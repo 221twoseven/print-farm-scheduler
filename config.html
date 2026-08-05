@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Add Print Farm Scheduler</title>
+<script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
+<style>
+  body {
+    margin: 0;
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    color: #201F1E;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; text-align: center; padding: 2rem;
+  }
+  h1 { font-size: 1.1rem; margin: 0 0 .4rem; }
+  p { color: #605E5C; font-size: .9rem; margin: 0; }
+  .dot {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: #5B5FC7; margin: 0 auto 1rem;
+  }
+</style>
+</head>
+<body>
+<div>
+  <div class="dot"></div>
+  <h1>Print Farm Scheduler</h1>
+  <p>Select Save to add the print queue board to this channel.</p>
+</div>
+
+<script>
+  var APP_URL = "https://221twoseven.github.io/print-farm-scheduler/";
+
+  microsoftTeams.app.initialize().then(function () {
+    microsoftTeams.pages.config.registerOnSaveHandler(function (saveEvent) {
+      microsoftTeams.pages.config
+        .setConfig({
+          entityId: "printFarmScheduler",
+          contentUrl: APP_URL,
+          websiteUrl: APP_URL,
+          suggestedDisplayName: "Print Farm",
+        })
+        .then(function () {
+          saveEvent.notifySuccess();
+        })
+        .catch(function (err) {
+          saveEvent.notifyFailure(String(err));
+        });
+    });
+
+    /* Nothing to configure, so Save is available immediately. */
+    microsoftTeams.pages.config.setValidityState(true);
+  });
+</script>
+</body>
+</html>
