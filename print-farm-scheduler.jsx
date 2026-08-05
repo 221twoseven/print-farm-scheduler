@@ -3100,8 +3100,8 @@ import { PublicClientApplication } from "@azure/msal-browser";
 
 /* ---- paste these two from the sysadmin, then redeploy ---- */
 const SP = {
-  clientId: "",                            // Application (client) ID
-  tenantId: "",                            // Directory (tenant) ID
+  clientId: "948b6982-588a-4a0f-a109-169675cb4fd9",                            // Application (client) ID
+  tenantId: "70aa5330-416f-48cb-a64f-1a89f0196577",                            // Directory (tenant) ID
   hostname: "twosevennet.sharepoint.com",
   sitePath: "/sites/Ticketing",
 };
