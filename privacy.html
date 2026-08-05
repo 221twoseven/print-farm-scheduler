@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Notice — Print Farm Scheduler</title>
+<style>
+  body {
+    margin: 0;
+    background: #F3F2F1;
+    color: #201F1E;
+    font: 15px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  main {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .meta { color: #605E5C; font-size: .85rem; margin: 0 0 2rem; }
+  ul { padding-left: 1.2rem; }
+  li { margin: .3rem 0; }
+  footer {
+    margin-top: 3rem; padding-top: 1rem;
+    border-top: 1px solid #E1DFDD;
+    color: #605E5C; font-size: .85rem;
+  }
+  a { color: #0F6CBD; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Privacy Notice</h1>
+<p class="meta">Print Farm Scheduler &middot; internal application</p>
+
+<p>
+  Print Farm Scheduler is an internal tool for scheduling and tracking 3D print
+  jobs. It is available only to people inside this organization who already have
+  access to the team SharePoint site. This notice describes what the application
+  does with information.
+</p>
+
+<h2>What the application stores</h2>
+<p>
+  The application stores the operational records you enter into it: printer
+  names and configurations, print job details (title, quantity, priority,
+  expected completion, file path, slicing and print settings), and the names
+  typed into the "sent by" and "give to" fields of a job.
+</p>
+<p>
+  These records are written to SharePoint lists on your organization's own
+  SharePoint site. They are not sent anywhere else.
+</p>
+
+<h2>Sign-in</h2>
+<p>
+  Signing in uses your existing work account through Microsoft Entra ID. The
+  application receives an access token that lets it read and write the SharePoint
+  lists on your behalf. It does not see or store your password. The token is
+  held in your browser for the length of your session and is discarded when the
+  session ends.
+</p>
+
+<h2>What the application does not do</h2>
+<ul>
+  <li>It does not sell, share, or transfer information to third parties.</li>
+  <li>It does not use analytics, advertising, or tracking services.</li>
+  <li>It does not set cookies beyond what sign-in requires.</li>
+  <li>It does not collect information about you beyond your account identity
+      and what you type into the board.</li>
+</ul>
+
+<h2>Who can see the information</h2>
+<p>
+  Everyone with access to the underlying SharePoint site can see the full board,
+  including any names entered on a job. Access is governed entirely by the
+  permissions on that site; the application maintains no separate account list
+  or permission system of its own.
+</p>
+
+<h2>Retention and deletion</h2>
+<p>
+  Records persist until someone deletes them &mdash; by removing a job, printer,
+  or group in the application, or by editing the SharePoint lists directly.
+  Deletions made in the application are permanent from the application's point of
+  view. Recovery, backup, and retention are governed by your organization's
+  SharePoint configuration, not by this tool.
+</p>
+
+<h2>Third-party components</h2>
+<p>
+  The application runs in your browser and loads its supporting libraries
+  (React, Microsoft Authentication Library, and interface components) from public
+  content delivery networks. Those services receive the standard request
+  information any website visit involves, such as your IP address. They receive
+  none of your print job data.
+</p>
+
+<h2>Questions</h2>
+<p>
+  This is an internally built tool. Direct questions about it, or requests to
+  correct or remove information, to the team that maintains it or to your
+  systems administrator.
+</p>
+
+<footer>
+  This notice describes an internal application and supplements, rather than
+  replaces, your organization's own privacy and data handling policies. Where
+  the two differ, your organization's policies govern.
+</footer>
+
+</main>
+</body>
+</html>
