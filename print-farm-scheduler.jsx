@@ -393,15 +393,30 @@ function isOverdue(task) {
 
 /* ------------------------------- app ---------------------------------- */
 
-export default function PrintFarmScheduler() {
+/* `initial` and `onPersist` are supplied by AppShell when SharePoint is
+   configured. With neither, the board runs on sample data exactly as it
+   did before Phase 2. */
+export default function PrintFarmScheduler({ initial = null, onPersist = null }) {
   /* hydrate() is the entry point storage rows will use too */
-  const [groups, setGroups] = useState(() => hydrate(seedGroups));
-  const [printers, setPrinters] = useState(() => hydrate(seedPrinters));
-  const [tasks, setTasks] = useState(() => hydrate(seedTasks));
-  const [appSettings, setAppSettings] = useState(DEFAULT_APP_SETTINGS);
-  /* PERSISTENCE SEAM: replace with the choice columns read from SharePoint
-     on sign-in, so equipment options are editable without a code change. */
-  const [choices, setChoices] = useState(DEFAULT_CHOICES);
+  const [groups, setGroups] = useState(() => hydrate(initial?.groups ?? seedGroups));
+  const [printers, setPrinters] = useState(() => hydrate(initial?.printers ?? seedPrinters));
+  const [tasks, setTasks] = useState(() => hydrate(initial?.tasks ?? seedTasks));
+  const [appSettings, setAppSettings] = useState(initial?.appSettings ?? DEFAULT_APP_SETTINGS);
+  /* PERSISTENCE SEAM: the choice columns read from SharePoint on sign-in,
+     so equipment options are editable without a code change. */
+  const [choices, setChoices] = useState(initial?.choices ?? DEFAULT_CHOICES);
+
+  /* Hand every change to the save layer. The first run is skipped —
+     what we were just given is by definition already stored. */
+  const persistedOnce = useRef(false);
+  useEffect(() => {
+    if (!onPersist) return;
+    if (!persistedOnce.current) {
+      persistedOnce.current = true;
+      return;
+    }
+    onPersist({ groups, printers, tasks, appSettings });
+  }, [groups, printers, tasks, appSettings, onPersist]);
 
   const [openSettings, setOpenSettings] = useState({});
   const [addingTaskIn, setAddingTaskIn] = useState(null); // printerId or STAGING
@@ -3059,9 +3074,697 @@ function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
   );
 }
 
+/* =====================================================================
+   PHASE 2 — SHAREPOINT PERSISTENCE
+
+   Everything below this line is the storage layer. Nothing above it
+   changed except that PrintFarmScheduler now accepts two optional props
+   (`initial` and `onPersist`); with neither, it behaves exactly as it
+   did before — in-memory sample data.
+
+   HOW IT DECIDES WHAT TO DO
+   If SP.clientId is empty the app runs on sample data, no sign-in.
+   Fill in clientId and tenantId and it requires sign-in and reads and
+   writes the four SharePoint lists instead. That is the whole switch.
+
+   HOW SAVING WORKS
+   No mutation handler was rewritten. `reindex()` preserves object
+   identity for rows it didn't touch, so after any change we compare the
+   new arrays against the last saved snapshot by reference: rows that
+   are a different object got edited, rows that appeared are new, rows
+   that vanished were deleted. Writes are debounced so dragging a card
+   produces one save, not thirty.
+   ===================================================================== */
+
+import { PublicClientApplication } from "@azure/msal-browser";
+
+/* ---- paste these two from the sysadmin, then redeploy ---- */
+const SP = {
+  clientId: "",                            // Application (client) ID
+  tenantId: "",                            // Directory (tenant) ID
+  hostname: "twosevennet.sharepoint.com",
+  sitePath: "/sites/Ticketing",
+};
+
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const SCOPES = ["Sites.ReadWrite.All"];
+const configured = () => Boolean(SP.clientId && SP.tenantId);
+
+/* ---------------------------------------------------------------------
+   COLUMN NAMES — verify against the real lists before first run.
+
+   Left side is the app's field, right side is the SharePoint column's
+   INTERNAL name (List settings → click the column → the `Field=` value
+   at the end of the address bar). Internal names keep the spelling the
+   column had when it was created, so a column renamed later still
+   answers to its original name here.
+   --------------------------------------------------------------------- */
+const COLS = {
+  groups: {
+    uuid: "GroupID",       // our crypto UUID, not SharePoint's row ID
+    name: "Title",
+    color: "Color",
+    sortOrder: "SortOrder",
+  },
+  printers: {
+    /* If you keep the column named "Printer ID" instead of recreating it,
+       change this to "Printer_x0020_ID" — SharePoint encodes the space into
+       the internal name at creation and a later rename does not undo it. */
+    uuid: "PrinterID",
+    name: "Title",
+    groupId: "GroupID",
+    status: "Status",
+    notes: "Notes",
+    sortOrder: "SortOrder",
+    // the five spec dropdowns come from PRINTER_FIELDS[].column
+  },
+  tasks: {
+    uuid: "TaskID",
+    printerId: "PrinterID", // holds the literal string "staging" when unassigned
+    title: "Title",
+    status: "Status",
+    priority: "Priority",
+    sliceStatus: "SliceStatus",
+    quantity: "Quantity",
+    etaDate: "EtaDate",
+    etaTime: "EtaTime",
+    sentBy: "SentBy",
+    giveTo: "GiveTo",
+    filepath: "Filepath",
+    printQuality: "PrintQuality",
+    printStrength: "PrintStrength",
+    sortOrder: "SortOrder",
+  },
+};
+
+/* `collapsed` is per-person and is not written to SharePoint. Folding a
+   group is one operator's view of the board, not a fact about the shop,
+   and a shared Yes/No column would have folded it for everyone. The
+   Collapsed column in the Groups list is left unused on purpose. */
+
+/* ------------------------------ MSAL ---------------------------------- */
+
+let msalApp = null;
+async function msal() {
+  if (!msalApp) {
+    msalApp = new PublicClientApplication({
+      auth: {
+        clientId: SP.clientId,
+        authority: `https://login.microsoftonline.com/${SP.tenantId}`,
+        redirectUri: window.location.origin + window.location.pathname,
+      },
+      cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false },
+    });
+    await msalApp.initialize();
+    await msalApp.handleRedirectPromise();
+  }
+  return msalApp;
+}
+
+/* Popup rather than redirect: a Teams tab is an iframe, and a full-page
+   redirect inside one either gets blocked or navigates Teams itself. */
+async function signIn() {
+  const app = await msal();
+  const res = await app.loginPopup({ scopes: SCOPES, prompt: "select_account" });
+  app.setActiveAccount(res.account);
+  return res.account;
+}
+
+async function currentAccount() {
+  const app = await msal();
+  return app.getActiveAccount() || app.getAllAccounts()[0] || null;
+}
+
+async function signOut() {
+  const app = await msal();
+  await app.logoutPopup({ account: await currentAccount() });
+}
+
+async function token() {
+  const app = await msal();
+  const account = await currentAccount();
+  if (!account) throw new Error("Not signed in");
+  try {
+    const r = await app.acquireTokenSilent({ scopes: SCOPES, account });
+    return r.accessToken;
+  } catch {
+    const r = await app.acquireTokenPopup({ scopes: SCOPES, account });
+    return r.accessToken;
+  }
+}
+
+/* ------------------------------ Graph --------------------------------- */
+
+async function graph(path, init = {}) {
+  const t = await token();
+  const url = path.startsWith("http") ? path : GRAPH + path;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${t}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  if (res.status === 429 || res.status >= 500) {
+    const wait = Number(res.headers.get("Retry-After") || 2) * 1000;
+    await new Promise((r) => setTimeout(r, wait));
+    return graph(path, init);
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Graph ${res.status} on ${path} — ${body.slice(0, 300)}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+let siteIdCache = null;
+async function siteId() {
+  if (!siteIdCache) {
+    const site = await graph(`/sites/${SP.hostname}:${SP.sitePath}`);
+    siteIdCache = site.id;
+  }
+  return siteIdCache;
+}
+
+async function readList(list) {
+  const sid = await siteId();
+  let next = `/sites/${sid}/lists/${list}/items?$expand=fields&$top=500`;
+  const rows = [];
+  while (next) {
+    const page = await graph(next);
+    rows.push(...page.value);
+    next = page["@odata.nextLink"] || null;
+  }
+  return rows;
+}
+
+const createItem = async (list, fields) =>
+  graph(`/sites/${await siteId()}/lists/${list}/items`, {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  });
+
+const patchItem = async (list, itemId, fields) =>
+  graph(`/sites/${await siteId()}/lists/${list}/items/${itemId}/fields`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+
+const deleteItem = async (list, itemId) =>
+  graph(`/sites/${await siteId()}/lists/${list}/items/${itemId}`, {
+    method: "DELETE",
+  });
+
+/* ------------------- rows in, rows out (per list) --------------------- */
+
+const str = (v) => (v === undefined || v === null ? "" : String(v));
+const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+
+/* EtaDate is a real Date and Time column, so it round-trips through ISO
+   rather than staying the "YYYY-MM-DD" string the date input produces.
+   We write noon UTC, not midnight: midnight UTC displays as the previous
+   evening anywhere west of Greenwich, so the SharePoint list itself would
+   show jobs due a day early. Noon keeps the date intact either way.
+   EtaTime stays a plain text column and needs no conversion. */
+const dateToIso = (ymd) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(ymd || "") ? `${ymd}T12:00:00Z` : null;
+
+const isoToDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
+
+const groupFromRow = (f) => ({
+  id: str(f[COLS.groups.uuid]) || uid(),
+  name: str(f[COLS.groups.name]),
+  color: str(f[COLS.groups.color]) || GROUP_COLORS[0],
+  collapsed: false,
+  sortOrder: num(f[COLS.groups.sortOrder]),
+});
+
+const groupToRow = (g) => ({
+  [COLS.groups.uuid]: g.id,
+  [COLS.groups.name]: g.name,
+  [COLS.groups.color]: g.color,
+  [COLS.groups.sortOrder]: num(g.sortOrder),
+});
+
+const printerFromRow = (f) => ({
+  id: str(f[COLS.printers.uuid]) || uid(),
+  name: str(f[COLS.printers.name]),
+  groupId: str(f[COLS.printers.groupId]),
+  status: str(f[COLS.printers.status]) || "Ready",
+  sortOrder: num(f[COLS.printers.sortOrder]),
+  settings: {
+    notes: str(f[COLS.printers.notes]),
+    fields: PRINTER_FIELDS.reduce((acc, pf) => {
+      acc[pf.key] = str(f[pf.column]) || defaultPrinterFields()[pf.key];
+      return acc;
+    }, {}),
+  },
+});
+
+const printerToRow = (p) => ({
+  [COLS.printers.uuid]: p.id,
+  [COLS.printers.name]: p.name,
+  [COLS.printers.groupId]: p.groupId,
+  [COLS.printers.status]: p.status,
+  [COLS.printers.notes]: p.settings?.notes || "",
+  [COLS.printers.sortOrder]: num(p.sortOrder),
+  ...PRINTER_FIELDS.reduce((acc, pf) => {
+    acc[pf.column] = p.settings?.fields?.[pf.key] || "";
+    return acc;
+  }, {}),
+});
+
+const taskFromRow = (f) => ({
+  id: str(f[COLS.tasks.uuid]) || uid(),
+  printerId: str(f[COLS.tasks.printerId]) || STAGING,
+  title: str(f[COLS.tasks.title]),
+  status: str(f[COLS.tasks.status]) || "Not started",
+  priority: str(f[COLS.tasks.priority]) || "Normal",
+  sliceStatus: str(f[COLS.tasks.sliceStatus]) || "Not Sliced",
+  quantity: num(f[COLS.tasks.quantity], 1),
+  etaDate: isoToDate(f[COLS.tasks.etaDate]),
+  etaTime: str(f[COLS.tasks.etaTime]),
+  sentBy: str(f[COLS.tasks.sentBy]),
+  giveTo: str(f[COLS.tasks.giveTo]),
+  filepath: str(f[COLS.tasks.filepath]),
+  printQuality: str(f[COLS.tasks.printQuality]) || "Medium",
+  printStrength: str(f[COLS.tasks.printStrength]) || "Standard",
+  sortOrder: num(f[COLS.tasks.sortOrder]),
+});
+
+const taskToRow = (t) => ({
+  [COLS.tasks.uuid]: t.id,
+  [COLS.tasks.printerId]: t.printerId || STAGING,
+  [COLS.tasks.title]: t.title || "",
+  [COLS.tasks.status]: t.status || "Not started",
+  [COLS.tasks.priority]: t.priority || "Normal",
+  [COLS.tasks.sliceStatus]: t.sliceStatus || "Not Sliced",
+  [COLS.tasks.quantity]: num(t.quantity, 1),
+  [COLS.tasks.etaDate]: dateToIso(t.etaDate),
+  [COLS.tasks.etaTime]: t.etaTime || "",
+  [COLS.tasks.sentBy]: t.sentBy || "",
+  [COLS.tasks.giveTo]: t.giveTo || "",
+  [COLS.tasks.filepath]: t.filepath || "",
+  [COLS.tasks.printQuality]: t.printQuality || "Medium",
+  [COLS.tasks.printStrength]: t.printStrength || "Standard",
+  [COLS.tasks.sortOrder]: num(t.sortOrder),
+});
+
+const LISTS = {
+  groups: { name: "Groups", fromRow: groupFromRow, toRow: groupToRow },
+  printers: { name: "Printers", fromRow: printerFromRow, toRow: printerToRow },
+  tasks: { name: "Tasks", fromRow: taskFromRow, toRow: taskToRow },
+};
+
+/* --------------------------- initial load ----------------------------- */
+
+/* Dropdown options come from the SharePoint choice columns so the shop can
+   edit them without a code change. A failed read keeps the built-in list —
+   a stale dropdown beats an empty one. */
+async function loadChoices() {
+  const out = { ...DEFAULT_CHOICES };
+  try {
+    const sid = await siteId();
+    const byColumn = {};
+    for (const list of ["Printers", "Tasks"]) {
+      const cols = await graph(`/sites/${sid}/lists/${list}/columns`);
+      for (const c of cols.value || []) {
+        if (c.choice?.choices?.length) byColumn[c.name] = c.choice.choices;
+      }
+    }
+    for (const pf of PRINTER_FIELDS) {
+      if (byColumn[pf.column]) out[pf.key] = byColumn[pf.column];
+    }
+    if (byColumn.PrintQuality) out.printQuality = byColumn.PrintQuality;
+    if (byColumn.PrintStrength) out.printStrength = byColumn.PrintStrength;
+  } catch (err) {
+    console.warn("Choice columns unreadable, using built-in defaults.", err);
+  }
+  return out;
+}
+
+/* Settings is a key/value list. A missing key falls back to the code
+   default rather than erroring, so a deleted row degrades gracefully. */
+async function loadSettings(itemIds) {
+  const out = { ...DEFAULT_APP_SETTINGS };
+  try {
+    const rows = await readList("Settings");
+    for (const row of rows) {
+      const key = str(row.fields?.Title);
+      if (!(key in out)) continue;
+      itemIds.set(`settings:${key}`, row.id);
+      const raw = str(row.fields?.Value);
+      out[key] = typeof out[key] === "number" ? num(raw, out[key]) : raw || out[key];
+    }
+  } catch (err) {
+    console.warn("Settings list unreadable, using defaults.", err);
+  }
+  return out;
+}
+
+async function loadEverything(itemIds) {
+  const [groupRows, printerRows, taskRows] = await Promise.all([
+    readList(LISTS.groups.name),
+    readList(LISTS.printers.name),
+    readList(LISTS.tasks.name),
+  ]);
+
+  const collect = (rows, spec, kind) =>
+    hydrate(
+      rows.map((row) => {
+        const rec = spec.fromRow(row.fields || {});
+        itemIds.set(`${kind}:${rec.id}`, row.id);
+        return rec;
+      })
+    );
+
+  const groups = collect(groupRows, LISTS.groups, "groups");
+  const printers = collect(printerRows, LISTS.printers, "printers");
+  const tasks = collect(taskRows, LISTS.tasks, "tasks");
+  const [choices, appSettings] = await Promise.all([
+    loadChoices(),
+    loadSettings(itemIds),
+  ]);
+
+  return { groups, printers, tasks, choices, appSettings };
+}
+
+/* ------------------------------ saving -------------------------------- */
+
+/* Reference comparison, which is only sound because reindex() and every
+   mutation handler copy the rows they change and leave the rest alone. */
+const sameRow = (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) if (String(a[k] ?? "") !== String(b[k] ?? "")) return false;
+  return true;
+};
+
+function diffByIdentity(prev, next) {
+  const before = new Map(prev.map((r) => [r.id, r]));
+  const after = new Map(next.map((r) => [r.id, r]));
+  const created = next.filter((r) => !before.has(r.id));
+  const deleted = prev.filter((r) => !after.has(r.id));
+  const updated = next.filter((r) => before.has(r.id) && before.get(r.id) !== r);
+  return { created, updated, deleted };
+}
+
+async function saveList(kind, prev, next, itemIds) {
+  const spec = LISTS[kind];
+  const { created, updated, deleted } = diffByIdentity(prev, next);
+  const before_ = new Map(prev.map((r) => [r.id, r]));
+  let writes = 0;
+
+  for (const rec of created) {
+    const row = await createItem(spec.name, spec.toRow(rec));
+    itemIds.set(`${kind}:${rec.id}`, row.id);
+    writes++;
+  }
+  for (const rec of updated) {
+    const itemId = itemIds.get(`${kind}:${rec.id}`);
+    const row = spec.toRow(rec);
+    if (itemId) {
+      /* A row can be a new object without any stored column differing —
+         toggling a group's collapse is view state, not shop state. Compare
+         the mapped row so those changes cost nothing. */
+      const before = spec.toRow(before_.get(rec.id));
+      if (sameRow(before, row)) continue;
+      await patchItem(spec.name, itemId, row);
+      writes++;
+    } else {
+      const created_ = await createItem(spec.name, row);
+      itemIds.set(`${kind}:${rec.id}`, created_.id);
+      writes++;
+    }
+  }
+  for (const rec of deleted) {
+    const itemId = itemIds.get(`${kind}:${rec.id}`);
+    if (itemId) {
+      await deleteItem(spec.name, itemId);
+      itemIds.delete(`${kind}:${rec.id}`);
+      writes++;
+    }
+  }
+  return writes;
+}
+
+async function saveSettings(prev, next, itemIds) {
+  let n = 0;
+  for (const key of Object.keys(DEFAULT_APP_SETTINGS)) {
+    if (String(prev[key]) === String(next[key])) continue;
+    const itemId = itemIds.get(`settings:${key}`);
+    if (itemId) await patchItem("Settings", itemId, { Value: String(next[key]) });
+    else {
+      const row = await createItem("Settings", {
+        Title: key,
+        Value: String(next[key]),
+      });
+      itemIds.set(`settings:${key}`, row.id);
+    }
+    n++;
+  }
+  return n;
+}
+
+/* ------------------------- shell + save status ------------------------- */
+
+const SAVE_DEBOUNCE_MS = 700;
+
+function StatusPill({ state, detail, account, onRetry, onSignOut }) {
+  const look = {
+    saving: { bg: "#FFF4CE", fg: "#7A5B00", text: "Saving…" },
+    saved: { bg: "#DFF6DD", fg: "#0E5814", text: "Saved" },
+    error: { bg: "#FDE7E9", fg: "#A4262C", text: "Not saved" },
+  }[state] || { bg: "#F3F2F1", fg: "#605E5C", text: "" };
+
+  return (
+    <div
+      className="fixed bottom-3 right-3 z-40 flex items-center gap-2 rounded-full px-3 py-1.5 shadow-sm"
+      style={{ background: look.bg, color: look.fg, fontSize: 11 }}
+      title={detail || account || ""}
+    >
+      <span className="font-semibold">{look.text}</span>
+      {state === "error" && (
+        <button onClick={onRetry} className="underline font-semibold">
+          Retry
+        </button>
+      )}
+      {account && (
+        <button
+          onClick={onSignOut}
+          className="underline opacity-70 hover:opacity-100"
+        >
+          Sign out
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Centered({ children }) {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: "#F3F2F1" }}
+    >
+      <div
+        className="w-full max-w-md rounded-lg bg-white p-6 shadow-sm"
+        style={{ border: "1px solid #E1DFDD" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AppShell() {
+  const [phase, setPhase] = useState(configured() ? "signin" : "ready");
+  const [initial, setInitial] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [error, setError] = useState(null);
+  const [saveState, setSaveState] = useState(null);
+  const [saveDetail, setSaveDetail] = useState("");
+
+  const itemIds = useRef(new Map());        // "kind:uuid" → SharePoint item id
+  const saved = useRef(null);               // last snapshot written
+  const pending = useRef(null);             // newest snapshot awaiting write
+  const writing = useRef(false);
+
+  /* already signed in from an earlier tab? skip the button */
+  useEffect(() => {
+    if (!configured()) return;
+    (async () => {
+      try {
+        const acct = await currentAccount();
+        if (acct) {
+          setAccount(acct);
+          await load();
+        }
+      } catch {
+        /* stay on the sign-in screen */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const load = async () => {
+    setPhase("loading");
+    setError(null);
+    try {
+      const data = await loadEverything(itemIds.current);
+      saved.current = {
+        groups: data.groups,
+        printers: data.printers,
+        tasks: data.tasks,
+        appSettings: data.appSettings,
+      };
+      setInitial(data);
+      setPhase("ready");
+    } catch (err) {
+      setError(err.message || String(err));
+      setPhase("error");
+    }
+  };
+
+  const doSignIn = async () => {
+    setPhase("loading");
+    try {
+      const acct = await signIn();
+      setAccount(acct);
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+      setPhase("error");
+    }
+  };
+
+  /* One writer at a time. Anything that lands mid-write is coalesced into
+     `pending` and written once the current pass finishes, so a burst of
+     drags collapses into a single trailing save. */
+  const flush = async () => {
+    if (writing.current || !pending.current) return;
+    writing.current = true;
+    setSaveState("saving");
+    try {
+      while (pending.current) {
+        const next = pending.current;
+        pending.current = null;
+        const prev = saved.current;
+        let n = 0;
+        n += await saveList("groups", prev.groups, next.groups, itemIds.current);
+        n += await saveList("printers", prev.printers, next.printers, itemIds.current);
+        n += await saveList("tasks", prev.tasks, next.tasks, itemIds.current);
+        n += await saveSettings(prev.appSettings, next.appSettings, itemIds.current);
+        saved.current = next;
+        setSaveDetail(n ? `${n} change${n === 1 ? "" : "s"} written` : "");
+      }
+      setSaveState("saved");
+    } catch (err) {
+      console.error(err);
+      setSaveDetail(err.message || String(err));
+      setSaveState("error");
+    } finally {
+      writing.current = false;
+    }
+  };
+
+  const onPersist = useMemo(() => {
+    if (!configured()) return null;
+    let timer = null;
+    return (snapshot) => {
+      pending.current = snapshot;
+      setSaveState((s) => (s === "error" ? s : "saving"));
+      clearTimeout(timer);
+      timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* last-ditch warning if someone closes the tab mid-write */
+  useEffect(() => {
+    const warn = (e) => {
+      if (pending.current || writing.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  if (phase === "signin")
+    return (
+      <Centered>
+        <h1 className="text-lg font-semibold" style={{ color: "#201F1E" }}>
+          Print Farm Scheduler
+        </h1>
+        <p className="mt-1 mb-4 text-sm" style={{ color: "#605E5C" }}>
+          Sign in with your work account to load the board.
+        </p>
+        <button
+          onClick={doSignIn}
+          className="w-full rounded py-2 text-sm font-medium text-white"
+          style={{ background: "#0F6CBD" }}
+        >
+          Sign in
+        </button>
+      </Centered>
+    );
+
+  if (phase === "loading")
+    return (
+      <Centered>
+        <p className="text-sm" style={{ color: "#605E5C" }}>
+          Loading the board…
+        </p>
+      </Centered>
+    );
+
+  if (phase === "error")
+    return (
+      <Centered>
+        <h1 className="text-base font-semibold" style={{ color: "#A4262C" }}>
+          Could not load the board
+        </h1>
+        <p
+          className="mt-2 mb-4 text-xs whitespace-pre-wrap"
+          style={{ color: "#605E5C" }}
+        >
+          {error}
+        </p>
+        <button
+          onClick={account ? load : doSignIn}
+          className="w-full rounded py-2 text-sm font-medium text-white"
+          style={{ background: "#0F6CBD" }}
+        >
+          Try again
+        </button>
+      </Centered>
+    );
+
+  return (
+    <>
+      <PrintFarmScheduler initial={initial} onPersist={onPersist} />
+      {configured() && (
+        <StatusPill
+          state={saveState}
+          detail={saveDetail}
+          account={account?.username}
+          onRetry={flush}
+          onSignOut={async () => {
+            await signOut();
+            window.location.reload();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 /* ---------------------------------------------------------------------
    Browser mount. Harmless when this file is imported as a component
    module — it only runs if a #root element exists on the page.
    --------------------------------------------------------------------- */
-const rootEl = typeof document !== "undefined" && document.getElementById("root");
-if (rootEl) createRoot(rootEl).render(<PrintFarmScheduler />);
+const rootEl =
+  typeof document !== "undefined" && document.getElementById("root");
+if (rootEl) createRoot(rootEl).render(<AppShell />);
