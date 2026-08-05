@@ -3100,8 +3100,8 @@ import { PublicClientApplication } from "@azure/msal-browser";
 
 /* ---- paste these two from the sysadmin, then redeploy ---- */
 const SP = {
-  clientId: "948b6982-588a-4a0f-a109-169675cb4fd9",                            // Application (client) ID
-  tenantId: "70aa5330-416f-48cb-a64f-1a89f0196577",                            // Directory (tenant) ID
+  clientId: "948b6982-588a-4a0f-a109-169675cb4fd9", // Application (client) ID
+  tenantId: "70aa5330-416f-48cb-a64f-1a89f0196577", // Directory (tenant) ID
   hostname: "twosevennet.sharepoint.com",
   sitePath: "/sites/Ticketing",
 };
@@ -3133,7 +3133,10 @@ const COLS = {
     uuid: "PrinterID",
     name: "Title",
     groupId: "GroupID",
-    status: "Status",
+    /* Internal name, not the display name. This column began life as the
+       Active Yes/No field and was later rebuilt as the three-state choice;
+       SharePoint kept the original internal name through the rename. */
+    status: "Active",
     notes: "Notes",
     sortOrder: "SortOrder",
     // the five spec dropdowns come from PRINTER_FIELDS[].column
@@ -3423,7 +3426,59 @@ async function loadSettings(itemIds) {
   return out;
 }
 
+/* ---------------------------------------------------------------------
+   Schema check.
+
+   SharePoint fixes a column's internal name when the column is created
+   and never changes it afterwards, so a column displayed as "Status" can
+   answer to something else entirely — a space becomes _x0020_, and a
+   name reused after a delete picks up a trailing digit. Rather than
+   discover that one failed save at a time, compare every name in COLS
+   against the live lists on load and report all mismatches together.
+   --------------------------------------------------------------------- */
+async function checkSchema() {
+  const sid = await siteId();
+  const problems = [];
+
+  const expected = {
+    Groups: Object.values(COLS.groups),
+    Printers: [
+      ...Object.values(COLS.printers),
+      ...PRINTER_FIELDS.map((f) => f.column),
+    ],
+    Tasks: Object.values(COLS.tasks),
+    Settings: ["Title", "Value"],
+  };
+
+  for (const [list, names] of Object.entries(expected)) {
+    let actual;
+    try {
+      const res = await graph(`/sites/${sid}/lists/${list}/columns`);
+      actual = (res.value || []).filter((c) => !c.readOnly).map((c) => c.name);
+    } catch {
+      problems.push(`${list}: list not found on the site.`);
+      continue;
+    }
+    const missing = names.filter((n) => !actual.includes(n));
+    if (missing.length) {
+      problems.push(
+        `${list} — the app expects ${missing.join(", ")}, but the list has: ${actual.join(", ")}`
+      );
+    }
+  }
+
+  if (problems.length) {
+    throw new Error(
+      "Column names don't line up. Fix the COLS block near the bottom of " +
+        "print-farm-scheduler.jsx so each entry matches the internal name " +
+        "on the right.\n\n" +
+        problems.join("\n\n")
+    );
+  }
+}
+
 async function loadEverything(itemIds) {
+  await checkSchema();
   const [groupRows, printerRows, taskRows] = await Promise.all([
     readList(LISTS.groups.name),
     readList(LISTS.printers.name),
