@@ -3176,7 +3176,7 @@ async function msal() {
         authority: `https://login.microsoftonline.com/${SP.tenantId}`,
         redirectUri: window.location.origin + window.location.pathname,
       },
-      cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false },
+      cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false },
     });
     await msalApp.initialize();
     await msalApp.handleRedirectPromise();
@@ -3184,9 +3184,83 @@ async function msal() {
   return msalApp;
 }
 
-/* Popup rather than redirect: a Teams tab is an iframe, and a full-page
-   redirect inside one either gets blocked or navigates Teams itself. */
+/* Are we running inside a Teams tab? The SDK resolves only in Teams, so a
+   short race against a timer answers it without hanging in a browser. */
+let inTeamsCache = null;
+async function inTeams() {
+  if (inTeamsCache !== null) return inTeamsCache;
+  const sdk = window.microsoftTeams;
+  if (!sdk) return (inTeamsCache = false);
+  inTeamsCache = await Promise.race([
+    sdk.app.initialize().then(() => true).catch(() => false),
+    new Promise((r) => setTimeout(() => r(false), 2000)),
+  ]);
+  return inTeamsCache;
+}
+
+/* Teams forbids a popup opened by page script, which is why loginPopup fails
+   there with popup_window_error. Teams opens the window itself instead and
+   points it at auth.html, which runs the redirect and writes the token to
+   localStorage where this tab can read it. Outside Teams, in a plain browser
+   tab, the ordinary MSAL popup is fine. */
+async function teamsSignIn() {
+  const url = window.location.origin + window.location.pathname + "auth.html";
+  await window.microsoftTeams.authentication.authenticate({
+    url,
+    width: 600,
+    height: 640,
+  });
+  const app = await msal();
+  const account = app.getAllAccounts()[0];
+  if (!account) throw new Error("Sign-in finished but no account was cached.");
+  app.setActiveAccount(account);
+  return account;
+}
+
+/* Teams already knows who you are, so try to get a token without asking.
+   ssoSilent completes against the existing Microsoft session in a hidden
+   frame; the login hint from the Teams context tells it which account to
+   use so it never has to show a chooser.
+
+   This is not the full Teams SSO handshake. That one (getAuthToken plus an
+   on-behalf-of exchange) needs a server holding a client secret, and this
+   app has no server. What it does mean in practice: nobody signs in twice,
+   and most people never see the button at all. */
+async function silentSignIn() {
+  const app = await msal();
+
+  const existing = app.getActiveAccount() || app.getAllAccounts()[0];
+  if (existing) {
+    app.setActiveAccount(existing);
+    try {
+      await app.acquireTokenSilent({ scopes: SCOPES, account: existing });
+      return existing;
+    } catch {
+      /* cached account but stale token — fall through and re-establish */
+    }
+  }
+
+  let loginHint;
+  try {
+    if (await inTeams()) {
+      const ctx = await window.microsoftTeams.app.getContext();
+      loginHint = ctx?.user?.userPrincipalName || ctx?.user?.loginHint;
+    }
+  } catch {
+    /* no context available; ssoSilent can still succeed without a hint */
+  }
+
+  try {
+    const res = await app.ssoSilent({ scopes: SCOPES, loginHint });
+    app.setActiveAccount(res.account);
+    return res.account;
+  } catch {
+    return null; // third-party frames blocked, or no session — ask instead
+  }
+}
+
 async function signIn() {
+  if (await inTeams()) return teamsSignIn();
   const app = await msal();
   const res = await app.loginPopup({ scopes: SCOPES, prompt: "select_account" });
   app.setActiveAccount(res.account);
@@ -3200,7 +3274,15 @@ async function currentAccount() {
 
 async function signOut() {
   const app = await msal();
-  await app.logoutPopup({ account: await currentAccount() });
+  const account = await currentAccount();
+  if (await inTeams()) {
+    /* logoutPopup is a popup too. Clearing the cache signs this browser out
+       of the app without trying to open a window Teams will refuse. */
+    if (account) app.setActiveAccount(null);
+    await app.clearCache();
+    return;
+  }
+  await app.logoutPopup({ account });
 }
 
 async function token() {
@@ -3211,6 +3293,17 @@ async function token() {
     const r = await app.acquireTokenSilent({ scopes: SCOPES, account });
     return r.accessToken;
   } catch {
+    /* An expired token cannot be renewed silently inside Teams, because the
+       hidden-iframe renewal MSAL uses is blocked in a nested frame. Send the
+       person back through the Teams window instead of a popup. */
+    if (await inTeams()) {
+      await teamsSignIn();
+      const r = await app.acquireTokenSilent({
+        scopes: SCOPES,
+        account: app.getActiveAccount(),
+      });
+      return r.accessToken;
+    }
     const r = await app.acquireTokenPopup({ scopes: SCOPES, account });
     return r.accessToken;
   }
@@ -3633,7 +3726,7 @@ function Centered({ children }) {
 }
 
 function AppShell() {
-  const [phase, setPhase] = useState(configured() ? "signin" : "ready");
+  const [phase, setPhase] = useState(configured() ? "checking" : "ready");
   const [initial, setInitial] = useState(null);
   const [account, setAccount] = useState(null);
   const [error, setError] = useState(null);
@@ -3650,13 +3743,15 @@ function AppShell() {
     if (!configured()) return;
     (async () => {
       try {
-        const acct = await currentAccount();
+        const acct = await silentSignIn();
         if (acct) {
           setAccount(acct);
           await load();
+        } else {
+          setPhase("signin");
         }
       } catch {
-        /* stay on the sign-in screen */
+        setPhase("signin");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3763,6 +3858,15 @@ function AppShell() {
         >
           Sign in
         </button>
+      </Centered>
+    );
+
+  if (phase === "checking")
+    return (
+      <Centered>
+        <p className="text-sm" style={{ color: "#605E5C" }}>
+          Checking your sign-in…
+        </p>
       </Centered>
     );
 

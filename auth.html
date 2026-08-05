@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Signing in…</title>
+<script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js"></script>
+<style>
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif; color: #605E5C;
+    text-align: center; padding: 2rem;
+  }
+  .err { color: #A4262C; max-width: 30rem; }
+</style>
+</head>
+<body>
+<div id="msg">Signing in…</div>
+
+<script>
+/* Teams will not allow a popup opened by page script, so sign-in runs in a
+   window Teams itself opens and points here. This page performs the normal
+   MSAL redirect, catches the result when the redirect lands back on it, and
+   reports success to the tab that started the flow.
+
+   MSAL caches to localStorage rather than sessionStorage precisely so the
+   token written here is visible to the tab, which is a different window. */
+
+var CLIENT_ID = "948b6982-588a-4a0f-a109-169675cb4fd9";
+var TENANT_ID = "70aa5330-416f-48cb-a64f-1a89f0196577";
+var SCOPES = ["https://graph.microsoft.com/Sites.ReadWrite.All"];
+var SELF = window.location.origin + window.location.pathname;
+
+function fail(text) {
+  document.getElementById("msg").className = "err";
+  document.getElementById("msg").textContent = text;
+  try { microsoftTeams.authentication.notifyFailure(text); } catch (e) {}
+}
+
+var msalApp = new msal.PublicClientApplication({
+  auth: { clientId: CLIENT_ID, authority: "https://login.microsoftonline.com/" + TENANT_ID, redirectUri: SELF },
+  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false },
+});
+
+microsoftTeams.app.initialize()
+  .catch(function () { /* opened outside Teams; the MSAL half still works */ })
+  .then(function () { return msalApp.initialize(); })
+  .then(function () { return msalApp.handleRedirectPromise(); })
+  .then(function (result) {
+    if (result && result.account) {
+      msalApp.setActiveAccount(result.account);
+      document.getElementById("msg").textContent = "Signed in. You can close this window.";
+      try { microsoftTeams.authentication.notifySuccess(result.account.username); } catch (e) {}
+      return;
+    }
+    /* no result yet — start the redirect */
+    return msalApp.loginRedirect({ scopes: SCOPES, redirectUri: SELF, prompt: "select_account" });
+  })
+  .catch(function (err) {
+    fail(String((err && err.message) || err));
+  });
+</script>
+</body>
+</html>
