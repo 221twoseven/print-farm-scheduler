@@ -51,9 +51,11 @@ staging carries `printerId === "staging"`.
 
 ## Printer cards
 
-Each card shows the printer name, its group chip in the group colour, and a
-status control. Its top edge is coloured by **state**, not group — green means
-"this machine will print".
+Each card shows the printer name, a task count, and a status control. Its top
+edge is coloured by **state**, not group — green means "this machine will
+print". The group is identified by the card's own colour and by the group header
+above it; the card does not name it, because on a card this narrow the width
+matters more than the repetition.
 
 - **Status** — Ready / Reserved / Maintenance, from the card control or the
   right-click menu. Moving a printer to **Maintenance** sends its queued jobs

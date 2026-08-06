@@ -2118,23 +2118,12 @@ function PrinterColumn({
 
       {/* everything below the header dims with the off state */}
       <div className="flex flex-col flex-1" style={dim}>
-        {/* group label */}
-        <div
-          className="px-3 pb-2 flex items-center gap-1.5 text-xs"
-          style={{ color: "#8A8886" }}
-        >
-          <span
-            className="px-1.5 py-0.5 rounded font-medium"
-            style={{
-              background: `${color}14`,
-              color: inactive ? "#8A8886" : color,
-            }}
-          >
-            {groupName}
-          </span>
-          <span>
-            · {tasks.length} task{tasks.length !== 1 && "s"}
-          </span>
+        {/* Task count. The group name used to sit here as a colour chip, but
+            the card's own colour and the group header directly above it
+            already say which group this is, so the chip was spending scarce
+            card width to repeat them. */}
+        <div className="px-3 pb-2 text-xs" style={{ color: "#8A8886" }}>
+          {tasks.length} task{tasks.length !== 1 && "s"}
         </div>
 
         {/* assigned printer settings — compact, collapsible readout */}
