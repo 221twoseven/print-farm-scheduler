@@ -52,6 +52,7 @@ One row per printer group (the shop's physical or logical clusters).
 | `groupId` | `GroupID` | Text | The group's UUID |
 | `status` | `Active` | Choice | `Ready` / `Reserved` / `Maintenance`. Internal name is a leftover — see above |
 | `settings.notes` | `Notes` | Text | Free-form |
+| `settings.printMaterialOther` | `PrintMaterialOther` | Text | The actual material, when `PrintMaterial` is an "Other". Written always, read only when it applies |
 | `sortOrder` | `SortOrder` | Number | Position within its group |
 | `settings.fields.nozzleSize` | `NozzleSize` | Choice | |
 | `settings.fields.nozzleType` | `NozzleType` | Choice | |
@@ -99,6 +100,7 @@ only the column name survives.
 | `filepath` | `Filepath` | Text | Where the model lives |
 | `printQuality` | `PrintQuality` | Choice | |
 | `printStrength` | `PrintStrength` | Choice | |
+| `printMaterial` | `PrintMaterial` | Choice | What the **job** asks for. A different column on a different list from the Printers one of the same name |
 | `sortOrder` | `SortOrder` | Number | Position within its printer (or within staging) |
 
 ### Dates
@@ -158,6 +160,23 @@ silently read as blank.
 **Not read from SharePoint on purpose:** task `Status`, `Priority`,
 `SliceStatus`, and printer `Status`. The app branches on every one of those, so
 they stay in code.
+
+### Two PrintMaterial columns
+
+`PrintMaterial` exists on **both** lists and they mean different things:
+
+- **Printers** — what the machine is currently loaded with. Choices `ABS` /
+  `Other`. Picking an "Other" reveals a free-text box stored in
+  `PrintMaterialOther`, because "Other" is not an answer on its own.
+- **Tasks** — what the job is asking for. Choices `ABS` /
+  `Other (Discuss with Operator)`; the longer wording is a message to the
+  designer choosing it, not to the operator.
+
+`loadChoices()` keys its results **by list**, not by column name. A flat map
+would let whichever list was read last silently overwrite the other — a real
+trap now that the two lists are deliberately different. The code that decides
+whether to show the free-text box matches on the stem (`isOtherMaterial`), so
+either list can be reworded in SharePoint without breaking it.
 
 ## What is not stored
 

@@ -31,8 +31,9 @@ Every column below has to exist **before** the matching code change ships, or
 | --- | --- | --- | --- |
 | ~~Tasks~~ | ~~Jobcode~~ | ~~Single line of text~~ | created — item 4, done |
 | ~~Tasks~~ | ~~NeedByDate~~ | ~~Date and Time~~ | created — item 5, done |
-| Tasks | PrintMaterial | Choice — `ABS`, `Other (Discuss with Operator)` | [6](#6-split-print-material-between-printer-and-task-8) |
-| Printers | PrintMaterialOther | Single line of text | [6](#6-split-print-material-between-printer-and-task-8) |
+| ~~Tasks~~ | ~~PrintMaterial~~ | ~~Choice — `ABS`, `Other (Discuss with Operator)`~~ | created — item 6, **internal names still to confirm** |
+| ~~Printers~~ | ~~PrintMaterialOther~~ | ~~Single line of text~~ | created — item 6, **internal names still to confirm** |
+| Printers | PrintMaterial *(existing)* | reword choices to `ABS` / `Other` | [6](#6-split-print-material-between-printer-and-task-8) — optional |
 | Printers | Active *(existing)* | add `Busy` to the choice values | [8](#8-busy-printer-status-1) |
 
 **After creating each column, send me its internal name** — List settings → click
@@ -171,7 +172,18 @@ existing cards, so I want it to be your call rather than a side effect.
 
 ## Tier 3 — moderate
 
-### 6. Split print material between printer and task (8)
+### 6. Split print material between printer and task (8) — DONE, pending name check
+
+*Shipped in #11.* `COLS` assumes the internal names match the display names
+(`PrintMaterial` on Tasks, `PrintMaterialOther` on Printers). **Confirm both
+before merging** — a mismatch fails at load, not at save.
+
+One optional SharePoint tidy-up remains: the Printers `PrintMaterial` choices
+still read `ABS` / `Other (Discuss with Operator)`. Rewording the printer's to
+`ABS` / `Other` matches the intent, but nothing breaks either way —
+`isOtherMaterial` matches on the stem.
+
+
 
 **Risk: Medium.** Two SharePoint columns, and it touches the printer settings
 panel, the new-task form and the detail modal.
@@ -332,11 +344,12 @@ the value without a server. Treat this item as "investigate and report", not
 
 Tier 1 is closed: items 1, 2 and 13 shipped (#3, #5, #8), item 3 declined.
 
-1. ~~Create the Tasks columns, items 4–5~~ — done, shipped in #10.
-2. **Decide whether "overdue" should account for need-by** — see item 5.
-3. **Create the material columns**, send internal names.
-4. **Item 6**, then **item 7** — in that order, so the manual print material
-   exists before the summary has to treat it as an exception.
+1. ~~Items 4–5~~ — done, shipped in #10.
+2. ~~Item 6~~ — done, shipped in #11, pending the internal-name check.
+3. **Confirm the two new internal names**, and decide whether "overdue" should
+   account for need-by (item 5).
+4. **Item 7** — the settings summary, now that a manually named material exists
+   for it to treat as an exception.
 5. **Decide the Busy behaviour**, add the choice value, then **item 8**.
 6. **Item 9.**
 7. **Item 10**, once the interface has stopped moving.

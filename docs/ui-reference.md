@@ -61,7 +61,9 @@ printer belongs to is answered by the group it is sitting in.
   back to staging and greys out the card (but never the control that brings it
   back).
 - **Specs** — an expandable panel with the five dropdowns (nozzle size, nozzle
-  type, nozzle material, bed type, print material) plus free-text notes.
+  type, nozzle material, bed type, print material) plus free-text notes. Setting
+  print material to **Other** reveals a box for naming the actual material —
+  "Other" alone does not tell an operator what is loaded.
 - **Queue** — active (non-complete) jobs. Two slots are visible by default with a
   "+N more" expander; the queue force-opens if the task being edited sits below
   slot 2.
@@ -93,10 +95,11 @@ already says the same thing in words.
 
 ### Detail modal
 
-Every task field: title, jobcode, quantity (stepper), status, priority, slice
-status, need-by date, ETA date and time, sent by, give to, filepath, print
-quality, print strength. Edits commit on blur and on close; there is no Save
-button. Delete lives here too.
+Every task field: title, jobcode, quantity (stepper), status, priority, print
+material, slice status, need-by date, ETA date and time, sent by, give to,
+filepath, print quality, print strength. The task's print material is what the
+job asks for, and is separate from what a printer is loaded with. Edits commit
+on blur and on close; there is no Save button. Delete lives here too.
 
 Closes on the X, on Escape, or on a click on the dimmed backdrop. Selecting text
 inside the panel and releasing outside it is a drag, not a click, and leaves the
