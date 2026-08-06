@@ -76,19 +76,21 @@ matters more than the repetition.
 ## Task cards
 
 Collapsed cards are deliberately minimal: status dot, title, quantity, priority
-flag, status pill, and ETA. Everything else lives in the detail modal — earlier
-cards showed more and the feedback was that the board read as visually busy.
+flag, status pill, and estimated finish. Everything else lives in the detail
+modal — earlier cards showed more and the feedback was that the board read as
+visually busy.
 
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
 - **Right-click** — context menu.
-- Overdue ETAs are called out on the card.
+- An estimated finish in the past is called out in red on the card.
 - A completed card is tinted and stops looking like live work.
 
 ### Detail modal
 
-Every task field: title, quantity (stepper), status, priority, slice status, ETA
-date and time, sent by, give to, filepath, print quality, print strength. Edits
+Every task field: title, quantity (stepper), status, priority, slice status,
+estimated finish date and time, sent by, give to, filepath, print quality, print
+strength. The date pair is labelled **Est. finish**, matching the card. Edits
 commit on blur and on close; there is no Save button. Delete lives here too.
 
 Closes on the X, on Escape, or on a click on the dimmed backdrop. Selecting text
@@ -119,7 +121,8 @@ Tasks in staging hide the fields that only mean something once assigned.
 - Only **Ready** printers and staging accept drops. Drops elsewhere are ignored,
   not queued.
 - Moving a task **out of staging onto a printer opens its detail modal**, because
-  a job being assigned is the moment its ETA and status need setting.
+  a job being assigned is the moment its estimated finish and status need
+  setting.
 - Drag state is cleared globally on `dragend`/`drop`, because a dragged card can
   unmount mid-drop and leave the board greyed out otherwise.
 

@@ -2493,14 +2493,17 @@ function TaskCard({
           )}
         </div>
 
-        {/* line 2: ETA, compact inline — printers only. Red when past due. */}
+        {/* line 2: estimated finish, compact inline — printers only. Red when
+            past due. Labelled "Est. finish" rather than "ETA": on a print shop
+            board a bare time reads as ambiguously as a start time, and a
+            second date ("Need by") is coming to sit beside it. */}
         {!inStaging && (
           <div
             className="mt-1 flex items-center gap-1.5"
             style={{ color: overdue ? "#D13438" : "#8A8886", fontSize: 10 }}
           >
             <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
-              ETA
+              Est. finish
             </span>
             <span
               className={`tabular-nums${overdue ? " font-semibold" : ""}`}
@@ -2698,9 +2701,9 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
             </Field>
           </div>
 
-          {/* ETA — printers only */}
+          {/* estimated finish — printers only */}
           {!inStaging && (
-            <Field label="ETA">
+            <Field label="Est. finish">
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="date"
@@ -2708,7 +2711,7 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
                   onChange={(e) => commit({ etaDate: e.target.value })}
                   className={MODAL_INPUT}
                   style={MODAL_STYLE}
-                  aria-label="ETA date"
+                  aria-label="Estimated finish date"
                 />
                 <input
                   type="time"
@@ -2716,7 +2719,7 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
                   onChange={(e) => commit({ etaTime: e.target.value })}
                   className={MODAL_INPUT}
                   style={MODAL_STYLE}
-                  aria-label="ETA time"
+                  aria-label="Estimated finish time"
                 />
               </div>
             </Field>
@@ -3017,7 +3020,7 @@ function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
             onChange={(e) => setEtaDate(e.target.value)}
             className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
             style={{ borderColor: "#C8C6C4" }}
-            aria-label="ETA date"
+            aria-label="Estimated finish date"
           />
           <input
             type="time"
@@ -3025,7 +3028,7 @@ function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
             onChange={(e) => setEtaTime(e.target.value)}
             className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
             style={{ borderColor: "#C8C6C4" }}
-            aria-label="ETA time"
+            aria-label="Estimated finish time"
           />
         </div>
       )}
