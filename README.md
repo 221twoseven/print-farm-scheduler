@@ -55,6 +55,7 @@ work on interface changes. See [docs/operations.md](docs/operations.md#working-l
 | [docs/operations.md](docs/operations.md) | Deploying a change, the two caches, the Teams package, troubleshooting |
 | [docs/ui-reference.md](docs/ui-reference.md) | What the board does, feature by feature — the behaviour spec |
 | [docs/decisions.md](docs/decisions.md) | Settled decisions that should not be relitigated, plus open items |
+| [docs/todo.md](docs/todo.md) | Open bugs and feature requests, ordered simplest first, with the SharePoint work each needs |
 | [docs/handoff-2026-08.md](docs/handoff-2026-08.md) | The original August 2026 handoff document, preserved verbatim |
 
 `CLAUDE.md` at the repo root is the working agreement for Claude Code sessions.
