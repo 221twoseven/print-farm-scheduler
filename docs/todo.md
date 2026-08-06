@@ -29,8 +29,8 @@ Every column below has to exist **before** the matching code change ships, or
 
 | List | Column | Type | Needed by |
 | --- | --- | --- | --- |
-| Tasks | Jobcode | Single line of text | [4](#4-jobcode-field-on-tasks-6) |
-| Tasks | NeedByDate | Date and Time | [5](#5-need-by-date-on-tasks-5) |
+| ~~Tasks~~ | ~~Jobcode~~ | ~~Single line of text~~ | created — item 4, done |
+| ~~Tasks~~ | ~~NeedByDate~~ | ~~Date and Time~~ | created — item 5, done |
 | Tasks | PrintMaterial | Choice — `ABS`, `Other (Discuss with Operator)` | [6](#6-split-print-material-between-printer-and-task-8) |
 | Printers | PrintMaterialOther | Single line of text | [6](#6-split-print-material-between-printer-and-task-8) |
 | Printers | Active *(existing)* | add `Busy` to the choice values | [8](#8-busy-printer-status-1) |
@@ -132,7 +132,11 @@ Mechanical, but a partial change fails at **load**, not at save, so the board go
 down for everyone until the missing piece lands. Ship each with its column
 already in place.
 
-### 4. Jobcode field on tasks (6)
+### 4. Jobcode field on tasks (6) — DONE
+
+*Shipped in #10.* Internal name came back as `Jobcode`, matching the display
+name. Jobcode joins the staging search — it is the most likely thing someone
+types into that box. Item 9 is now unblocked.
 
 **Risk: Medium** — new stored field. **Blocks item 9.**
 
@@ -143,7 +147,14 @@ Typically 5 characters (`XX000`), but nothing enforces that unless you want it t
 (currently title / sent by / give to / filepath). It seems obviously useful, and
 it is a one-line change while I am already in that function.
 
-### 5. Need-by date on tasks (5)
+### 5. Need-by date on tasks (5) — DONE
+
+*Shipped in #10.* Internal name `NeedByDate`. Shows on staging cards as well as
+assigned ones, and only when a date is set.
+
+**Overdue was deliberately left alone** — see the open question below, which is
+still open. `isOverdue()` still keys off `etaDate` only, and a passed need-by
+date is not called out in red.
 
 **Risk: Medium** — new stored field, plus a question about existing behaviour.
 
@@ -321,8 +332,8 @@ the value without a server. Treat this item as "investigate and report", not
 
 Tier 1 is closed: items 1, 2 and 13 shipped (#3, #5, #8), item 3 declined.
 
-1. **Create the Tasks columns** (Jobcode, NeedByDate), send me the internal names.
-2. **Items 4–5.**
+1. ~~Create the Tasks columns, items 4–5~~ — done, shipped in #10.
+2. **Decide whether "overdue" should account for need-by** — see item 5.
 3. **Create the material columns**, send internal names.
 4. **Item 6**, then **item 7** — in that order, so the manual print material
    exists before the summary has to treat it as an exception.

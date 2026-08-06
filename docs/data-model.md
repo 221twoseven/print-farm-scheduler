@@ -86,12 +86,14 @@ only the column name survives.
 | `id` | `TaskID` | Text | UUID |
 | `printerId` | `PrinterID` | Text | Printer UUID, or the literal `staging` |
 | `title` | `Title` | Text | |
+| `jobcode` | `Jobcode` | Text | The shop's job reference, typically `XX000`. Not validated — a wrong-shaped code is better than a rejected save |
 | `status` | `Status` | Choice | `Not started` / `In progress` / `Complete` |
 | `priority` | `Priority` | Choice | `Low` / `Normal` / `High` / `Urgent` |
 | `sliceStatus` | `SliceStatus` | Choice | `Sliced` / `Not Sliced` / `Needs Nesting` |
 | `quantity` | `Quantity` | Number | Defaults to 1 |
 | `etaDate` | `EtaDate` | Date and Time | Written at noon UTC — see below |
 | `etaTime` | `EtaTime` | Text | `HH:MM`, plain text on purpose |
+| `needByDate` | `NeedByDate` | Date and Time | The deadline, where `EtaDate` is the prediction. Same noon-UTC write |
 | `sentBy` | `SentBy` | Text | Requesting designer |
 | `giveTo` | `GiveTo` | Text | Who receives the print |
 | `filepath` | `Filepath` | Text | Where the model lives |
@@ -101,9 +103,16 @@ only the column name survives.
 
 ### Dates
 
-`EtaDate` is a real Date and Time column; `EtaTime` is plain text.
+`EtaDate` and `NeedByDate` are real Date and Time columns; `EtaTime` is plain
+text.
 
-Dates are written at **noon UTC**, not midnight (`dateToIso`). Midnight UTC
+The two dates answer different questions and are not interchangeable:
+**`NeedByDate` is a commitment** — when the job is wanted — and exists from the
+moment the task does. **`EtaDate` is a prediction** — when the print is expected
+to finish — and only means anything once the task has a printer, which is why
+the interface hides it while a task sits in staging.
+
+Both dates are written at **noon UTC**, not midnight (`dateToIso`). Midnight UTC
 displays as the previous evening anywhere west of Greenwich, so the SharePoint
 list itself would show jobs due a day early. Noon survives any offset. The site is
 Eastern, so the round trip is safe in both directions. Reading back just slices
