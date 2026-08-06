@@ -80,51 +80,48 @@ Group identity is already carried by the card's colour and the group header abov
 it, so the chip is redundant. Its styling gets reused in item 7 — worth doing
 these two in sequence.
 
-### 3. Label the ETA on assigned task cards (4)
+### 3. Label the ETA on assigned task cards (4) — NOT DOING
 
-**Risk: Low.** The card renders `formatEta(...)` bare, so a reader cannot tell
-whether the time is when the print starts or when it finishes.
+*Declined 2026-08-06. Built as #7, then closed unmerged.* "Est. finish" was
+tried and rejected: **ETA is the shop's own word for it** and the board should
+speak the shop's language, not a tidier one. Do not re-propose this.
 
-**Decide before starting:** what the label should say. "ETA", "Est. finish" and
-"Due" all read differently on a card, and this becomes more pointed once item 5
-adds a second date — so pick the wording for both at the same time.
+The one thing it was meant to solve — telling the two dates apart once item 5
+lands — is handled by "Need by" being unmistakably different from "ETA". What
+does still need doing is in item 5: the add-task form's date inputs have no
+visible label at all, which is survivable with one date and will not be with
+two.
 
-### 13. Printer card colour follows the group, not the state
+### 13. Retire group colour; colour means state or touch — DONE
 
-**Risk: Low to build, but it reverses a settled decision — read this first.**
+*Shipped in #8.* Landed differently from how it was first raised, and the
+reasoning is worth keeping.
 
-Two changes, and they belong together:
+The original ask was to make the printer card's top edge the **group** colour.
+What it became: group colour retired from the interface entirely, and the top
+edge **kept** its state colour. The reframing came from the shop — three colour
+systems were running at once (group, printer state, task status) and none of
+them read as meaning anything; the printer state colour, the one carrying real
+information, was not legible as state until it changed in front of you.
 
-- The card's 4px top edge (`borderTop`, currently `stateColor`) becomes the
-  group colour.
-- The colour dot beside the printer name goes, since the top edge would then be
-  saying the same thing.
+Group is the system that went, on a fact that settles it: **a printer cannot
+move between groups.** Colour was encoding something that never varies. What
+remains follows one rule — colour means an interaction or a state, never an
+identity:
 
-**What this reopens.** [decisions.md](decisions.md) records "group colour for
-identity, state colour for state", and the code comment on `stateColor` spells
-out the intent: *a green top edge means "this machine will print"*. Making the
-edge group-coloured removes the board's at-a-glance answer to "which machines
-are running?" — you would read each card's status pill instead of scanning for
-green.
+- printer card top edge keeps state colour, now uncontested
+- task status keeps colour but only with its word attached; the bare dot went
+- group headers, in-progress chips, context menu swatches all neutral
+- one `ACCENT` for focus, drag targets and active controls
+- the only dots left sit inside the status control, beside their own labels
 
-**Why it is still defensible.** The state signal does not disappear, it
-concentrates: the status pill is already coloured and named, and Maintenance
-still greys the whole card. Meanwhile group identity currently costs a dot on
-every card, and item 2 just removed the other group marker — so the card is
-carrying two colour systems for a board where printers are physically grouped.
-If operators navigate by group first and state second, this matches how they
-actually read the board, and that is a new fact rather than a reversal on taste.
+Group colours are still assigned and still round-trip through the `Color`
+column; nothing renders them, so reversing this needs no schema change.
+[decisions.md](decisions.md) records the superseded decision rather than
+quietly dropping it.
 
-**Decide before starting:** the drop-target highlight also uses `stateColor`
-(background tint, border and glow while dragging a task over the card). It only
-appears on printers that accept work, so it is already a state signal by
-existing at all. Either it follows the top edge to group colour, or it stays
-state-coloured and the card carries both — pick one, because they will look
-wrong together.
-
-If this goes ahead, [decisions.md](decisions.md) needs amending in the same
-commit to record what replaced it and why. A settled decision that is quietly
-contradicted by the code is worse than one that was never written down.
+**If the board reads flat** after a week of use, that is the signal to revisit —
+and the reversal is cheap by design.
 
 ---
 
@@ -322,20 +319,17 @@ the value without a server. Treat this item as "investigate and report", not
 
 ## Suggested sequencing
 
-1. ~~Items 1 and 2~~ — done, shipped in #3 and #5.
-2. **Item 3** — waiting on the ETA wording.
-3. **Item 13** — waiting on the drop-highlight decision, and on confirmation
-   that trading the green-means-running signal for group colour is what the shop
-   wants.
-4. **Create the Tasks columns** (Jobcode, NeedByDate), send me the internal names.
-5. **Items 4–5.**
-6. **Create the material columns**, send internal names.
-7. **Item 6**, then **item 7** — in that order, so the manual print material
-   exists before the summary has to treat it as an exception.
-8. **Decide the Busy behaviour**, add the choice value, then **item 8**.
-9. **Item 9.**
-10. **Item 10**, once the interface has stopped moving.
-11. **Then** tackle 11 on its own, and treat 12 as research.
+Tier 1 is closed: items 1, 2 and 13 shipped (#3, #5, #8), item 3 declined.
 
-Items 3 and 13 are both one-sitting changes blocked only on a decision, so
-answering those two unblocks the rest of the quick work.
+1. **Create the Tasks columns** (Jobcode, NeedByDate), send me the internal names.
+2. **Items 4–5.**
+3. **Create the material columns**, send internal names.
+4. **Item 6**, then **item 7** — in that order, so the manual print material
+   exists before the summary has to treat it as an exception.
+5. **Decide the Busy behaviour**, add the choice value, then **item 8**.
+6. **Item 9.**
+7. **Item 10**, once the interface has stopped moving.
+8. **Then** tackle 11 on its own, and treat 12 as research.
+
+Everything left needs something from the shop first — two SharePoint columns for
+the next step, and a decision on Busy after that.
