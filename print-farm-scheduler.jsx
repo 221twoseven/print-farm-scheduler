@@ -295,6 +295,8 @@ const buildSeedTasks = () => {
       id: "t1",
       printerId: "p1",
       title: "Bracket set — 12pcs",
+      jobcode: "AX112",
+      needByDate: "2026-06-18",
       status: "In progress",
       etaDate: "2026-06-15",
       etaTime: "14:30",
@@ -369,9 +371,11 @@ const buildSeedTasks = () => {
       id: `seed-task-${i}`,
       printerId: STAGING,
       title: `${parts[i % parts.length]} — job ${100 + i}`,
+      jobcode: `${"ABCDEFGH"[i % 8]}${"XYZ"[i % 3]}${String(100 + i).slice(-3)}`,
       status: "Not started",
       etaDate: "",
       etaTime: "",
+      needByDate: i % 3 === 0 ? `2026-08-${String(10 + (i % 18)).padStart(2, "0")}` : "",
       sliceStatus: slice[i % slice.length],
       sentBy: people[i % people.length],
       giveTo: people[(i + 3) % people.length],
@@ -1593,6 +1597,7 @@ function StagingArea({
       if (!q) return true;
       return (
         (t.title || "").toLowerCase().includes(q) ||
+        (t.jobcode || "").toLowerCase().includes(q) ||
         (t.sentBy || "").toLowerCase().includes(q) ||
         (t.giveTo || "").toLowerCase().includes(q) ||
         (t.filepath || "").toLowerCase().includes(q)
@@ -2371,6 +2376,7 @@ function TaskCard({
   dragging,
 }) {
   const eta = formatEta(task.etaDate, task.etaTime);
+  const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
   const overdue = isOverdue(task);
   const st = STATUS_STYLE[task.status];
   const [overPos, setOverPos] = useState(null); // 'before' | 'after' | null
@@ -2475,6 +2481,28 @@ function TaskCard({
             </span>
           )}
         </div>
+
+        {/* Need by, when one is set. Shown in staging too: a deadline exists
+            from the moment the job does, unlike the ETA. Rendered only when
+            present, so cards without one stay as minimal as they were.
+
+            Deliberately not red when the date has passed — "overdue" on this
+            board still means the ETA has passed (isOverdue), and quietly
+            introducing a second, competing lateness signal is a behaviour
+            change the shop has not asked for yet. */}
+        {needBy && (
+          <div
+            className="mt-1 flex items-center gap-1.5"
+            style={{ color: "#8A8886", fontSize: 10 }}
+          >
+            <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
+              Need by
+            </span>
+            <span className="tabular-nums" style={{ color: "#605E5C" }}>
+              {needBy.date}
+            </span>
+          </div>
+        )}
 
         {/* line 2: ETA, compact inline — printers only. Red when past due. */}
         {!inStaging && (
@@ -2611,6 +2639,17 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
             />
           </Field>
 
+          <Field label="Jobcode">
+            <input
+              value={val("jobcode")}
+              onChange={(e) => edit("jobcode", e.target.value)}
+              onBlur={flush}
+              className={MODAL_INPUT}
+              style={MODAL_STYLE}
+              aria-label="Jobcode"
+            />
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Sent by">
               <input
@@ -2672,6 +2711,20 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
               </select>
             </Field>
           </div>
+
+          {/* Need by is a deadline and applies to any task, assigned or not.
+              ETA is a prediction and only means something once the job has a
+              printer, so it stays printers-only. */}
+          <Field label="Need by">
+            <input
+              type="date"
+              value={val("needByDate")}
+              onChange={(e) => commit({ needByDate: e.target.value })}
+              className={MODAL_INPUT}
+              style={MODAL_STYLE}
+              aria-label="Need by date"
+            />
+          </Field>
 
           {/* ETA — printers only */}
           {!inStaging && (
@@ -2882,6 +2935,8 @@ function NumberStepper({
 
 function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [title, setTitle] = useState("");
+  const [jobcode, setJobcode] = useState("");
+  const [needByDate, setNeedByDate] = useState("");
   const [etaDate, setEtaDate] = useState("");
   const [etaTime, setEtaTime] = useState("");
   const [sentBy, setSentBy] = useState("");
@@ -2900,6 +2955,8 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
     if (!title.trim()) return;
     onAdd({
       title: title.trim(),
+      jobcode: jobcode.trim(),
+      needByDate,
       etaDate: showEta ? etaDate : "",
       etaTime: showEta ? etaTime : "",
       sentBy: sentBy.trim(),
@@ -2926,6 +2983,15 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         className="w-full text-sm px-2 py-1.5 rounded border outline-none"
         style={{ borderColor: "#C8C6C4" }}
         aria-label="Task name"
+      />
+      <input
+        value={jobcode}
+        onChange={(e) => setJobcode(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder="Jobcode"
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none"
+        style={{ borderColor: "#C8C6C4" }}
+        aria-label="Jobcode"
       />
       <div className="flex gap-2">
         <input
@@ -2984,24 +3050,42 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           </select>
         </label>
       </div>
+      {/* Two dates, so each has to say which it is — a bare pair of pickers
+          was survivable with one and is not with two. Need by is a deadline
+          and applies from the moment the job exists; ETA is a prediction and
+          only means anything once the job has a printer. */}
+      <label className="block text-xs" style={{ color: "#605E5C" }}>
+        <span className="block">Need by</span>
+        <input
+          type="date"
+          value={needByDate}
+          onChange={(e) => setNeedByDate(e.target.value)}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border outline-none"
+          style={{ borderColor: "#C8C6C4" }}
+          aria-label="Need by date"
+        />
+      </label>
       {showEta && (
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={etaDate}
-            onChange={(e) => setEtaDate(e.target.value)}
-            className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-            style={{ borderColor: "#C8C6C4" }}
-            aria-label="ETA date"
-          />
-          <input
-            type="time"
-            value={etaTime}
-            onChange={(e) => setEtaTime(e.target.value)}
-            className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-            style={{ borderColor: "#C8C6C4" }}
-            aria-label="ETA time"
-          />
+        <div className="text-xs" style={{ color: "#605E5C" }}>
+          <span className="block">ETA</span>
+          <div className="mt-0.5 flex gap-2">
+            <input
+              type="date"
+              value={etaDate}
+              onChange={(e) => setEtaDate(e.target.value)}
+              className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
+              style={{ borderColor: "#C8C6C4" }}
+              aria-label="ETA date"
+            />
+            <input
+              type="time"
+              value={etaTime}
+              onChange={(e) => setEtaTime(e.target.value)}
+              className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
+              style={{ borderColor: "#C8C6C4" }}
+              aria-label="ETA time"
+            />
+          </div>
         </div>
       )}
       <select
@@ -3136,12 +3220,16 @@ const COLS = {
     uuid: "TaskID",
     printerId: "PrinterID", // holds the literal string "staging" when unassigned
     title: "Title",
+    jobcode: "Jobcode",
     status: "Status",
     priority: "Priority",
     sliceStatus: "SliceStatus",
     quantity: "Quantity",
     etaDate: "EtaDate",
     etaTime: "EtaTime",
+    /* A deadline, where EtaDate is a prediction. Same noon-UTC treatment —
+       see dateToIso. */
+    needByDate: "NeedByDate",
     sentBy: "SentBy",
     giveTo: "GiveTo",
     filepath: "Filepath",
@@ -3426,12 +3514,14 @@ const taskFromRow = (f) => ({
   id: str(f[COLS.tasks.uuid]) || uid(),
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
   title: str(f[COLS.tasks.title]),
+  jobcode: str(f[COLS.tasks.jobcode]),
   status: str(f[COLS.tasks.status]) || "Not started",
   priority: str(f[COLS.tasks.priority]) || "Normal",
   sliceStatus: str(f[COLS.tasks.sliceStatus]) || "Not Sliced",
   quantity: num(f[COLS.tasks.quantity], 1),
   etaDate: isoToDate(f[COLS.tasks.etaDate]),
   etaTime: str(f[COLS.tasks.etaTime]),
+  needByDate: isoToDate(f[COLS.tasks.needByDate]),
   sentBy: str(f[COLS.tasks.sentBy]),
   giveTo: str(f[COLS.tasks.giveTo]),
   filepath: str(f[COLS.tasks.filepath]),
@@ -3444,12 +3534,14 @@ const taskToRow = (t) => ({
   [COLS.tasks.uuid]: t.id,
   [COLS.tasks.printerId]: t.printerId || STAGING,
   [COLS.tasks.title]: t.title || "",
+  [COLS.tasks.jobcode]: t.jobcode || "",
   [COLS.tasks.status]: t.status || "Not started",
   [COLS.tasks.priority]: t.priority || "Normal",
   [COLS.tasks.sliceStatus]: t.sliceStatus || "Not Sliced",
   [COLS.tasks.quantity]: num(t.quantity, 1),
   [COLS.tasks.etaDate]: dateToIso(t.etaDate),
   [COLS.tasks.etaTime]: t.etaTime || "",
+  [COLS.tasks.needByDate]: dateToIso(t.needByDate),
   [COLS.tasks.sentBy]: t.sentBy || "",
   [COLS.tasks.giveTo]: t.giveTo || "",
   [COLS.tasks.filepath]: t.filepath || "",

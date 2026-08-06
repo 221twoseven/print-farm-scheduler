@@ -35,7 +35,7 @@ third setting stored in the same list.
 The holding pen for jobs that have not been assigned to a printer. A task in
 staging carries `printerId === "staging"`.
 
-- **Search** — matches title, sent by, give to, and filepath.
+- **Search** — matches title, jobcode, sent by, give to, and filepath.
 - **Priority filter** — All / Urgent / High / Normal / Low.
 - **Priority ordering** — Urgent first, then High, Normal, Low, with a small
   header the first time each tier appears. Manual `sortOrder` is the tiebreaker
@@ -75,22 +75,28 @@ printer belongs to is answered by the group it is sitting in.
 ## Task cards
 
 Collapsed cards are deliberately minimal: title, quantity, priority flag,
-status pill, and the ETA. Everything else lives in the detail
-modal — earlier cards showed more and the feedback was that the board read as
-visually busy. There is no status dot: the pill beside it already says the same
-thing in words.
+status pill, the need-by date when one is set, and the ETA. Everything else
+lives in the detail modal — earlier cards showed more and the feedback was that
+the board read as visually busy. There is no status dot: the pill beside it
+already says the same thing in words.
 
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
 - **Right-click** — context menu.
-- Overdue ETAs are called out on the card.
+- Overdue ETAs are called out in red on the card. A passed **need-by** date is
+  not — "overdue" on this board still means the ETA has passed.
+- **Need by** shows on staging cards too, unlike the ETA: a deadline exists from
+  the moment the job does, while an ETA only means something once the job has a
+  printer. It renders only when a date is set, so cards without one look exactly
+  as they did.
 - A completed card is tinted and stops looking like live work.
 
 ### Detail modal
 
-Every task field: title, quantity (stepper), status, priority, slice status, ETA
-date and time, sent by, give to, filepath, print quality, print strength. Edits
-commit on blur and on close; there is no Save button. Delete lives here too.
+Every task field: title, jobcode, quantity (stepper), status, priority, slice
+status, need-by date, ETA date and time, sent by, give to, filepath, print
+quality, print strength. Edits commit on blur and on close; there is no Save
+button. Delete lives here too.
 
 Closes on the X, on Escape, or on a click on the dimmed backdrop. Selecting text
 inside the panel and releasing outside it is a drag, not a click, and leaves the
