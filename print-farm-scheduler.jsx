@@ -379,6 +379,26 @@ function formatEta(etaDate, etaTime) {
   return { date: datePart, time: etaTime || "" };
 }
 
+/* Dismiss-on-backdrop handlers for a modal.
+
+   A click belongs to the nearest common ancestor of where the mouse went
+   down and where it came up. Select text inside a panel and release past
+   its edge and that ancestor is the backdrop, so a plain onClick reads the
+   drag as a click on the backdrop and closes the modal mid-edit. Remember
+   where the press landed instead of inferring it from the release. */
+function useBackdropClose(onClose) {
+  const pressedBackdrop = useRef(false);
+  return {
+    onMouseDown: (e) => {
+      pressedBackdrop.current = e.target === e.currentTarget;
+    },
+    onClick: (e) => {
+      if (e.target === e.currentTarget && pressedBackdrop.current) onClose();
+      pressedBackdrop.current = false;
+    },
+  };
+}
+
 /* Past-due test. A date with no time is due at end of that day, so a job
    due today doesn't read as late all morning. Complete jobs never count. */
 function isOverdue(task) {
@@ -429,6 +449,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const [contextMenu, setContextMenu] = useState(null); // {type, id, x, y}
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const [confirm, setConfirm] = useState(null); // {title, body, confirmLabel, onConfirm}
+
+  /* declared here, not at the modal, because the modal renders conditionally
+     and a hook cannot */
+  const shopSettingsBackdrop = useBackdropClose(() => setShowShopSettings(false));
 
   const groupColor = (groupId) =>
     groups.find((g) => g.id === groupId)?.color || "#69797E";
@@ -821,7 +845,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.4)" }}
-          onClick={() => setShowShopSettings(false)}
+          {...shopSettingsBackdrop}
         >
           <div
             className="rounded-xl shadow-2xl w-full max-w-md p-5"
@@ -1263,11 +1287,12 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
 /* ------------------------- confirmation dialog ------------------------ */
 
 function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }) {
+  const backdrop = useBackdropClose(onCancel);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.4)" }}
-      onClick={onCancel}
+      {...backdrop}
     >
       <div
         className="rounded-xl shadow-2xl w-full max-w-md p-5"
@@ -2537,6 +2562,8 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
     onClose();
   };
 
+  const backdrop = useBackdropClose(close);
+
   /* Escape closes, committing any in-flight text edit first. closeRef keeps
      the listener stable so it isn't torn down and rebuilt on every keystroke. */
   const closeRef = useRef(close);
@@ -2559,7 +2586,7 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.45)" }}
-      onClick={close}
+      {...backdrop}
     >
       <div
         className="rounded-xl shadow-2xl w-full max-w-lg flex flex-col"

@@ -89,6 +89,10 @@ Every task field: title, quantity (stepper), status, priority, slice status, ETA
 date and time, sent by, give to, filepath, print quality, print strength. Edits
 commit on blur and on close; there is no Save button. Delete lives here too.
 
+Closes on the X, on Escape, or on a click on the dimmed backdrop. Selecting text
+inside the panel and releasing outside it is a drag, not a click, and leaves the
+modal open — the same applies to the shop layout and confirmation dialogs.
+
 Tasks in staging hide the fields that only mean something once assigned.
 
 ### Context menu
