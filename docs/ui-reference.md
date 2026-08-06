@@ -75,7 +75,7 @@ printer belongs to is answered by the group it is sitting in.
 ## Task cards
 
 Collapsed cards are deliberately minimal: title, quantity, priority flag,
-status pill, and the estimated finish. Everything else lives in the detail
+status pill, and the ETA. Everything else lives in the detail
 modal — earlier cards showed more and the feedback was that the board read as
 visually busy. There is no status dot: the pill beside it already says the same
 thing in words.
