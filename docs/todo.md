@@ -5,7 +5,12 @@ parentheses are the item's position in the original request, so the two lists ca
 be cross-referenced.
 
 Each entry records what changes, where, whether SharePoint needs a parallel
-change, and what could break. Tick items off as they merge.
+change, and what could break. Items are marked DONE as they merge.
+
+Item numbers are stable identifiers, not positions — a later request can land in
+an early tier without renumbering everything around it. Read the tier and the
+order within it for what to do next; read the number when you need to refer to
+an item.
 
 **Risk** is blast radius if the change is wrong, not effort:
 
@@ -83,6 +88,43 @@ whether the time is when the print starts or when it finishes.
 **Decide before starting:** what the label should say. "ETA", "Est. finish" and
 "Due" all read differently on a card, and this becomes more pointed once item 5
 adds a second date — so pick the wording for both at the same time.
+
+### 13. Printer card colour follows the group, not the state
+
+**Risk: Low to build, but it reverses a settled decision — read this first.**
+
+Two changes, and they belong together:
+
+- The card's 4px top edge (`borderTop`, currently `stateColor`) becomes the
+  group colour.
+- The colour dot beside the printer name goes, since the top edge would then be
+  saying the same thing.
+
+**What this reopens.** [decisions.md](decisions.md) records "group colour for
+identity, state colour for state", and the code comment on `stateColor` spells
+out the intent: *a green top edge means "this machine will print"*. Making the
+edge group-coloured removes the board's at-a-glance answer to "which machines
+are running?" — you would read each card's status pill instead of scanning for
+green.
+
+**Why it is still defensible.** The state signal does not disappear, it
+concentrates: the status pill is already coloured and named, and Maintenance
+still greys the whole card. Meanwhile group identity currently costs a dot on
+every card, and item 2 just removed the other group marker — so the card is
+carrying two colour systems for a board where printers are physically grouped.
+If operators navigate by group first and state second, this matches how they
+actually read the board, and that is a new fact rather than a reversal on taste.
+
+**Decide before starting:** the drop-target highlight also uses `stateColor`
+(background tint, border and glow while dragging a task over the card). It only
+appears on printers that accept work, so it is already a state signal by
+existing at all. Either it follows the top edge to group colour, or it stays
+state-coloured and the card carries both — pick one, because they will look
+wrong together.
+
+If this goes ahead, [decisions.md](decisions.md) needs amending in the same
+commit to record what replaced it and why. A settled decision that is quietly
+contradicted by the code is worse than one that was never written down.
 
 ---
 
@@ -280,15 +322,20 @@ the value without a server. Treat this item as "investigate and report", not
 
 ## Suggested sequencing
 
-1. **PR 1** — items 1–3. No SharePoint, immediate wins.
-2. **Create the Tasks columns** (Jobcode, NeedByDate), send me the internal names.
-3. **PR 2** — items 4–5.
-4. **Create the material columns**, send internal names.
-5. **PR 3** — item 6, then **PR 4** — item 7.
-6. **Decide the Busy behaviour**, add the choice value, then **PR 5** — item 8.
-7. **PR 6** — item 9.
-8. **PR 7** — item 10, once the interface has stopped moving.
-9. **Then** tackle 11 on its own, and treat 12 as research.
+1. ~~Items 1 and 2~~ — done, shipped in #3 and #5.
+2. **Item 3** — waiting on the ETA wording.
+3. **Item 13** — waiting on the drop-highlight decision, and on confirmation
+   that trading the green-means-running signal for group colour is what the shop
+   wants.
+4. **Create the Tasks columns** (Jobcode, NeedByDate), send me the internal names.
+5. **Items 4–5.**
+6. **Create the material columns**, send internal names.
+7. **Item 6**, then **item 7** — in that order, so the manual print material
+   exists before the summary has to treat it as an exception.
+8. **Decide the Busy behaviour**, add the choice value, then **item 8**.
+9. **Item 9.**
+10. **Item 10**, once the interface has stopped moving.
+11. **Then** tackle 11 on its own, and treat 12 as research.
 
-Items 1–3 need nothing from you but the ETA wording, so that PR can go out as
-soon as you pick it.
+Items 3 and 13 are both one-sitting changes blocked only on a decision, so
+answering those two unblocks the rest of the quick work.
