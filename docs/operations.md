@@ -3,16 +3,63 @@
 ## Deploying a change
 
 1. Edit `print-farm-scheduler.jsx` and commit to `main`.
-2. Wait for the GitHub Pages build — check the **Actions** tab for a green check.
-3. Hard-refresh, or use a private window. **Babel fetches the JSX separately from
+2. Wait for the run in the **Actions** tab to finish, and check that the
+   **deploy** job went green — not just the build. See below: they fail
+   independently, and a green build is not a deployed site.
+3. **Confirm what is actually live** before touching a browser cache. Open
+   the raw file and search it for something the change introduced:
+
+   ```
+   https://221twoseven.github.io/print-farm-scheduler/print-farm-scheduler.jsx
+   ```
+
+   If the new code is not in there, the deploy did not land and no amount of
+   refreshing will help.
+4. Hard-refresh, or use a private window. **Babel fetches the JSX separately from
    the page, so it caches on its own** — reloading `index.html` is not enough.
-4. Inside Teams, fully quit the client from the system tray and reopen. Teams
+5. Inside Teams, fully quit the client from the system tray and reopen. Teams
    holds tab content harder than a browser and has no hard refresh.
 
 Two separate caches — the browser's HTTP cache on `print-farm-scheduler.jsx`, and
 the Teams client's own content cache — bit this project twice during deployment.
-**When a change appears not to have taken effect, suspect cache before suspecting
-the code.**
+But a failed deploy looks exactly like a caching problem from inside Teams, and
+cache is the more expensive thing to chase. **Confirm the file on the server
+first (step 3), then blame cache.**
+
+### When the deploy hangs
+
+"pages build and deployment" is two jobs, **build** then **deploy**, and the
+Actions list shows one line for both. The build stage compiles the site; the
+deploy stage just polls GitHub's Pages backend until it reports done. They fail
+for completely different reasons:
+
+- **Build fails** — something about the files. Read the log; it will name the
+  offending file.
+- **Deploy fails** — nothing to do with the repo. The log shows
+  `Current status: deployment_in_progress` repeating for ten minutes, then
+  `Timeout reached, aborting!`. The site keeps serving whatever was last
+  deployed successfully.
+
+A healthy deploy on this repo takes **40 seconds to a minute**. Anything around
+ten minutes is the timeout, not slowness.
+
+A wedged Pages deployment can also refuse to clear: a re-run may sit as *Queued*
+without ever picking up a runner, while the API rejects both cancel
+(`Cannot cancel a workflow re-run that has not yet queued`) and re-run
+(`This workflow is already running`). In that state, in order of preference:
+
+1. Cancel the run from the Actions UI, which sometimes succeeds where the API
+   refuses, then re-run it.
+2. Push a new commit to `main`. That starts a genuinely new run rather than a
+   re-run, which can sidestep the stuck one.
+3. **Settings → Pages → Unpublish site**, then re-select `main` / `(root)` and
+   Save. This clears stuck Pages state, at the cost of taking the board offline
+   for a few minutes — so pick the moment.
+
+Worth checking once before assuming a platform fault, though all three were
+clean when this last happened: https://www.githubstatus.com for a Pages
+incident, and **Settings → Environments → `github-pages`** for a required
+reviewer or wait timer, which would hold a deployment in exactly this state.
 
 There is no build step, no test suite and no linter in CI. The only gate between
 a commit and production is the Pages build, which only fails on infrastructure
@@ -78,7 +125,7 @@ so it does not require a code change. Deleting and recreating one does.
 
 | Symptom | Where to look |
 | --- | --- |
-| Change didn't take effect | Cache, twice over: hard-refresh the browser, fully quit and reopen Teams |
+| Change didn't take effect | Check the deployed file first (see step 3 above). If the new code is on the server, it's cache twice over: hard-refresh the browser, fully quit and reopen Teams. If it isn't, the deploy failed — the Actions line can read as failed while the *build* was fine |
 | "Could not load the board" with a column list | `checkSchema()` — fix `COLS`, not SharePoint |
 | Status pill stuck on "Not saved" | Hover it for the Graph error; click Retry. `flush()` keeps the pending snapshot, so nothing is lost until the tab closes |
 | Blank board, console shows a Babel error | Syntax error in the JSX — it ships unvalidated |
