@@ -48,7 +48,10 @@ row trying to store it.
 
 Three quick wins. These can go out as a single PR.
 
-### 1. Modal closes when a text selection drags outside it (3)
+### 1. Modal closes when a text selection drags outside it (3) — DONE
+
+*Shipped in #3, deployed and confirmed in Teams 2026-08-06.* The confirmation
+dialog turned out to have the same bug and was fixed with it.
 
 **Risk: Low.** Confirmed bug, and the cause is exactly what the symptom suggests.
 
@@ -60,7 +63,10 @@ it — losing the edit in progress.
 Fix: only close when the press *and* the release both land on the backdrop —
 record the `mousedown` target and check it on `mouseup`. Apply to both modals.
 
-### 2. Remove the group name from printer cards (9)
+### 2. Remove the group name from printer cards (9) — DONE
+
+*Shipped in #5.* Note for item 7: the chip's styling is gone from the card but
+recorded in that commit's diff if it is wanted back for the exception list.
 
 **Risk: Low.** Deleting the group chip in `PrinterColumn`; the task count beside
 it stays.
