@@ -9,7 +9,7 @@ consistent with (or deliberately update).
 1. **Header** — purple bar, app name, live count of printers and tasks, and a
    gear opening **Shop layout**.
 2. **In-progress bar** — a chip per printer that has at least one `In progress`
-   task, in the printer's group colour, with a count. Reads "No printers have
+   task, with a count, in the `In progress` status blue. Reads "No printers have
    tasks in progress" when empty.
 3. **Staging area** — the unassigned queue.
 4. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
@@ -52,10 +52,9 @@ staging carries `printerId === "staging"`.
 ## Printer cards
 
 Each card shows the printer name, a task count, and a status control. Its top
-edge is coloured by **state**, not group — green means "this machine will
-print". The group is identified by the card's own colour and by the group header
-above it; the card does not name it, because on a card this narrow the width
-matters more than the repetition.
+edge is coloured by **state** — green means "this machine will print". The card
+carries no group marker at all: neither the name nor a colour. Which group a
+printer belongs to is answered by the group it is sitting in.
 
 - **Status** — Ready / Reserved / Maintenance, from the card control or the
   right-click menu. Moving a printer to **Maintenance** sends its queued jobs
@@ -75,9 +74,11 @@ matters more than the repetition.
 
 ## Task cards
 
-Collapsed cards are deliberately minimal: status dot, title, quantity, priority
-flag, status pill, and ETA. Everything else lives in the detail modal — earlier
-cards showed more and the feedback was that the board read as visually busy.
+Collapsed cards are deliberately minimal: title, quantity, priority flag,
+status pill, and the estimated finish. Everything else lives in the detail
+modal — earlier cards showed more and the feedback was that the board read as
+visually busy. There is no status dot: the pill beside it already says the same
+thing in words.
 
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
@@ -115,7 +116,7 @@ Tasks in staging hide the fields that only mean something once assigned.
 - Drop on a **column's open area** → the task moves to that printer, at the end
   of its queue.
 - Drop **on a card** → the task inserts before or after it, depending on which
-  half you release over; a coloured edge shows where it will land.
+  half you release over; an accent-coloured edge shows where it will land.
 - Only **Ready** printers and staging accept drops. Drops elsewhere are ignored,
   not queued.
 - Moving a task **out of staging onto a printer opens its detail modal**, because
@@ -128,8 +129,9 @@ Tasks in staging hide the fields that only mean something once assigned.
 - Click the header to collapse or expand. **Collapse is per-person and is not
   saved** — folding a group is one operator's view, not a fact about the shop.
 - Rename in place via the pencil.
-- Colour is assigned automatically from a fixed palette and is not individually
-  assignable: group colour is identity, state colour is state.
+- Groups have no colour in the interface. A colour is still assigned and stored
+  against each group, but nothing renders it — see
+  [decisions.md](decisions.md). Group headers and their left band are neutral.
 - **Add group** / **Add printer**; removing a group uses an explicit remove mode
   and a confirmation, since it takes its printers with it.
 

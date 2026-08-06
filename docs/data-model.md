@@ -39,7 +39,7 @@ One row per printer group (the shop's physical or logical clusters).
 | --- | --- | --- | --- |
 | `id` | `GroupID` | Text | Our `crypto.randomUUID()`, not SharePoint's row ID |
 | `name` | `Title` | Text | |
-| `color` | `Color` | Text | Hex from `GROUP_COLORS`, assigned automatically |
+| `color` | `Color` | Text | Hex from `GROUP_COLORS`, assigned automatically. **Stored but no longer rendered** — kept so reversing that needs no schema change. See [decisions.md](decisions.md) |
 | `sortOrder` | `SortOrder` | Number | Position on the board |
 | `collapsed` | `Collapsed` | Yes/No | **Unused on purpose.** Collapse is per-person view state; a shared column would fold the group for everyone |
 

@@ -45,11 +45,38 @@ Within staging, tier order (Urgent → High → Normal → Low) always wins;
 `sortOrder` is the tiebreaker *inside* a tier. Dragging a card to the top of
 staging does not promote it — change its priority instead.
 
-### Group colour for identity, state colour for state
+### ~~Group colour for identity, state colour for state~~ — superseded 2026-08
 
-Group colours are assigned automatically from a fixed palette and inherited by
-printers. Printer colour is not individually assignable, so colour never means
-two things at once.
+The original decision: group colours assigned automatically from a fixed palette
+and inherited by printers, so colour never means two things at once.
+
+It did not survive contact with a full board. Three colour systems ran at the
+same time — group identity, printer state, task status — and the intent that
+each would stay in its own lane did not hold visually: with colour everywhere,
+none of it read as meaning anything in particular. The printer state colour
+suffered worst. It was the one carrying real information, and operators
+reported it was not legible as *state* until they watched it change.
+
+**What replaced it: colour means an interaction or a state, never an identity.**
+
+- **Group colour is retired from the interface.** A printer cannot be moved
+  between groups — the assignment is static — so colour was encoding something
+  that never varies, which is where a colour code earns least. The grouping is
+  already unmistakable from the layout and the group's name.
+- **State keeps its colour**, and now has it to itself: the printer card's top
+  edge stays green / orange / grey, so "which machines will print" is still
+  answerable by scanning rather than by reading each card.
+- **Status keeps its colour, but only with its word attached.** The task status
+  chip stays; the bare status dot beside it went, because it repeated the chip
+  without the label that made it readable.
+- **A single accent** (`ACCENT`) covers focus, drag targets and active controls
+  — "what am I touching", never "what is this".
+
+Group colours are still assigned and still round-trip through the `Color`
+column. Nothing renders them. They cost nothing to keep, and leaving them means
+reversing this needs no schema change and no data migration — which is the
+cheapest possible insurance against the board reading flat once the shop lives
+with it.
 
 ### One three-state printer control
 
