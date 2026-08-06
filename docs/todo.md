@@ -31,8 +31,8 @@ Every column below has to exist **before** the matching code change ships, or
 | --- | --- | --- | --- |
 | ~~Tasks~~ | ~~Jobcode~~ | ~~Single line of text~~ | created — item 4, done |
 | ~~Tasks~~ | ~~NeedByDate~~ | ~~Date and Time~~ | created — item 5, done |
-| ~~Tasks~~ | ~~PrintMaterial~~ | ~~Choice — `ABS`, `Other (Discuss with Operator)`~~ | created — item 6, **internal names still to confirm** |
-| ~~Printers~~ | ~~PrintMaterialOther~~ | ~~Single line of text~~ | created — item 6, **internal names still to confirm** |
+| ~~Tasks~~ | ~~PrintMaterial~~ | ~~Choice — `ABS`, `Other (Discuss with Operator)`~~ | created — item 6, done |
+| ~~Printers~~ | ~~PrintMaterialOther~~ | ~~Single line of text~~ | created — item 6, done |
 | Printers | PrintMaterial *(existing)* | reword choices to `ABS` / `Other` | [6](#6-split-print-material-between-printer-and-task-8) — optional |
 | Printers | Active *(existing)* | add `Busy` to the choice values | [8](#8-busy-printer-status-1) |
 
@@ -172,11 +172,13 @@ existing cards, so I want it to be your call rather than a side effect.
 
 ## Tier 3 — moderate
 
-### 6. Split print material between printer and task (8) — DONE, pending name check
+### 6. Split print material between printer and task (8) — DONE
 
-*Shipped in #11.* `COLS` assumes the internal names match the display names
-(`PrintMaterial` on Tasks, `PrintMaterialOther` on Printers). **Confirm both
-before merging** — a mismatch fails at load, not at save.
+*Shipped in #11.* Internal names confirmed as `PrintMaterial` (Tasks) and
+`PrintMaterialOther` (Printers) — both matching their display names. That is
+now four columns in a row that matched, which is worth noting but not worth
+trusting: the two that did not are still in this repo, and still cost a
+debugging cycle each.
 
 One optional SharePoint tidy-up remains: the Printers `PrintMaterial` choices
 still read `ABS` / `Other (Discuss with Operator)`. Rewording the printer's to
@@ -346,8 +348,7 @@ Tier 1 is closed: items 1, 2 and 13 shipped (#3, #5, #8), item 3 declined.
 
 1. ~~Items 4–5~~ — done, shipped in #10.
 2. ~~Item 6~~ — done, shipped in #11, pending the internal-name check.
-3. **Confirm the two new internal names**, and decide whether "overdue" should
-   account for need-by (item 5).
+3. **Decide whether "overdue" should account for need-by** — see item 5.
 4. **Item 7** — the settings summary, now that a manually named material exists
    for it to treat as an exception.
 5. **Decide the Busy behaviour**, add the choice value, then **item 8**.
