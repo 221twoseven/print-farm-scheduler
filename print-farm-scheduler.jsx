@@ -43,8 +43,25 @@ import {
 
 /* ----------------------------- constants ------------------------------ */
 
-/* Group colors are assigned automatically and uniquely; printers inherit
-   their group's color and it is not individually assignable. */
+/* Interaction accent. Focus rings, drag targets, the active state of a control
+   — anything answering "what am I touching", never "what is this". Kept apart
+   from the state colors so that a color on this board always means either an
+   interaction or a state, and never an identity. */
+const ACCENT = "#5B5FC7";
+
+/* Group colors are still assigned and stored, but nothing renders them.
+
+   They used to carry group identity on every card and chip. The board ended up
+   with three color systems competing — group, printer state, task status — and
+   a color that means three things means none of them; the printer state color
+   in particular was unreadable until it changed in front of you. Group is the
+   one of the three that a color was never needed for: a printer cannot move
+   between groups, and the grouping is already obvious from the layout and the
+   group's name.
+
+   The values stay because they cost nothing, the Color column keeps round
+   tripping, and reversing this needs no schema change — see
+   docs/decisions.md. */
 const GROUP_COLORS = [
   "#5B5FC7", // indigo
   "#038387", // teal
@@ -454,9 +471,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
      and a hook cannot */
   const shopSettingsBackdrop = useBackdropClose(() => setShowShopSettings(false));
 
-  const groupColor = (groupId) =>
-    groups.find((g) => g.id === groupId)?.color || "#69797E";
-
   /* close context menu on any click / escape / scroll */
   useEffect(() => {
     if (!contextMenu) return;
@@ -505,8 +519,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     });
     return printers
       .filter((p) => counts[p.id])
-      .map((p) => ({ ...p, count: counts[p.id], color: groupColor(p.groupId) }));
-  }, [tasks, printers, groups]);
+      .map((p) => ({ ...p, count: counts[p.id] }));
+  }, [tasks, printers]);
 
   const expandedTask = tasks.find((t) => t.id === expandedTaskId) || null;
 
@@ -966,16 +980,15 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
               key={p.id}
               className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
               style={{
-                background: `${p.color}1A`,
-                color: p.color,
-                border: `1px solid ${p.color}40`,
+                background: STATUS_STYLE["In progress"].bg,
+                color: STATUS_STYLE["In progress"].text,
+                border: `1px solid ${STATUS_STYLE["In progress"].dot}40`,
               }}
             >
-              <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
               {p.name}
               <span
                 className="px-1.5 rounded-full text-white"
-                style={{ background: p.color, fontSize: 10 }}
+                style={{ background: STATUS_STYLE["In progress"].dot, fontSize: 10 }}
               >
                 {p.count}
               </span>
@@ -1031,7 +1044,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                 style={{
                   background: "white",
                   border: "1px solid #E1DFDD",
-                  borderLeft: `4px solid ${group.color}`,
+                  /* neutral: the band still separates one group from the next,
+                     it just no longer claims to identify which */
+                  borderLeft: "4px solid #C8C6C4",
                 }}
               >
                 {/* group header */}
@@ -1044,11 +1059,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                   ) : (
                     <ChevronDown size={16} style={{ color: "#605E5C" }} />
                   )}
-                  <span
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ background: group.color }}
-                    title="Group color (assigned automatically)"
-                  />
                   {isEditing ? (
                     <input
                       autoFocus
@@ -1060,7 +1070,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                         if (e.key === "Escape") setEditingGroupId(null);
                       }}
                       className="text-sm font-semibold px-2 py-0.5 rounded border outline-none"
-                      style={{ borderColor: group.color, color: "#242424" }}
+                      style={{ borderColor: ACCENT, color: "#242424" }}
                       aria-label="Group name"
                     />
                   ) : (
@@ -1125,7 +1135,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                       <PrinterColumn
                         key={printer.id}
                         printer={printer}
-                        color={group.color}
                         groupName={group.name}
                         tasks={tasksByPrinter[printer.id] || []}
                         choices={choices}
@@ -1182,11 +1191,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
             className="rounded-lg p-3 flex gap-2 items-center"
             style={{ background: "white", border: "1px solid #E1DFDD", maxWidth: 480 }}
           >
-            <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ background: nextGroupColor(groups) }}
-              title="This group's color (assigned automatically)"
-            />
             <input
               autoFocus
               value={newGroupName}
@@ -1455,7 +1459,6 @@ function ContextMenu({
           return (
             <Item
               key={p.id}
-              swatch={g?.color || "#69797E"}
               label={
                 <span className="flex-1">
                   {p.name}
@@ -1773,7 +1776,6 @@ function StagingArea({
           {adding && (
             <div className="mb-3" style={{ maxWidth: 288 }}>
               <AddTaskForm
-                color="#5B5FC7"
                 choices={choices}
                 showEta={false}
                 onAdd={onAdd}
@@ -1825,7 +1827,6 @@ function StagingArea({
                     )}
                     <TaskCard
                       task={task}
-                      color="#5B5FC7"
                       disabled={false}
                       expanded={expandedTaskId === task.id}
                       onExpand={() => onExpandTask(task.id)}
@@ -1967,7 +1968,6 @@ function StatusPicker({ status, onSelect }) {
 
 function PrinterColumn({
   printer,
-  color,
   groupName,
   tasks,
   choices,
@@ -2065,13 +2065,6 @@ function PrinterColumn({
         onContextMenu={(e) => onPrinterContextMenu(e, printer.id)}
       >
         <div className="flex-1 min-w-0 flex items-center gap-2" style={dim}>
-          {/* color dot inherited from group — not assignable */}
-          <span
-            className="w-4 h-4 rounded-full border-2 border-white shadow flex-shrink-0"
-            style={{ background: color }}
-            title={`Color follows group "${groupName}"`}
-          />
-
           {editingName ? (
             <input
               autoFocus
@@ -2084,7 +2077,7 @@ function PrinterColumn({
               }}
               onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
               className="flex-1 min-w-0 text-sm font-semibold px-1 py-0.5 rounded border outline-none"
-              style={{ borderColor: color }}
+              style={{ borderColor: ACCENT }}
               aria-label="Printer name"
             />
           ) : (
@@ -2104,7 +2097,7 @@ function PrinterColumn({
             aria-label="Printer settings"
             title="Printer settings"
           >
-            <Settings size={15} style={{ color: settingsOpen ? color : "#605E5C" }} />
+            <Settings size={15} style={{ color: settingsOpen ? ACCENT : "#605E5C" }} />
           </button>
         </div>
 
@@ -2235,7 +2228,6 @@ function PrinterColumn({
             <TaskCard
               key={task.id}
               task={task}
-              color={color}
               disabled={inactive}
               expanded={expandedTaskId === task.id}
               onExpand={() => !inactive && onExpandTask(task.id)}
@@ -2253,9 +2245,9 @@ function PrinterColumn({
               className="rounded-lg border border-dashed flex items-center justify-center text-xs italic"
               style={{
                 minHeight: 96,
-                color: showDrop ? color : "#C8C6C4",
+                color: showDrop ? ACCENT : "#C8C6C4",
                 background: "#FAF9F8",
-                borderColor: showDrop ? color : "#E1DFDD",
+                borderColor: showDrop ? ACCENT : "#E1DFDD",
               }}
             >
               {emptyLabel}
@@ -2267,7 +2259,7 @@ function PrinterColumn({
             <button
               onClick={() => setQueueOpen(true)}
               className="w-full flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded hover:bg-gray-50"
-              style={{ color: inactive ? "#8A8886" : color }}
+              style={{ color: inactive ? "#8A8886" : ACCENT }}
             >
               <ChevronDown size={13} /> Show {hiddenCount} more queued
             </button>
@@ -2276,7 +2268,7 @@ function PrinterColumn({
             <button
               onClick={() => setQueueOpen(false)}
               className="w-full flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded hover:bg-gray-50"
-              style={{ color: inactive ? "#8A8886" : color }}
+              style={{ color: inactive ? "#8A8886" : ACCENT }}
             >
               <ChevronUp size={13} /> Show less
             </button>
@@ -2308,7 +2300,6 @@ function PrinterColumn({
                   <TaskCard
                     key={task.id}
                     task={task}
-                    color={color}
                     disabled={inactive}
                     expanded={expandedTaskId === task.id}
                     onExpand={() => !inactive && onExpandTask(task.id)}
@@ -2336,7 +2327,6 @@ function PrinterColumn({
         <div className="px-3 pb-3 pt-2 mt-auto">
           {addingTask ? (
             <AddTaskForm
-              color={color}
               choices={choices}
               showEta
               onCancel={onCancelAddTask}
@@ -2349,7 +2339,7 @@ function PrinterColumn({
               className="w-full flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg border hover:bg-gray-50 disabled:cursor-not-allowed"
               style={{
                 borderColor: "#E1DFDD",
-                color: accepts ? color : "#8A8886",
+                color: accepts ? ACCENT : "#8A8886",
               }}
               title={
                 accepts
@@ -2370,7 +2360,6 @@ function PrinterColumn({
 
 function TaskCard({
   task,
-  color,
   disabled,
   expanded,
   onExpand,
@@ -2389,8 +2378,8 @@ function TaskCard({
   const indicatorShadow = !overPos
     ? "none"
     : overPos === "before"
-    ? `0 -3px 0 0 ${color}`
-    : `0 3px 0 0 ${color}`;
+    ? `0 -3px 0 0 ${ACCENT}`
+    : `0 3px 0 0 ${ACCENT}`;
 
   return (
     <div
@@ -2428,7 +2417,7 @@ function TaskCard({
       onContextMenu={(e) => !disabled && onContextMenu && onContextMenu(e, task.id)}
       className="rounded-lg border"
       style={{
-        borderColor: expanded ? color : "#E1DFDD",
+        borderColor: expanded ? ACCENT : "#E1DFDD",
         background: task.status === "Complete" ? "#FAFAF9" : "white",
         opacity: dragging ? 0.4 : 1,
         cursor: disabled ? "default" : "grab",
@@ -2442,15 +2431,9 @@ function TaskCard({
         className="w-full text-left px-2.5 py-2"
         title={disabled ? undefined : "Click for details · drag to move · right-click for menu"}
       >
-        {/* line 1: status dot + title + qty + priority flag + status pill */}
+        {/* line 1: title + qty + priority flag + status pill. No status dot —
+            the pill two elements along says the same thing in words. */}
         <div className="flex items-center gap-1.5 min-w-0">
-          {!inStaging && (
-            <span
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ background: st.dot }}
-              title={task.status}
-            />
-          )}
           <span
             className="flex-1 min-w-0 text-sm leading-snug truncate"
             title={task.title}
@@ -2568,7 +2551,6 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
   const needsSlicing =
     val("sliceStatus", "Not Sliced") === "Not Sliced" ||
     val("sliceStatus", "Not Sliced") === "Needs Nesting";
-  const st = STATUS_STYLE[task.status];
   const priority = val("priority", "Normal");
 
   return (
@@ -2587,13 +2569,6 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
           className="flex items-center gap-2 px-4 py-3 border-b flex-shrink-0"
           style={{ borderColor: "#EDEBE9" }}
         >
-          {!inStaging && (
-            <span
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              style={{ background: st.dot }}
-              title={task.status}
-            />
-          )}
           <h2
             className="flex-1 min-w-0 text-base font-semibold truncate"
             style={{ color: "#242424" }}
@@ -2905,7 +2880,7 @@ function NumberStepper({
 
 /* --------------------------- add task form ---------------------------- */
 
-function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
+function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [title, setTitle] = useState("");
   const [etaDate, setEtaDate] = useState("");
   const [etaTime, setEtaTime] = useState("");
@@ -2940,7 +2915,7 @@ function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
   return (
     <div
       className="p-2.5 rounded-lg space-y-2"
-      style={{ background: "#FAF9F8", border: `1px solid ${color}55` }}
+      style={{ background: "#FAF9F8", border: `1px solid ${ACCENT}55` }}
     >
       <input
         autoFocus
@@ -3074,7 +3049,7 @@ function AddTaskForm({ color, choices, showEta, onAdd, onCancel }) {
         <button
           onClick={submit}
           className="flex-1 text-sm font-medium text-white py-1.5 rounded"
-          style={{ background: color }}
+          style={{ background: ACCENT }}
         >
           Add task
         </button>
