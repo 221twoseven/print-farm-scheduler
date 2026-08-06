@@ -115,7 +115,10 @@ const DEFAULT_CHOICES = {
   nozzleType: ["Standard", "High Flow"],
   nozzleMaterial: ["Standard", "Hardened", "Tungsten"],
   bedType: ["Smooth", "Textured"],
-  printMaterial: ["ABS", "Other (Discuss with Operator)"],
+  printMaterial: ["ABS", "Other"],
+  /* Tasks carry their own material column. Same idea, different wording and a
+     different list, so it needs its own key — see loadChoices. */
+  taskPrintMaterial: ["ABS", "Other (Discuss with Operator)"],
   printQuality: ["Draft", "Medium", "High"],
   printStrength: ["Structural", "Standard", "Aesthetic"],
 };
@@ -126,6 +129,12 @@ const optionsFor = (list, current) => {
   const opts = list || [];
   return current && !opts.includes(current) ? [...opts, current] : opts;
 };
+
+/* The printer's list says "Other"; the task's says "Other (Discuss with
+   Operator)" — the longer wording is a message to the designer choosing it,
+   not to the operator. Both lists live in SharePoint and the shop can reword
+   either, so match on the stem rather than on an exact string. */
+const isOtherMaterial = (v) => /^\s*other\b/i.test(v || "");
 
 const defaultPrinterFields = () => ({
   nozzleSize: "0.4mm",
@@ -2198,6 +2207,25 @@ function PrinterColumn({
                     </option>
                   ))}
                 </select>
+
+                {/* "Other" is not an answer on its own — a machine is loaded
+                    with something specific. Ask for the name rather than
+                    leaving the card reading "Other". */}
+                {field.key === "printMaterial" &&
+                  isOtherMaterial(settings.fields[field.key]) && (
+                    <input
+                      value={settings.printMaterialOther || ""}
+                      onChange={(e) =>
+                        onUpdateSettings(printer.id, {
+                          printMaterialOther: e.target.value,
+                        })
+                      }
+                      placeholder="Which material?"
+                      className="mt-1 w-full text-sm px-2 py-1.5 rounded border outline-none"
+                      style={{ borderColor: "#C8C6C4" }}
+                      aria-label="Other print material"
+                    />
+                  )}
               </label>
             ))}
 
@@ -2751,6 +2779,19 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
           )}
 
           <div className={inStaging ? "" : "grid grid-cols-2 gap-3"}>
+            <Field label="Print material">
+              <select
+                value={val("printMaterial", "ABS")}
+                onChange={(e) => commit({ printMaterial: e.target.value })}
+                className={MODAL_SELECT}
+                style={MODAL_STYLE}
+              >
+                {optionsFor(choices.taskPrintMaterial, val("printMaterial", "ABS")).map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </Field>
+
             <Field label="Slicing">
               <select
                 value={val("sliceStatus", "Not Sliced")}
@@ -2943,6 +2984,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [giveTo, setGiveTo] = useState("");
   const [filepath, setFilepath] = useState("");
   const [sliceStatus, setSliceStatus] = useState("Not Sliced");
+  const [printMaterial, setPrintMaterial] = useState("ABS");
   const [printQuality, setPrintQuality] = useState("Medium");
   const [printStrength, setPrintStrength] = useState("Standard");
   const [quantity, setQuantity] = useState(1);
@@ -2963,6 +3005,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       giveTo: giveTo.trim(),
       filepath: filepath.trim(),
       sliceStatus,
+      printMaterial,
       quantity,
       priority,
       ...(needsSlicing ? { printQuality, printStrength } : {}),
@@ -3088,6 +3131,20 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           </div>
         </div>
       )}
+      <label className="block text-xs" style={{ color: "#605E5C" }}>
+        <span className="block">Print material</span>
+        <select
+          value={printMaterial}
+          onChange={(e) => setPrintMaterial(e.target.value)}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
+          style={{ borderColor: "#C8C6C4" }}
+          aria-label="Print material"
+        >
+          {optionsFor(choices.taskPrintMaterial, printMaterial).map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </label>
       <select
         value={sliceStatus}
         onChange={(e) => setSliceStatus(e.target.value)}
@@ -3213,6 +3270,8 @@ const COLS = {
        SharePoint kept the original internal name through the rename. */
     status: "Active",
     notes: "Notes",
+    /* free text, used only when printMaterial is an "Other" */
+    printMaterialOther: "PrintMaterialOther",
     sortOrder: "SortOrder",
     // the five spec dropdowns come from PRINTER_FIELDS[].column
   },
@@ -3235,6 +3294,10 @@ const COLS = {
     filepath: "Filepath",
     printQuality: "PrintQuality",
     printStrength: "PrintStrength",
+    /* the task's own material — what the designer is asking for. Distinct
+       from the Printers column of the same name, which is what the machine
+       is currently loaded with. Same name, different list, no clash. */
+    printMaterial: "PrintMaterial",
     sortOrder: "SortOrder",
   },
 };
@@ -3490,6 +3553,7 @@ const printerFromRow = (f) => ({
   sortOrder: num(f[COLS.printers.sortOrder]),
   settings: {
     notes: str(f[COLS.printers.notes]),
+    printMaterialOther: str(f[COLS.printers.printMaterialOther]),
     fields: PRINTER_FIELDS.reduce((acc, pf) => {
       acc[pf.key] = str(f[pf.column]) || defaultPrinterFields()[pf.key];
       return acc;
@@ -3503,6 +3567,7 @@ const printerToRow = (p) => ({
   [COLS.printers.groupId]: p.groupId,
   [COLS.printers.status]: p.status,
   [COLS.printers.notes]: p.settings?.notes || "",
+  [COLS.printers.printMaterialOther]: p.settings?.printMaterialOther || "",
   [COLS.printers.sortOrder]: num(p.sortOrder),
   ...PRINTER_FIELDS.reduce((acc, pf) => {
     acc[pf.column] = p.settings?.fields?.[pf.key] || "";
@@ -3527,6 +3592,7 @@ const taskFromRow = (f) => ({
   filepath: str(f[COLS.tasks.filepath]),
   printQuality: str(f[COLS.tasks.printQuality]) || "Medium",
   printStrength: str(f[COLS.tasks.printStrength]) || "Standard",
+  printMaterial: str(f[COLS.tasks.printMaterial]) || "ABS",
   sortOrder: num(f[COLS.tasks.sortOrder]),
 });
 
@@ -3547,6 +3613,7 @@ const taskToRow = (t) => ({
   [COLS.tasks.filepath]: t.filepath || "",
   [COLS.tasks.printQuality]: t.printQuality || "Medium",
   [COLS.tasks.printStrength]: t.printStrength || "Standard",
+  [COLS.tasks.printMaterial]: t.printMaterial || "ABS",
   [COLS.tasks.sortOrder]: num(t.sortOrder),
 });
 
@@ -3565,18 +3632,23 @@ async function loadChoices() {
   const out = { ...DEFAULT_CHOICES };
   try {
     const sid = await siteId();
-    const byColumn = {};
+    /* Keyed by list, not just by column name. Printers and Tasks both have a
+       PrintMaterial column and they are deliberately different lists — a flat
+       map would let whichever list was read last silently win. */
+    const byList = {};
     for (const list of ["Printers", "Tasks"]) {
       const cols = await graph(`/sites/${sid}/lists/${list}/columns`);
+      byList[list] = {};
       for (const c of cols.value || []) {
-        if (c.choice?.choices?.length) byColumn[c.name] = c.choice.choices;
+        if (c.choice?.choices?.length) byList[list][c.name] = c.choice.choices;
       }
     }
     for (const pf of PRINTER_FIELDS) {
-      if (byColumn[pf.column]) out[pf.key] = byColumn[pf.column];
+      if (byList.Printers[pf.column]) out[pf.key] = byList.Printers[pf.column];
     }
-    if (byColumn.PrintQuality) out.printQuality = byColumn.PrintQuality;
-    if (byColumn.PrintStrength) out.printStrength = byColumn.PrintStrength;
+    if (byList.Tasks.PrintQuality) out.printQuality = byList.Tasks.PrintQuality;
+    if (byList.Tasks.PrintStrength) out.printStrength = byList.Tasks.PrintStrength;
+    if (byList.Tasks.PrintMaterial) out.taskPrintMaterial = byList.Tasks.PrintMaterial;
   } catch (err) {
     console.warn("Choice columns unreadable, using built-in defaults.", err);
   }
