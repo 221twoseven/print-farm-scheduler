@@ -153,9 +153,16 @@ it is a one-line change while I am already in that function.
 *Shipped in #10.* Internal name `NeedByDate`. Shows on staging cards as well as
 assigned ones, and only when a date is set.
 
-**Overdue was deliberately left alone** — see the open question below, which is
-still open. `isOverdue()` still keys off `etaDate` only, and a passed need-by
-date is not called out in red.
+**The overdue question is now closed.** `isOverdue()` still keys off `etaDate`
+only — the rule did not change. What changed in #15 is that the state is now
+*named*: a small `OVERDUE` line under the date, because red alone was carrying
+too much on a board that also uses it for urgent priority and delete actions.
+
+Deliberately **not** done: making "overdue" mean *ETA later than need-by*. It
+was proposed, considered, and dropped — the shop did not ask for a second
+lateness rule, and one rule that everyone understands beats two that need
+explaining. Reopen only if jobs start silently missing deadlines that the ETA
+alone does not catch.
 
 **Risk: Medium** — new stored field, plus a question about existing behaviour.
 
@@ -348,7 +355,7 @@ Tier 1 is closed: items 1, 2 and 13 shipped (#3, #5, #8), item 3 declined.
 
 1. ~~Items 4–5~~ — done, shipped in #10.
 2. ~~Item 6~~ — done, shipped in #11, pending the internal-name check.
-3. **Decide whether "overdue" should account for need-by** — see item 5.
+3. ~~Decide whether "overdue" should account for need-by~~ — closed, see item 5.
 4. **Item 7** — the settings summary, now that a manually named material exists
    for it to treat as an exception.
 5. **Decide the Busy behaviour**, add the choice value, then **item 8**.

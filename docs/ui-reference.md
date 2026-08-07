@@ -85,8 +85,12 @@ already says the same thing in words.
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
 - **Right-click** — context menu.
-- Overdue ETAs are called out in red on the card. A passed **need-by** date is
-  not — "overdue" on this board still means the ETA has passed.
+- **Overdue** — an ETA in the past on an unfinished job turns the date red and
+  adds a small `OVERDUE` line beneath it. The word is there because red is not
+  self-explanatory on this board: it also marks urgent priority and destructive
+  actions, so a red date alone does not say *why*. A **Complete** job is never
+  overdue however old its ETA, and a passed **need-by** date is not called
+  overdue — on this board that word means the ETA has passed.
 - **Need by** shows on staging cards too, unlike the ETA: a deadline exists from
   the moment the job does, while an ETA only means something once the job has a
   printer. It renders only when a date is set, so cards without one look exactly
