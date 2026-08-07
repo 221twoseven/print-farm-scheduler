@@ -31,7 +31,7 @@ view** hides everything that configures the shop or assigns work:
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Add printer, group rename, **printer rename** | Context menu on staging jobs — status, priority, slicing |
 | Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
-| **Assigned jobs entirely**: no detail modal, no context menu, no drag | |
+| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
 
 **The dividing line is assignment.** A job in staging belongs to the designer
 who raised it and stays fully editable. The moment it is on a printer it is the
@@ -166,12 +166,25 @@ already says the same thing in words.
   printer. It renders only when a date is set, so cards without one look exactly
   as they did.
 - A completed card is tinted and stops looking like live work.
+- **Note icon** — a small icon appears when the task carries an **operator
+  note**; hovering reads it. The icon rather than hover alone, because hover
+  cannot tell you *which* cards have a note. It is how a designer reads an
+  operator's note without being able to open the job.
+
+#### The two notes
+
+- **Notes** is the requester's. Written in the new-task form or the modal while
+  the job is in staging, and **frozen the moment it reaches a printer** — grey,
+  read-only, for everyone including the operator. It is a record of what was
+  asked for.
+- **Operator notes** appears only once a job is assigned, and stays editable. A
+  job in staging has no operator yet, so the field is not shown at all.
 
 ### Detail modal
 
 Every task field: title, jobcode, quantity (stepper), status, priority, print
 material, slice status, need-by date, ETA date and time, sent by, give to,
-filepath, print quality, print strength. The task's print material is what the
+notes, operator notes, filepath, print quality, print strength. The task's print material is what the
 job asks for, and is separate from what a printer is loaded with. Edits commit
 on blur and on close; there is no Save button. Delete lives here too.
 

@@ -133,6 +133,8 @@ PATCH every printer on every keystroke.
 | `printerId` | `PrinterID` | Text | Printer UUID, or the literal `staging` |
 | `title` | `Title` | Text | |
 | `jobcode` | `Jobcode` | Text | The shop's job reference, typically `XX000`. Not validated — a wrong-shaped code is better than a rejected save |
+| `notes` | `Notes` | Multi-line text, **plain** | The requester's note. Editable only while the task is in staging — see below. A different column on a different list from the Printers `Notes` |
+| `operatorNotes` | `OperatorNotes` | Multi-line text, **plain** | The operator's working note. Only shown, and only editable, once the task is on a printer |
 | `status` | `Status` | Choice | `Not started` / `In progress` / `Complete` |
 | `priority` | `Priority` | Choice | `Low` / `Normal` / `High` / `Urgent` |
 | `sliceStatus` | `SliceStatus` | Choice | `Sliced` / `Not Sliced` / `Needs Nesting` |
@@ -147,6 +149,28 @@ PATCH every printer on every keystroke.
 | `printStrength` | `PrintStrength` | Choice | |
 | `printMaterial` | `PrintMaterial` | Choice | What the **job** asks for. A different column on a different list from the Printers one of the same name |
 | `sortOrder` | `SortOrder` | Number | Position within its printer (or within staging) |
+
+### The two notes, and why one freezes
+
+`Notes` is the **requester's**: what the designer wants the operator to know.
+It is editable while the task sits in staging and **read-only once the task is
+on a printer** — for everyone, the operator included. It is then a record of
+what was asked for, and a record that can be rewritten afterwards is not one.
+The modal renders it as grey text under "Notes — from the requester", and hides
+it entirely when an assigned task has none rather than showing a permanent
+blank.
+
+`OperatorNotes` is the **operator's**, and is the one that stays live. It does
+not appear at all while a task is in staging, because there is no operator on
+the job yet.
+
+Both are **plain-text** multi-line columns, not rich text. SharePoint's enhanced
+rich text returns HTML through Graph, which would arrive on the board as visible
+markup — the "Use enhanced rich text" toggle must stay off.
+
+A task carrying an operator note shows a small note icon on its card, with the
+text as the icon's tooltip. That is the only way a designer can read one, since
+designer view does not open assigned tasks at all.
 
 ### Dates
 

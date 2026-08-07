@@ -33,7 +33,9 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Tasks~~ | ~~NeedByDate~~ | ~~Date and Time~~ | created — item 5, done |
 | ~~Tasks~~ | ~~PrintMaterial~~ | ~~Choice — `ABS`, `Other (Discuss with Operator)`~~ | created — item 6, done |
 | ~~Printers~~ | ~~PrintMaterialOther~~ | ~~Single line of text~~ | created — item 6, done |
-| Printers | PrintMaterial *(existing)* | reword choices to `ABS` / `Other` | [6](#6-split-print-material-between-printer-and-task-8) — optional |
+| ~~Printers~~ | ~~PrintMaterial *(existing)*~~ | ~~reword choices to `ABS` / `Other`~~ | done |
+| ~~Tasks~~ | ~~Notes~~ | ~~Multi-line text, plain~~ | created — requester's note, item 14 |
+| ~~Tasks~~ | ~~OperatorNotes~~ | ~~Multi-line text, plain~~ | created — operator's note, item 14 |
 | ~~Printers~~ | ~~Active *(existing)*~~ | ~~add `Busy`~~ | superseded — the column was replaced, see below |
 | ~~Printers~~ | ~~Status *(new)*~~ | ~~Choice — Ready / Reserved / Maintenance / **Busy**~~ | created — replaces the old `Active`-named column. `Busy` is already a valid value; item 8 is now code-only |
 | ~~Printers~~ | ~~Status (legacy)~~ | ~~delete~~ | deleted; the code fallback went with it in #19 |
@@ -177,6 +179,25 @@ keys off `etaDate`. If need-by is the real deadline and ETA is the predicted
 finish, then overdue should probably mean *ETA is later than need-by*, which is a
 more useful signal than either date alone — but it is a behaviour change to
 existing cards, so I want it to be your call rather than a side effect.
+
+### 14. Requester notes and operator notes on tasks — DONE
+
+*Shipped in #23.* Two multi-line plain-text columns on Tasks, `Notes` and
+`OperatorNotes`, both internal names matching their display names.
+
+The rule that makes them worth having separately: **the requester's note freezes
+on assignment.** It is editable while the job sits in staging and read-only
+afterwards for everyone, the operator included — a record of what was asked for,
+and a record that can be rewritten is not one. The operator's note is the live
+one, and does not appear at all until there is an operator on the job.
+
+Designer view cannot open an assigned job, so an operator note would otherwise
+be invisible to the person who raised it. A small note icon appears on any card
+carrying one, with the text as its tooltip — the icon rather than hover alone,
+because hover cannot tell you which cards have a note.
+
+**Plain text, not rich text.** SharePoint's enhanced rich text returns HTML
+through Graph, which would land on the board as visible markup.
 
 ---
 
