@@ -43,23 +43,58 @@ for completely different reasons:
 A healthy deploy on this repo takes **40 seconds to a minute**. Anything around
 ten minutes is the timeout, not slowness.
 
-A wedged Pages deployment can also refuse to clear: a re-run may sit as *Queued*
-without ever picking up a runner, while the API rejects both cancel
-(`Cannot cancel a workflow re-run that has not yet queued`) and re-run
-(`This workflow is already running`). In that state, in order of preference:
+**Check https://www.githubstatus.com first.** Not last — first. On 2026-08-06
+this section said to check it "once before assuming a platform fault", and that
+ordering cost seven hours and an outage. Actions and Pages were degraded all
+afternoon; every symptom below was a consequence, and none of it was fixable
+from this side.
 
-1. Cancel the run from the Actions UI, which sometimes succeeds where the API
-   refuses, then re-run it.
-2. Push a new commit to `main`. That starts a genuinely new run rather than a
-   re-run, which can sidestep the stuck one.
-3. **Settings → Pages → Unpublish site**, then re-select `main` / `(root)` and
-   Save. This clears stuck Pages state, at the cost of taking the board offline
-   for a few minutes — so pick the moment.
+Signs the fault is GitHub's and not yours:
 
-Worth checking once before assuming a platform fault, though all three were
-clean when this last happened: https://www.githubstatus.com for a Pages
-incident, and **Settings → Environments → `github-pages`** for a required
-reviewer or wait timer, which would hold a deployment in exactly this state.
+- A build job sitting with `runner_id: 0` and an empty runner name — it never
+  got a machine, so nothing in the repo can be responsible.
+- Runs stuck *Queued* for tens of minutes.
+- The Actions API rejecting both cancel
+  (`Cannot cancel a workflow re-run that has not yet queued`) and re-run
+  (`This workflow is already running`) for the same run.
+- Runs completing as **cancelled** rather than failed. A cancelled run that was
+  superseded by a newer one is a non-event; only the last run matters.
+
+When that is the picture, the answer is to **wait**. Specifically:
+
+- **Do not re-run.** Every re-run attempted during that incident wedged into a
+  state that could be neither cancelled nor retried, and each one added to a
+  queue that could not drain. Fresh pushes were scheduled; re-runs were not.
+- **Do not unpublish Pages.** This is the one that hurts. Republishing needs a
+  successful build, so unpublishing during an Actions outage converts a
+  *stale but working* board into a hard 404 with no way back until Actions
+  recovers. A stale board is a working board; a 404 is an outage for everyone.
+  There is no undo.
+
+Merging back-to-back is fine, by the way. A second push cancels the older
+deployment and the newer one carries both commits — correct behaviour, not an
+error, and not worth choreographing around.
+
+### If the board is down
+
+The interface is the only thing affected. **The data is untouched and still
+reachable**: the SharePoint lists at
+https://twosevennet.sharepoint.com/sites/Ticketing/ hold every job with its
+printer, status, priority and dates, and the shop can read and edit them
+directly in the SharePoint UI meanwhile. The board picks up those edits when it
+returns. Worth telling whoever is on shift, so an outage is not mistaken for
+lost work.
+
+### Recovering once Actions is healthy
+
+A push to `main` triggers a fresh run; that is the reliable trigger. If Pages
+was unpublished, re-select `main` / `(root)` **and** push a commit — the
+settings change alone did not start a build. Then verify with the raw file
+check above rather than the Actions line.
+
+Other things worth ruling out, though all were clean on 2026-08-06:
+**Settings → Environments → `github-pages`** for a required reviewer or wait
+timer, which would hold a deployment in exactly this state.
 
 There is no build step, no test suite and no linter in CI. The only gate between
 a commit and production is the Pages build, which only fails on infrastructure
@@ -130,6 +165,7 @@ so it does not require a code change. Deleting and recreating one does.
 | Status pill stuck on "Not saved" | Hover it for the Graph error; click Retry. `flush()` keeps the pending snapshot, so nothing is lost until the tab closes |
 | Blank board, console shows a Babel error | Syntax error in the JSX — it ships unvalidated |
 | Board loads but dropdowns are the built-in defaults | `loadChoices()` failed; check the console warning. Non-fatal by design |
+| Site returns a 404 rather than a stale board | Pages has no successful deployment behind it — usually because it was unpublished and never rebuilt. Push a commit to `main`; the settings change alone does not start a build |
 | Someone's edits vanished | Two people editing the same row: last writer wins. There is no conflict detection — see [decisions.md](decisions.md#open-items) |
 | Sign-in loop or `popup_window_error` | See [authentication.md](authentication.md#failure-modes-worth-recognising) |
 
