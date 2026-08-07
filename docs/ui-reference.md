@@ -29,7 +29,7 @@ view** hides everything that configures the shop or assigns work:
 | Printer status control — shown as a plain pill, not a menu | Printer status is still *legible*: a machine in maintenance looks it |
 | **Add task** on a printer | Jobcode filter |
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
-| Add / Remove group, Add printer, group rename, **printer rename** | Context menu on staging jobs — status, priority, slicing |
+| Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
 | Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
 | **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
 
@@ -44,13 +44,21 @@ stop a determined designer from reassigning a print. Real enforcement would need
 SharePoint permissions and a server-side check, which this app deliberately does
 not have. Do not describe it to anyone as access control.
 
+**One asymmetry runs the other way.** Staging is normally identical in both
+views, but in **operator view only**, staging cards stop opening the detail
+modal and drop their right-click menu — reading the summary is enough, and
+editing an unassigned job is the designer's. **Designer view keeps staging
+fully editable**, per the table above. Dragging a staging card onto a printer
+still works in both views; only the click-to-open and the context menu lock.
+
 The choice is remembered per browser (`localStorage`), unlike group collapse
 which resets each load — somebody who works as a designer should stay one
 without re-picking every morning. It is still per-person and still nothing
 SharePoint knows about.
 
-Three things are hidden that the original request did not list — **Add printer**,
-the **printer right-click menu**, and the **status control** — because leaving
+Three things are hidden that the original request did not list — **Edit
+printers mode** (which is where adding and removing printers now lives), the
+**printer right-click menu**, and the **status control** — because leaving
 them would have made the mode pointless: a designer could still delete a printer
 or put one into maintenance.
 
@@ -105,6 +113,9 @@ staging carries `printerId === "staging"`.
 - **Collapse** — a chevron folds the whole panel.
 - **Add task** — inline form.
 - Drop a card anywhere on the panel to send it back to staging.
+- **Operator view only**: the collapsed card also shows jobcode and quantity,
+  grey, on the same line as need-by (see "One asymmetry runs the other way"
+  above).
 
 ## Printer cards
 
@@ -228,8 +239,18 @@ Tasks in staging hide the fields that only mean something once assigned.
 - Groups have no colour in the interface. A colour is still assigned and stored
   against each group, but nothing renders it — see
   [decisions.md](decisions.md). Group headers and their left band are neutral.
-- **Add group** / **Add printer**; removing a group uses an explicit remove mode
-  and a confirmation, since it takes its printers with it.
+- **Add group**; removing a group uses an explicit remove mode and a
+  confirmation, since it takes its printers with it.
+- **Add or remove a printer**: both live behind an **Edit printers** toggle
+  (bottom of the board, beside Remove group), not a standalone Add printer
+  button. While it's active, a compact **Add** tile sits at the end of each
+  group's grid and a small trash icon replaces the settings gear on every
+  printer card — both wired to the printer add/delete that already existed,
+  just reached differently. Normal board interaction on printers and their
+  tasks (drag, click-to-expand a task, right-click menus) suspends while the
+  mode is on, so a card being clicked mid-edit can't be mistaken for an
+  accidental drag or open. A printer's own settings-panel delete button still
+  works too, outside this mode.
 
 ## Confirmations
 
