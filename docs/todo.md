@@ -34,7 +34,9 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Tasks~~ | ~~PrintMaterial~~ | ~~Choice — `ABS`, `Other (Discuss with Operator)`~~ | created — item 6, done |
 | ~~Printers~~ | ~~PrintMaterialOther~~ | ~~Single line of text~~ | created — item 6, done |
 | Printers | PrintMaterial *(existing)* | reword choices to `ABS` / `Other` | [6](#6-split-print-material-between-printer-and-task-8) — optional |
-| Printers | Active *(existing)* | add `Busy` to the choice values | [8](#8-busy-printer-status-1) |
+| ~~Printers~~ | ~~Active *(existing)*~~ | ~~add `Busy`~~ | superseded — the column was replaced, see below |
+| ~~Printers~~ | ~~Status *(new)*~~ | ~~Choice — Ready / Reserved / Maintenance / **Busy**~~ | created — replaces the old `Active`-named column. `Busy` is already a valid value; item 8 is now code-only |
+| Printers | Status (legacy) | **delete** once the new column has been right for a few days | then remove `LEGACY_STATUS_COL` from the code |
 
 **After creating each column, send me its internal name** — List settings → click
 the column → the `Field=` value at the end of the address bar. Do not assume it
@@ -237,6 +239,11 @@ constant is the intended source of truth. I lean toward leaving it in code and
 documenting it, since "standard setup" is a shop convention rather than data.
 
 ### 8. Busy printer status (1)
+
+**The SharePoint side is already done.** The status column was replaced in #17
+so its internal name finally matches its display name, and the new column was
+created with `Busy` among its values. Nothing left but the four decisions below
+and the code.
 
 **Risk: Medium-High.** This one needs decisions before any code.
 

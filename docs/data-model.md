@@ -15,14 +15,34 @@ never changes it. Rename the column and the display name changes; the internal
 name — the one Graph uses — keeps its original spelling. A space becomes
 `_x0020_`, and a name reused after a delete picks up a trailing digit.
 
-Two columns here are affected, and both cost a debugging cycle to find:
+**As of 2026-08-07 every column in `COLS` matches its display name.** That is
+worth keeping true — it was not free to get here.
 
-| List | App field | Internal name | Why |
+| List | App field | Internal name | Why it is worth knowing |
 | --- | --- | --- | --- |
-| Printers | `status` | `Active` | Began as the Active Yes/No column, rebuilt as the three-state choice. The rename did not follow. |
 | Printers | `uuid` | `PrinterID` | Recreated without the space. Had it been renamed instead, it would still be `Printer_x0020_ID` |
-| Tasks | `uuid` | `TaskID` | Capital D |
 | Tasks | `printerId` | `PrinterID` | Holds the literal string `staging` when unassigned |
+
+### The one that got fixed
+
+`status` on Printers used to read `Active`: the column began as an Active
+Yes/No field, was rebuilt as the three-state choice, and SharePoint fixed the
+internal name at creation so the rename never followed. `COLS` said `Active`
+while SharePoint showed `Status`.
+
+It cost a debugging cycle to find, then confused every later conversation about
+that column — including one where the shop reasonably reported that no `Active`
+column existed. A rename could not fix it, so the column was **replaced**: a new
+Choice column created with the internal name `Status`, values copied across, and
+the old one kept temporarily as `Status (legacy)`.
+
+`LEGACY_STATUS_COL` in the code reads the old column when the new one is empty,
+so a row missed during the copy cannot silently turn a Maintenance printer into
+a Ready one. **Delete that constant and its use when the legacy column goes.**
+
+The lesson survives the fix: SharePoint fixes an internal name at creation and a
+rename never changes it. Always read `Field=` back. What changed is that the
+codebase no longer carries an example of the damage.
 
 **To check any column's internal name:** List settings → click the column → read
 the `Field=` value at the end of the address bar.
@@ -50,7 +70,7 @@ One row per printer group (the shop's physical or logical clusters).
 | `id` | `PrinterID` | Text | UUID |
 | `name` | `Title` | Text | |
 | `groupId` | `GroupID` | Text | The group's UUID |
-| `status` | `Active` | Choice | `Ready` / `Reserved` / `Maintenance`. Internal name is a leftover — see above |
+| `status` | `Status` | Choice | `Ready` / `Reserved` / `Maintenance`, plus `Busy` in the column but not yet used by the app — see [todo.md](todo.md) item 8 |
 | `settings.notes` | `Notes` | Text | Free-form |
 | `settings.printMaterialOther` | `PrintMaterialOther` | Text | The actual material, when `PrintMaterial` is an "Other". Written always, read only when it applies |
 | `sortOrder` | `SortOrder` | Number | Position within its group |

@@ -3413,10 +3413,7 @@ const COLS = {
     uuid: "PrinterID",
     name: "Title",
     groupId: "GroupID",
-    /* Internal name, not the display name. This column began life as the
-       Active Yes/No field and was later rebuilt as the three-state choice;
-       SharePoint kept the original internal name through the rename. */
-    status: "Active",
+    status: "Status",
     notes: "Notes",
     /* free text, used only when printMaterial is an "Other" */
     printMaterialOther: "PrintMaterialOther",
@@ -3449,6 +3446,24 @@ const COLS = {
     sortOrder: "SortOrder",
   },
 };
+
+/* TRANSITIONAL — remove once the legacy column is deleted.
+
+   Printer status used to live in a column whose internal name was "Active":
+   it began as an Active Yes/No field and was rebuilt as the three-state
+   choice, and SharePoint fixes internal names at creation, so the rename
+   never followed. Reading it meant COLS said "Active" while SharePoint showed
+   "Status", which cost a debugging cycle once and confused every conversation
+   about that column since.
+
+   It has been replaced by a genuinely new column whose internal name is
+   "Status". Rows were copied across by hand, so this fallback exists for the
+   one that gets missed: without it, a Maintenance printer with an empty new
+   column would read as Ready and quietly start taking jobs. Reading a column
+   that is not in COLS is safe — checkSchema only validates COLS — so this
+   keeps working until the legacy column is deleted, and can then be deleted
+   itself. */
+const LEGACY_STATUS_COL = "Active";
 
 /* `collapsed` is per-person and is not written to SharePoint. Folding a
    group is one operator's view of the board, not a fact about the shop,
@@ -3697,7 +3712,8 @@ const printerFromRow = (f) => ({
   id: str(f[COLS.printers.uuid]) || uid(),
   name: str(f[COLS.printers.name]),
   groupId: str(f[COLS.printers.groupId]),
-  status: str(f[COLS.printers.status]) || "Ready",
+  status:
+    str(f[COLS.printers.status]) || str(f[LEGACY_STATUS_COL]) || "Ready",
   sortOrder: num(f[COLS.printers.sortOrder]),
   settings: {
     notes: str(f[COLS.printers.notes]),
