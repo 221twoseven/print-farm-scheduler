@@ -25,12 +25,18 @@ view** hides everything that configures the shop or assigns work:
 | Hidden in designer view | Still available |
 | --- | --- |
 | Shop layout gear | Staging area, in full — search, filters, **New task** |
-| Printer settings button and right-click menu | The whole board, read-only where it matters |
+| Printer settings button and right-click menu | The whole board, readable throughout |
 | Printer status control — shown as a plain pill, not a menu | Printer status is still *legible*: a machine in maintenance looks it |
-| **Add task** on a printer | Task detail modal, including editing a job's own fields |
-| Specs summary | Jobcode filter |
-| Add / Remove group, Add printer, group rename | Task status, priority, slicing |
+| **Add task** on a printer | Jobcode filter |
+| Specs summary | Task detail modal **for staging jobs**, fully editable |
+| Add / Remove group, Add printer, group rename, **printer rename** | Context menu on staging jobs — status, priority, slicing |
 | Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
+| **Assigned jobs entirely**: no detail modal, no context menu, no drag | |
+
+**The dividing line is assignment.** A job in staging belongs to the designer
+who raised it and stays fully editable. The moment it is on a printer it is the
+operator's, and in designer view its card becomes inert — click it and nothing
+happens.
 
 **This is not a permission boundary.** The toggle is one click for anybody and
 the data is untouched. It removes clutter and prevents accidents; it does not
