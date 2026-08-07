@@ -77,9 +77,15 @@ carries no group marker at all: neither the name nor a colour. Which group a
 printer belongs to is answered by the group it is sitting in.
 
 - **Status** — Ready / Reserved / Maintenance, from the card control or the
-  right-click menu. Moving a printer to **Maintenance** sends its queued jobs
-  back to staging and greys out the card (but never the control that brings it
-  back).
+  right-click menu, plus **Busy**, which the app sets and you cannot choose. A
+  printer running a job shows Busy and goes back to Ready when nothing is
+  running; setting Reserved or Maintenance yourself overrules that for as long
+  as you leave it set. Busy still takes new queued work — a printer mid-print is
+  where the next job belongs. Moving a printer to **Maintenance** sends its
+  queued jobs back to staging and greys out the card (but never the control that
+  brings it back).
+- **Reserved and Maintenance refuse to start work.** "In progress" is greyed in
+  the task context menu and the detail modal, with the reason in its tooltip.
 - **Specs summary** — the collapsed line reads **Standard setup** when every
   spec matches the shop default, and otherwise lists **only the fields that
   differ**, each as `Setting: value` — "Nozzle size: 0.2mm", "Bed type: Smooth".
