@@ -264,7 +264,18 @@ deliberate simplification of an earlier four-state mess. Adding a fourth state
 that the app manages is defensible, but it is reopening that decision knowingly,
 and the doc should record why.
 
-### 9. Display filter by jobcode (11)
+### 9. Display filter by jobcode (11) — DONE
+
+*Shipped in #16.* Dimming is **purely visual** — the decision flagged when this
+was written. A dimmed printer still accepts drops and clicks, because a card
+that looks disabled and silently refuses work reads as a bug rather than a
+filter.
+
+Two details worth knowing: the dropdown offers only jobcodes on a printer and
+not yet Complete, and the selection clears itself when its jobcode stops being
+live, rather than leaving the board dimmed against nothing.
+
+
 
 **Risk: Medium.** Depends on item 4.
 
