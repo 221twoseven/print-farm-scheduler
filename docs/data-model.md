@@ -36,9 +36,9 @@ column existed. A rename could not fix it, so the column was **replaced**: a new
 Choice column created with the internal name `Status`, values copied across, and
 the old one kept temporarily as `Status (legacy)`.
 
-`LEGACY_STATUS_COL` in the code reads the old column when the new one is empty,
-so a row missed during the copy cannot silently turn a Maintenance printer into
-a Ready one. **Delete that constant and its use when the legacy column goes.**
+A transitional fallback read the old column while both existed, so a row missed
+during the copy could not silently turn a Maintenance printer into a Ready one.
+Both are gone now — the legacy column was deleted and the fallback with it.
 
 The lesson survives the fix: SharePoint fixes an internal name at creation and a
 rename never changes it. Always read `Field=` back. What changed is that the
