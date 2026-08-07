@@ -199,7 +199,18 @@ panel, the new-task form and the detail modal.
 Do this **before** item 7 — a manually entered material counts as an exception in
 the summary line, so doing it after means reworking that logic.
 
-### 7. Printer settings summary: "Standard setup" plus exceptions (10)
+### 7. Printer settings summary: "Standard setup" plus exceptions (10) — DONE
+
+*Shipped in #14.* **The defaults stay in code** (`defaultPrinterFields()`), which
+was the open question. "Standard setup" is a shop convention, not data — reading
+it from the choice columns would make the first value of each list silently
+become the standard. The accepted cost is the trap below: it is visible
+immediately and fixed by editing one function.
+
+Exceptions render as neutral chips, not group-coloured ones — group colour is
+retired, and an exception is information rather than a state.
+
+
 
 **Risk: Medium.** Display-only, but the logic has a trap in it.
 
