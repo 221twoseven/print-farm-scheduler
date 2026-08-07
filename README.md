@@ -5,7 +5,16 @@ print jobs are queued onto printers, tracked through their lifecycle, and staged
 before assignment. Roughly 10–15 designers and operators inside one company.
 Internal tool, built to stay usable at several hundred queued jobs.
 
-The app is built, connected to SharePoint, published to Teams, and in use.
+The app is built, connected to SharePoint, published to Teams, and live in the
+Ticketing channel. The shop has not cut over from its previous ticketing system
+yet, so the lists currently hold test data.
+
+**That is not licence to treat this as a toy.** It has to be usable the day the
+shop switches, which could be any day, and a schema or save-layer mistake
+discovered then is far more expensive than one caught now. Work to production
+standard: verify the deploy, check the column's internal name, keep the
+identity invariant. The instructions in `CLAUDE.md` assume live data on
+purpose.
 
 ## Where everything lives
 
