@@ -287,29 +287,18 @@ silently refuses drops is the kind of thing that reads as a bug.
 
 Per-person view state, not stored, same as group collapse.
 
-### 10. Designer view / Operator view (12)
+### 10. Designer view / Operator view (12) — DONE
 
-**Risk: Medium-High.** Not conceptually hard, but it reaches into nearly every
-component, which makes it easy to miss a control.
+*Shipped in #21.* Both questions answered in the building: the choice is
+remembered per browser via `localStorage`, and the mode is **not** a permission
+boundary — that is stated in [ui-reference.md](ui-reference.md) so nobody
+describes it as access control.
 
-Designer view hides: printer settings button, Add Task on printers, Add/Remove
-Group, group rename, the shop layout gear, the settings summary — and disables
-click/drag task assignment. Toggle sits in the top bar next to the gear.
-
-**Two things to be clear about up front:**
-
-1. **This is not a permission boundary.** Anyone can flip the toggle, and the
-   underlying data is unchanged. It reduces clutter and prevents accidents; it
-   does not stop a determined designer from reassigning a print. Real enforcement
-   would need SharePoint permissions and a server-side check, which this app
-   deliberately does not have. Worth stating plainly so nobody assumes otherwise.
-2. **Should the choice persist per person?** Group collapse set the precedent —
-   per-person and not stored at all, so it resets each load. A view mode probably
-   wants to be stickier than that; `localStorage` keeps it per-person without a
-   SharePoint column. Your call.
-
-Best done **last** of the interface items — every earlier item adds or removes
-controls that this one has to know how to hide.
+Three controls are hidden that the request did not list — Add printer, the
+printer right-click menu, and the status control. Leaving any of them would have
+made the mode pointless: a designer could still delete a printer or send one to
+maintenance. The status is still *shown*, as a plain pill, because knowing a
+machine is down is not an operator privilege.
 
 ---
 

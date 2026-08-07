@@ -534,6 +534,33 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const [confirm, setConfirm] = useState(null); // {title, body, confirmLabel, onConfirm}
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
 
+  /* Operator view is the board as built; designer view hides the controls that
+     configure the shop or assign work.
+
+     This is NOT a permission boundary. The toggle is one click for anybody and
+     the data is untouched — it removes clutter and prevents accidents, nothing
+     more. Real enforcement would need SharePoint permissions and a server-side
+     check, which this app deliberately does not have.
+
+     Stickier than group collapse, which resets every load: someone who works
+     as a designer wants to stay one, so it is remembered per browser. Still
+     per-person, and still nothing SharePoint knows about. */
+  const [designerView, setDesignerView] = useState(() => {
+    try {
+      return localStorage.getItem("pfs.view") === "designer";
+    } catch {
+      return false; // private mode, blocked storage — default to operator
+    }
+  });
+  const operator = !designerView;
+  useEffect(() => {
+    try {
+      localStorage.setItem("pfs.view", designerView ? "designer" : "operator");
+    } catch {
+      /* not remembering the choice is survivable; failing to render is not */
+    }
+  }, [designerView]);
+
   /* declared here, not at the modal, because the modal renders conditionally
      and a hook cannot */
   const shopSettingsBackdrop = useBackdropClose(() => setShowShopSettings(false));
@@ -972,15 +999,34 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
             Team tab · {printers.length} printers · {tasks.length} tasks
           </div>
         </div>
+        {/* View toggle. Deliberately says what you get, not what you are:
+            nothing here identifies anybody, and calling it a role would imply
+            an authority this control does not have. */}
         <button
-          onClick={() => setShowShopSettings(true)}
-          className="ml-auto p-1.5 rounded hover:bg-white/15"
-          title="Shop layout settings"
-          aria-label="Shop layout settings"
-          style={{ opacity: 0.55 }}
+          onClick={() => setDesignerView((v) => !v)}
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium hover:bg-white/15"
+          style={{ background: "rgba(255,255,255,0.14)", color: "white" }}
+          title={
+            operator
+              ? "Operator view — switch to Designer view to hide shop controls"
+              : "Designer view — switch to Operator view to assign work and edit printers"
+          }
+          aria-pressed={designerView}
         >
-          <Settings size={16} color="white" />
+          {operator ? <Settings size={13} /> : <Search size={13} />}
+          {operator ? "Operator" : "Designer"}
         </button>
+        {operator && (
+          <button
+            onClick={() => setShowShopSettings(true)}
+            className="p-1.5 rounded hover:bg-white/15"
+            title="Shop layout settings"
+            aria-label="Shop layout settings"
+            style={{ opacity: 0.55 }}
+          >
+            <Settings size={16} color="white" />
+          </button>
+        )}
       </header>
 
       {/* shop layout settings — a "set once" buried config */}
@@ -1255,7 +1301,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                       {group.name}
                     </span>
                   )}
-                  {!isEditing && (
+                  {!isEditing && operator && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1342,11 +1388,13 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                         onDropOnTask={moveTaskRelative}
                         onTaskContextMenu={openTaskMenu}
                         onPrinterContextMenu={openPrinterMenu}
+                        operator={operator}
                         onDragStart={setDraggingTaskId}
                         onDragEnd={() => setDraggingTaskId(null)}
                       />
                     ))}
 
+                    {operator && (
                     <button
                       onClick={() => addPrinter(group.id)}
                       className="w-full mt-2 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 py-6 text-sm font-medium hover:bg-white"
@@ -1354,6 +1402,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                     >
                       <Plus size={16} /> Add printer
                     </button>
+                    )}
                   </div>
                 )}
               </section>
@@ -1363,6 +1412,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       </main>
 
       {/* add group — outside the scrolling board so it stays at viewport width */}
+      {operator && (
       <div className="px-5 pb-5">
         {showNewGroup ? (
           <div
@@ -1416,6 +1466,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           </div>
         )}
       </div>
+      )}
 
       {/* ---------------- task detail modal (single instance, app level) ----
           Kept out of TaskCard so it survives the card unmounting mid-edit —
@@ -1453,6 +1504,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           groups={groups}
           stagingName={appSettings.stagingName}
           acceptsTasks={acceptsTasks}
+          operator={operator}
           onClose={() => setContextMenu(null)}
           onUpdateTask={updateTask}
           onDeleteTask={deleteTask}
@@ -1519,6 +1571,7 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }) {
 
 function ContextMenu({
   menu,
+  operator,
   tasks,
   printers,
   groups,
@@ -1647,8 +1700,10 @@ function ContextMenu({
             onClick={() => onUpdateTask(task.id, { sliceStatus: tag })}
           />
         ))}
-        <Divider />
-        <Header>Move to</Header>
+        {operator && (
+          <>
+            <Divider />
+            <Header>Move to</Header>
         {task.printerId !== STAGING && (
           <Item
             icon={<Inbox size={14} style={{ color: "#605E5C" }} />}
@@ -1673,10 +1728,12 @@ function ContextMenu({
             />
           );
         })}
-        {destinations.length === 0 && task.printerId === STAGING && (
-          <div className="px-3 py-1 text-xs italic" style={{ color: "#8A8886" }}>
-            No printers are Ready
-          </div>
+            {destinations.length === 0 && task.printerId === STAGING && (
+              <div className="px-3 py-1 text-xs italic" style={{ color: "#8A8886" }}>
+                No printers are Ready
+              </div>
+            )}
+          </>
         )}
         <Divider />
         <Item
@@ -2067,7 +2124,9 @@ function StagingArea({
 /* The pill states what the printer is; the menu states what each state does,
    because "Reserved" on its own doesn't tell an operator their drag will be
    refused. Positioned fixed so it can't be clipped by the group card. */
-function StatusPicker({ status, onSelect }) {
+/* readOnly renders the same pill without the menu: a designer needs to know a
+   machine is in maintenance, and has no business putting it there. */
+function StatusPicker({ status, onSelect, readOnly }) {
   const state = PRINTER_STATUS[status] || PRINTER_STATUS.Ready;
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
@@ -2102,10 +2161,13 @@ function StatusPicker({ status, onSelect }) {
     <>
       <button
         ref={btnRef}
-        onClick={open}
-        aria-haspopup="menu"
-        aria-expanded={!!pos}
-        title={`${status} — ${state.blurb}. Click to change.`}
+        onClick={readOnly ? undefined : open}
+        disabled={readOnly}
+        aria-haspopup={readOnly ? undefined : "menu"}
+        aria-expanded={readOnly ? undefined : !!pos}
+        title={
+          readOnly ? `${status} — ${state.blurb}` : `${status} — ${state.blurb}. Click to change.`
+        }
         className="flex items-center gap-1 font-semibold px-2 py-1 rounded-full flex-shrink-0"
         style={{ fontSize: 10, background: state.bg, color: state.text }}
       >
@@ -2114,7 +2176,7 @@ function StatusPicker({ status, onSelect }) {
           style={{ background: state.color }}
         />
         {status}
-        <ChevronDown size={11} />
+        {!readOnly && <ChevronDown size={11} />}
       </button>
 
       {pos && (
@@ -2171,6 +2233,7 @@ function StatusPicker({ status, onSelect }) {
 
 function PrinterColumn({
   printer,
+  operator,
   filteredOut,
   groupName,
   tasks,
@@ -2251,7 +2314,7 @@ function PrinterColumn({
         boxShadow: showDrop ? `0 0 0 2px ${stateColor}33` : "none",
       }}
       onDragOver={(e) => {
-        if (!accepts) return;
+        if (!accepts || !operator) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setDragOver(true);
@@ -2260,7 +2323,7 @@ function PrinterColumn({
         if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
       }}
       onDrop={(e) => {
-        if (!accepts) return;
+        if (!accepts || !operator) return;
         e.preventDefault();
         const id = e.dataTransfer.getData("text/plain");
         if (id) onDropTask(id);
@@ -2270,7 +2333,7 @@ function PrinterColumn({
       {/* ---- printer header (right-click for menu) ---- */}
       <div
         className="px-3 pt-2.5 pb-2 flex items-center gap-2"
-        onContextMenu={(e) => onPrinterContextMenu(e, printer.id)}
+        onContextMenu={(e) => operator && onPrinterContextMenu(e, printer.id)}
       >
         <div className="flex-1 min-w-0 flex items-center gap-2" style={dim}>
           {editingName ? (
@@ -2299,6 +2362,7 @@ function PrinterColumn({
             </button>
           )}
 
+          {operator && (
           <button
             onClick={onToggleSettings}
             className="p-1 rounded hover:bg-gray-100 flex-shrink-0"
@@ -2307,12 +2371,14 @@ function PrinterColumn({
           >
             <Settings size={15} style={{ color: settingsOpen ? ACCENT : "#605E5C" }} />
           </button>
+          )}
         </div>
 
         {/* one control, three states — never dimmed, so a printer in
             maintenance can always be brought back */}
         <StatusPicker
           status={printer.status}
+          readOnly={!operator}
           onSelect={(s) => onSetStatus(printer.id, s)}
         />
       </div>
@@ -2328,6 +2394,7 @@ function PrinterColumn({
         </div>
 
         {/* assigned printer settings — compact, collapsible readout */}
+        {operator && (
         <div className="px-3 pb-2">
           <button
             onClick={() => setSpecsOpen((v) => !v)}
@@ -2377,6 +2444,7 @@ function PrinterColumn({
             </div>
           )}
         </div>
+        )}
 
         {/* ---- settings panel ---- */}
         {settingsOpen && (
@@ -2473,6 +2541,7 @@ function PrinterColumn({
             <TaskCard
               key={task.id}
               task={task}
+              draggableCard={operator}
               disabled={inactive}
               expanded={expandedTaskId === task.id}
               onExpand={() => !inactive && onExpandTask(task.id)}
@@ -2545,6 +2614,7 @@ function PrinterColumn({
                   <TaskCard
                     key={task.id}
                     task={task}
+                    draggableCard={operator}
                     disabled={inactive}
                     expanded={expandedTaskId === task.id}
                     onExpand={() => !inactive && onExpandTask(task.id)}
@@ -2569,6 +2639,7 @@ function PrinterColumn({
         )}
 
         {/* ---- add task ---- */}
+        {operator && (
         <div className="px-3 pb-3 pt-2 mt-auto">
           {addingTask ? (
             <AddTaskForm
@@ -2596,6 +2667,7 @@ function PrinterColumn({
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );
@@ -2605,6 +2677,7 @@ function PrinterColumn({
 
 function TaskCard({
   task,
+  draggableCard = true,
   disabled,
   expanded,
   onExpand,
@@ -2629,7 +2702,7 @@ function TaskCard({
 
   return (
     <div
-      draggable={!disabled && !expanded}
+      draggable={draggableCard && !disabled && !expanded}
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", task.id);
         e.dataTransfer.effectAllowed = "move";
