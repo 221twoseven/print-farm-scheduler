@@ -12,7 +12,9 @@ consistent with (or deliberately update).
    task, with a count, in the `In progress` status blue. Reads "No printers have
    tasks in progress" when empty.
 3. **Staging area** — the unassigned queue.
-4. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
+4. **Jobcode filter** — dims every printer not working the selected jobcode.
+   Hidden entirely when no assigned job carries one.
+5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
 
 ## Shop layout (gear icon)
@@ -29,6 +31,24 @@ taste.
 
 The staging area's name is edited in place on the staging header, and is the
 third setting stored in the same list.
+
+## Jobcode filter
+
+A strip between staging and the groups, offering every jobcode currently on a
+printer. Selecting one **dims every printer that is not working that jobcode**,
+so a board of twenty machines answers "who has XX000?" at a glance. A count of
+matching printers and a **Clear** link sit beside the dropdown.
+
+- **The dropdown only lists live work** — jobs assigned to a printer and not
+  yet Complete. A jobcode sitting in staging is not offered, because the filter
+  dims printers and an unassigned job says nothing about one.
+- **Dimming is purely visual.** A dimmed printer still accepts drops, clicks and
+  every menu — a card that looks disabled but silently refuses work reads as a
+  bug.
+- **The selection clears itself** if its jobcode stops being live, rather than
+  leaving the board dimmed against something that no longer exists.
+- Per-person and not stored, like group collapse and the staging filters.
+- The whole strip is hidden when no assigned job has a jobcode.
 
 ## Staging area
 
@@ -62,14 +82,15 @@ printer belongs to is answered by the group it is sitting in.
   back).
 - **Specs summary** — the collapsed line reads **Standard setup** when every
   spec matches the shop default, and otherwise lists **only the fields that
-  differ**, as small chips. A printer running a 0.2mm nozzle on a smooth plate
-  shows those two and nothing else. Where a material was typed in by hand, the
-  chip shows the typed name rather than "Other".
+  differ**, each as `Setting: value` — "Nozzle size: 0.2mm", "Bed type: Smooth".
+  A printer at defaults except its plate shows one chip. Where a material was
+  typed in by hand, the chip shows the typed name rather than "Other", which is
+  the reason for asking for it.
 - **Specs** — expanding the summary shows all five dropdowns (nozzle size,
-  nozzle type, nozzle material, bed type, print material) plus free-text notes,
-  whether or not they are exceptions. Setting print material to **Other**
-  reveals a box for naming the actual material — "Other" alone does not tell an
-  operator what is loaded.
+  nozzle type, nozzle material, bed type, material) plus free-text notes,
+  whether or not they are exceptions. Setting material to **Other** reveals a
+  box for naming the actual material — "Other" alone does not tell an operator
+  what is loaded.
 - **Queue** — active (non-complete) jobs. Two slots are visible by default with a
   "+N more" expander; the queue force-opens if the task being edited sits below
   slot 2.

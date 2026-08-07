@@ -85,7 +85,7 @@ const PRINTER_FIELDS = [
   { key: "nozzleType", label: "Nozzle type", column: "NozzleType" },
   { key: "nozzleMaterial", label: "Nozzle material", column: "NozzleMaterial" },
   { key: "bedType", label: "Bed type", column: "BedType" },
-  { key: "printMaterial", label: "Print material", column: "PrintMaterial" },
+  { key: "printMaterial", label: "Material", column: "PrintMaterial" },
 ];
 
 /* ---------------------------------------------------------------------
@@ -345,6 +345,7 @@ const buildSeedTasks = () => {
       id: "t2",
       printerId: "p1",
       title: "Enclosure vents v3",
+      jobcode: "BY113",
       status: "Not started",
       etaDate: "2026-06-19",
       etaTime: "09:00",
@@ -356,6 +357,7 @@ const buildSeedTasks = () => {
       id: "t3",
       printerId: "p2",
       title: "Jig plates — batch 2",
+      jobcode: "AX112",
       status: "In progress",
       etaDate: "2026-06-13",
       etaTime: "17:00",
@@ -504,6 +506,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const [contextMenu, setContextMenu] = useState(null); // {type, id, x, y}
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const [confirm, setConfirm] = useState(null); // {title, body, confirmLabel, onConfirm}
+  const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
 
   /* declared here, not at the modal, because the modal renders conditionally
      and a hook cannot */
@@ -559,6 +562,39 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       .filter((p) => counts[p.id])
       .map((p) => ({ ...p, count: counts[p.id] }));
   }, [tasks, printers]);
+
+  /* Jobcodes worth filtering by: live work sitting on a printer. Staging is
+     excluded because the filter dims printers, and a job with no printer
+     cannot tell you anything about one. Completed jobs are excluded too —
+     "assigned or in progress" is about what the shop is working on now. */
+  const liveJobcodes = useMemo(() => {
+    const set = new Set();
+    tasks.forEach((t) => {
+      if (t.printerId !== STAGING && t.status !== "Complete" && t.jobcode) {
+        set.add(t.jobcode);
+      }
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [tasks]);
+
+  /* Printer ids carrying the selected jobcode. Everything else dims. */
+  const jobcodeMatches = useMemo(() => {
+    if (!jobcodeFilter) return null;
+    const ids = new Set();
+    tasks.forEach((t) => {
+      if (t.printerId !== STAGING && t.status !== "Complete" && t.jobcode === jobcodeFilter) {
+        ids.add(t.printerId);
+      }
+    });
+    return ids;
+  }, [tasks, jobcodeFilter]);
+
+  /* A jobcode can stop being live while it is selected — the last job on it
+     finishes, or moves back to staging. Drop the selection rather than leaving
+     the board dimmed against something that no longer exists. */
+  useEffect(() => {
+    if (jobcodeFilter && !liveJobcodes.includes(jobcodeFilter)) setJobcodeFilter("");
+  }, [liveJobcodes, jobcodeFilter]);
 
   const expandedTask = tasks.find((t) => t.id === expandedTaskId) || null;
 
@@ -1059,6 +1095,54 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         onDragEnd={() => setDraggingTaskId(null)}
       />
 
+      {/* ---------------- jobcode filter ----------------
+          Hidden entirely when nothing is assigned — an empty dropdown is
+          clutter, not a feature. Purely visual: dimmed printers still accept
+          drops and clicks, because a card that looks disabled and silently
+          refuses work reads as a bug. */}
+      {liveJobcodes.length > 0 && (
+        <div
+          className="px-5 py-2 flex items-center gap-2 flex-wrap border-b"
+          style={{ background: "white", borderColor: "#E1DFDD" }}
+        >
+          <span
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
+            style={{ color: "#605E5C" }}
+          >
+            <Search size={14} style={{ color: "#605E5C" }} />
+            Jobcode
+          </span>
+          <select
+            value={jobcodeFilter}
+            onChange={(e) => setJobcodeFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded border bg-white outline-none"
+            style={{ borderColor: jobcodeFilter ? ACCENT : "#C8C6C4", minWidth: 150 }}
+            aria-label="Highlight printers by jobcode"
+          >
+            <option value="">All jobcodes</option>
+            {liveJobcodes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          {jobcodeFilter && (
+            <>
+              <span className="text-xs" style={{ color: "#605E5C" }}>
+                {jobcodeMatches.size} printer{jobcodeMatches.size !== 1 && "s"}
+              </span>
+              <button
+                onClick={() => setJobcodeFilter("")}
+                className="text-xs font-medium underline"
+                style={{ color: ACCENT }}
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ---------------- groups ---------------- */}
       <main className="px-5 py-3 pt-3 pp-board-scroll">
         <div
@@ -1173,6 +1257,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                       <PrinterColumn
                         key={printer.id}
                         printer={printer}
+                        filteredOut={!!jobcodeMatches && !jobcodeMatches.has(printer.id)}
                         groupName={group.name}
                         tasks={tasksByPrinter[printer.id] || []}
                         choices={choices}
@@ -2007,6 +2092,7 @@ function StatusPicker({ status, onSelect }) {
 
 function PrinterColumn({
   printer,
+  filteredOut,
   groupName,
   tasks,
   choices,
@@ -2078,6 +2164,8 @@ function PrinterColumn({
       className="w-full mt-2 rounded-lg flex flex-col transition-all"
       style={{
         minWidth: PRINTER_MIN_W,
+        /* Filtered out by jobcode: faded, but still fully interactive. */
+        opacity: filteredOut ? 0.35 : 1,
         background: showDrop ? `${stateColor}0D` : "white",
         border: showDrop ? `1px solid ${stateColor}` : "1px solid #E1DFDD",
         borderTop: `4px solid ${stateColor}`,
@@ -2189,7 +2277,7 @@ function PrinterColumn({
                     style={{ background: "#F3F2F1", color: "#605E5C", maxWidth: "100%" }}
                     title={`${e.label}: ${e.text}`}
                   >
-                    {e.text}
+                    {e.label}: {e.text}
                   </span>
                 ))}
               </span>
@@ -2839,7 +2927,7 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
           )}
 
           <div className={inStaging ? "" : "grid grid-cols-2 gap-3"}>
-            <Field label="Print material">
+            <Field label="Material">
               <select
                 value={val("printMaterial", "ABS")}
                 onChange={(e) => commit({ printMaterial: e.target.value })}
@@ -3192,13 +3280,13 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         </div>
       )}
       <label className="block text-xs" style={{ color: "#605E5C" }}>
-        <span className="block">Print material</span>
+        <span className="block">Material</span>
         <select
           value={printMaterial}
           onChange={(e) => setPrintMaterial(e.target.value)}
           className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
           style={{ borderColor: "#C8C6C4" }}
-          aria-label="Print material"
+          aria-label="Material"
         >
           {optionsFor(choices.taskPrintMaterial, printMaterial).map((c) => (
             <option key={c}>{c}</option>
