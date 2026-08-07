@@ -346,6 +346,8 @@ Three quick wins, same shape as Tier 1. Can go out together.
 
 ### 15. Give the jobcode filter its own container (9)
 
+*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged.*
+
 **Risk: Low.** Layout only — no state or logic changes.
 
 The jobcode filter strip currently sits directly under the staging area with no
@@ -360,6 +362,8 @@ all, and nothing about `jobcodeFilter` / `jobcodeMatches` changes.
 
 ### 16. Require jobcode, task name, sent by, give to, and filepath on new tasks (8)
 
+*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged. Decided: all five hard-block.*
+
 **Risk: Low.** Client-side form validation in `AddTaskForm`; no schema change,
 since all five columns already exist.
 
@@ -367,15 +371,15 @@ Today only the task name blocks submission (`if (!title.trim()) return;`).
 Extend that guard to all five fields, and mark them visually as required so the
 block isn't a silent dead click.
 
-**Decide before starting:** whether all five should hard-block, or some should
-be strongly encouraged rather than mandatory. `Give to` and `filepath` in
-particular may not be known yet when a designer first raises a job — worst case
-this makes quick job entry slower for exactly the people item 1 (original
-request) was trying to keep unblocked. Worth confirming with whoever raises
-jobs day to day before shipping. This does not touch existing tasks — a blank
-field on a row already in SharePoint stays exactly as it is.
+**Decided:** all five hard-block, rather than leaving `Give to` and `filepath`
+merely encouraged. `AddTaskForm`'s Add task button disables until all five are
+filled in, each marked with a trailing `*`. This does not touch existing tasks
+— a blank field on a row already in SharePoint stays exactly as it is.
 
 ### 17. Confirm the view toggle survives a full Teams restart (3)
+
+*Still open — needs a manual check in the actual Teams desktop client, which
+isn't something a remote coding session can do. Not addressed in PR #25.*
 
 **Risk: Low — likely a verification task, not a code change.**
 
@@ -395,6 +399,8 @@ this project before.
 ## Tier 5 — moderate, no SharePoint (2026-08-07 request)
 
 ### 18. Operator-view staging cards: summary info, read-only (1)
+
+*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged.*
 
 **Risk: Medium.** Changes what staging cards do in one view but not the other —
 worth getting the split right.
@@ -422,6 +428,8 @@ it to a new case rather than inventing a new one.
 
 ### 19. Replace "Add printer" with an "Edit printers" mode (2)
 
+*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged. Decided: one global toggle, not per-group.*
+
 **Risk: Medium.** Interaction change to a control every operator uses
 regularly; get the affordance right before shipping.
 
@@ -435,10 +443,8 @@ regularly; get the affordance right before shipping.
   add icon per group, a remove icon per printer card, both wired to the
   existing `addPrinter` / `askDeletePrinter` handlers.
 
-**Decide before starting:** whether this is one global toggle (mirroring
-`removeGroupMode`, which is board-wide) or per-group. Global is simpler and
-consistent with the button it sits beside; per-group would need its own state
-per group. I'd default to global unless told otherwise.
+**Decided:** one global toggle, mirroring `removeGroupMode`, per the default
+above — not per-group.
 
 No SharePoint change — `addPrinter` and `deletePrinter` already do the work;
 this only changes how they're reached.
@@ -627,11 +633,15 @@ Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
 
 **2026-08-07 request, in order:**
 
-1. **Tier 4** (15, 16, 17) — no SharePoint, can go out as one PR. Start with 17
-   (verify only) since it may close without any code.
-2. **Tier 5** (18, 19) — moderate UI/interaction changes, no SharePoint.
+1. **Tier 4** (15, 16, 17) — no SharePoint, can go out as one PR. 15 and 16
+   are code, in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25)
+   (open). 17 is verify-only and still needs a manual check in the Teams
+   desktop client — not done yet.
+2. **Tier 5** (18, 19) — moderate UI/interaction changes, no SharePoint. Both
+   in PR #25 alongside 15/16.
 3. **SharePoint**: create `CompletedAt` and `CreatedAt`, send back the internal
-   names, then **Tier 6** (20, 21, then 22 once 21's column exists).
+   names, then **Tier 6** (20, 21, then 22 once 21's column exists). **Blocked
+   — waiting on the two columns.**
 4. **Tier 7** (23) — the completed-jobs table, ideally after item 20 so it has
    something to sort by.
 5. **Tier 8** — 11 and 12 as before (design discussion / research
@@ -641,3 +651,7 @@ Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
 
 Nothing in Tiers 4–7 is blocked on SharePoint except Tier 6 itself and 23's
 soft dependency on 20 — everything else can start immediately.
+
+**Current state (2026-08-07):** PR #25 covers 15, 16, 18, and 19, open against
+`main`, not yet merged or verified in Teams. 17 is still outstanding. Tier 6
+is blocked on the two SharePoint columns above.
