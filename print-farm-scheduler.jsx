@@ -177,10 +177,10 @@ const SLICE_DOT = {
   "Needs Nesting": "#CA5010",
 };
 
-/* Printer state — one control, three states. Replaces the old on/off toggle
-   plus availability pill, which between them produced four states when only
-   three mean anything. Stored as the Status choice column in the Printers
-   list (Active and Available are no longer used).
+/* Printer state — three the operator chooses, one the app sets. Replaces an
+   on/off toggle plus an availability pill, which between them produced four
+   states when only three meant anything. Stored as the Status choice column
+   in the Printers list.
      accepts  can new work be dropped / added here
      evicts   does entering this state send queued jobs back to staging
      dim      is the card greyed out — reserved for "cannot print at all" */
@@ -3536,24 +3536,6 @@ const COLS = {
   },
 };
 
-/* TRANSITIONAL — remove once the legacy column is deleted.
-
-   Printer status used to live in a column whose internal name was "Active":
-   it began as an Active Yes/No field and was rebuilt as the three-state
-   choice, and SharePoint fixes internal names at creation, so the rename
-   never followed. Reading it meant COLS said "Active" while SharePoint showed
-   "Status", which cost a debugging cycle once and confused every conversation
-   about that column since.
-
-   It has been replaced by a genuinely new column whose internal name is
-   "Status". Rows were copied across by hand, so this fallback exists for the
-   one that gets missed: without it, a Maintenance printer with an empty new
-   column would read as Ready and quietly start taking jobs. Reading a column
-   that is not in COLS is safe — checkSchema only validates COLS — so this
-   keeps working until the legacy column is deleted, and can then be deleted
-   itself. */
-const LEGACY_STATUS_COL = "Active";
-
 /* `collapsed` is per-person and is not written to SharePoint. Folding a
    group is one operator's view of the board, not a fact about the shop,
    and a shared Yes/No column would have folded it for everyone. The
@@ -3801,8 +3783,7 @@ const printerFromRow = (f) => ({
   id: str(f[COLS.printers.uuid]) || uid(),
   name: str(f[COLS.printers.name]),
   groupId: str(f[COLS.printers.groupId]),
-  status:
-    str(f[COLS.printers.status]) || str(f[LEGACY_STATUS_COL]) || "Ready",
+  status: str(f[COLS.printers.status]) || "Ready",
   sortOrder: num(f[COLS.printers.sortOrder]),
   settings: {
     notes: str(f[COLS.printers.notes]),
