@@ -184,6 +184,9 @@ const SLICE_DOT = {
      accepts  can new work be dropped / added here
      evicts   does entering this state send queued jobs back to staging
      dim      is the card greyed out — reserved for "cannot print at all" */
+/* What the operator can choose. Busy is deliberately absent: the app sets it,
+   and offering it manually would give you a control that snaps back the moment
+   nothing is running. */
 const PRINTER_STATUSES = ["Ready", "Reserved", "Maintenance"];
 const PRINTER_STATUS = {
   Ready: {
@@ -191,6 +194,22 @@ const PRINTER_STATUS = {
     bg: "#DFF6DD",
     text: "#498205",
     blurb: "Available for new jobs",
+    accepts: true,
+    evicts: false,
+    dim: false,
+  },
+  /* Set by the app, never chosen. See reconcilePrinterBusy: automation only
+     ever moves a printer between Ready and Busy, so an operator's Reserved or
+     Maintenance always outlives whatever the jobs are doing.
+
+     Shares the "In progress" blue on purpose — the printer is busy *because* a
+     task is in progress, and one colour for one fact is the rule this board
+     now follows. */
+  Busy: {
+    color: "#0F6CBD",
+    bg: "#DEECF9",
+    text: "#0F6CBD",
+    blurb: "Printing now; still queues new jobs",
     accepts: true,
     evicts: false,
     dim: false,
@@ -216,6 +235,13 @@ const PRINTER_STATUS = {
 };
 
 const STATUSES = ["Not started", "In progress", "Complete"];
+
+/* A held or out-of-service machine must not have a job started on it. Reserved
+   already refused *new* work; this closes the other half, where a job already
+   queued could be set running anyway. Busy and Ready both allow it — Busy is
+   just Ready with something on the bed. */
+const canStartWork = (printerStatus) =>
+  printerStatus === "Ready" || printerStatus === "Busy";
 
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
 const PRIORITY_STYLE = {
@@ -632,6 +658,35 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       );
     }
   };
+
+  /* Busy follows the work: a printer with something In progress is Busy, one
+     without is Ready. Automation only ever moves between those two — Reserved
+     and Maintenance are the operator's word and outlast any job.
+
+     Returns the same array when nothing moved. That is not an optimisation:
+     the save layer diffs by object identity, so handing back a fresh array of
+     fresh rows every time tasks changed would PATCH every printer on every
+     keystroke. */
+  useEffect(() => {
+    setPrinters((ps) => {
+      let moved = false;
+      const next = ps.map((p) => {
+        if (p.status !== "Ready" && p.status !== "Busy") return p;
+        const running = tasks.some(
+          (t) => t.printerId === p.id && t.status === "In progress"
+        );
+        const want = running ? "Busy" : "Ready";
+        if (p.status === want) return p;
+        moved = true;
+        return { ...p, status: want };
+      });
+      return moved ? next : ps;
+    });
+  }, [tasks]);
+
+  /* the printer a task sits on, for the rules that depend on its state */
+  const printerStatusOf = (printerId) =>
+    printers.find((p) => p.id === printerId)?.status || "Ready";
 
   /* only a Ready printer takes new work */
   const acceptsTasks = (printerId) => {
@@ -1369,6 +1424,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         <TaskDetailModal
           task={expandedTask}
           inStaging={expandedTask.printerId === STAGING}
+          printerStatus={printerStatusOf(expandedTask.printerId)}
           choices={choices}
           onUpdate={updateTask}
           onDelete={deleteTask}
@@ -1489,15 +1545,22 @@ function ContextMenu({
     });
   }, [menu]);
 
-  const Item = ({ icon, label, onClick, danger, swatch }) => (
+  const Item = ({ icon, label, onClick, danger, swatch, disabled, title }) => (
     <button
+      disabled={disabled}
+      title={title}
       onClick={(e) => {
         e.stopPropagation();
+        if (disabled) return;
         onClick();
         onClose();
       }}
-      className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-100"
-      style={{ color: danger ? "#D13438" : "#242424" }}
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm ${
+        disabled ? "cursor-not-allowed" : "hover:bg-gray-100"
+      }`}
+      style={{
+        color: disabled ? "#A19F9D" : danger ? "#D13438" : "#242424",
+      }}
     >
       {swatch && (
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: swatch }} />
@@ -1529,26 +1592,42 @@ function ContextMenu({
     const destinations = printers.filter(
       (p) => acceptsTasks(p.id) && p.id !== task.printerId
     );
+    const printerStatus =
+      printers.find((p) => p.id === task.printerId)?.status || "Ready";
+    const startable = canStartWork(printerStatus);
     content = (
       <>
         {task.printerId !== STAGING && (
           <>
             <Header>Set status</Header>
-            {STATUSES.map((s) => (
-              <Item
-                key={s}
-                swatch={STATUS_STYLE[s].dot}
-                label={
-                  <span className="flex-1 flex items-center justify-between">
-                    {s}
-                    {task.status === s && (
-                      <Check size={13} style={{ color: "#5B5FC7" }} />
-                    )}
-                  </span>
-                }
-                onClick={() => onUpdateTask(task.id, { status: s })}
-              />
-            ))}
+            {STATUSES.map((s) => {
+              /* A held or out-of-service machine cannot have work started on
+                 it. Shown greyed with the reason rather than hidden — an
+                 option that vanishes leaves you wondering, and one that
+                 accepts a click and does nothing reads as a bug. */
+              const blocked = s === "In progress" && !startable;
+              return (
+                <Item
+                  key={s}
+                  swatch={STATUS_STYLE[s].dot}
+                  disabled={blocked}
+                  title={
+                    blocked
+                      ? `${printerStatus} — a job cannot be started on this printer`
+                      : undefined
+                  }
+                  label={
+                    <span className="flex-1 flex items-center justify-between">
+                      {s}
+                      {task.status === s && (
+                        <Check size={13} style={{ color: "#5B5FC7" }} />
+                      )}
+                    </span>
+                  }
+                  onClick={() => onUpdateTask(task.id, { status: s })}
+                />
+              );
+            })}
             <Divider />
           </>
         )}
@@ -2707,7 +2786,7 @@ function TaskCard({
 /* Typing edits a local draft and commits on blur, so a task name is one save
    rather than one per letter. Discrete controls (selects, dates, steppers)
    commit immediately, folding in any pending text edit. */
-function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose }) {
+function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, onDelete, onClose }) {
   const [draft, setDraft] = useState({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -2959,9 +3038,19 @@ function TaskDetailModal({ task, inStaging, choices, onUpdate, onDelete, onClose
                   onChange={(e) => commit({ status: e.target.value })}
                   className={MODAL_SELECT}
                   style={MODAL_STYLE}
+                  title={
+                    canStartWork(printerStatus)
+                      ? undefined
+                      : `${printerStatus} — a job cannot be started on this printer`
+                  }
                 >
                   {STATUSES.map((s) => (
-                    <option key={s}>{s}</option>
+                    <option
+                      key={s}
+                      disabled={s === "In progress" && !canStartWork(printerStatus)}
+                    >
+                      {s}
+                    </option>
                   ))}
                 </select>
               </Field>

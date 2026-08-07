@@ -239,38 +239,28 @@ whether the defaults should also come from SharePoint, or whether the code
 constant is the intended source of truth. I lean toward leaving it in code and
 documenting it, since "standard setup" is a shop convention rather than data.
 
-### 8. Busy printer status (1)
+### 8. Busy printer status (1) — DONE
 
-**The SharePoint side is already done.** The status column was replaced in #17
-so its internal name finally matches its display name, and the new column was
-created with `Busy` among its values. Nothing left but the four decisions below
-and the code.
+*Shipped in #18.* The shop's four answers reduced to one rule, which is what
+made this simple in the end:
 
-**Risk: Medium-High.** This one needs decisions before any code.
+> **Automation only ever moves a printer between Ready and Busy.**
 
-Adding a fourth value to `PRINTER_STATUSES` / `PRINTER_STATUS` is easy. The hard
-part is that Busy is the first status the *app* sets on its own, and it collides
-with the operator's manual control:
+- Ready + a job starts → Busy; Busy + nothing running → Ready.
+- Reserved and Maintenance are never touched by automation, so an operator who
+  reserves a machine mid-print still has it reserved afterwards.
+- Busy accepts new queued work — a printer mid-print is where the next job goes.
+- Busy is not in the status picker. A manual Busy would snap back the moment
+  nothing was running.
 
-- **Does Busy accept new queued jobs?** A printer that is mid-print is exactly
-  where you want the next job queued, so "accepts" is probably still true — but
-  then Busy behaves unlike Reserved and Maintenance, which both refuse work.
-- **What if the operator set Reserved and a job then starts?** Auto-switching to
-  Busy silently discards a deliberate choice.
-- **Revert to Ready when — any task completes, or all of them?** With two jobs
-  queued and one finished, reverting is wrong.
-- **What if the operator manually changes status while Busy?** Manual should
-  presumably win until the print ends.
+Also added, from the answer to "Reserved wins, no jobs can start": Reserved and
+Maintenance now refuse to let a **queued** job be started, not just to accept new
+ones. "In progress" is disabled with the reason in its tooltip rather than
+hidden or silently ignored.
 
-My recommendation: Busy accepts work, is set only when a task moves to *In
-progress*, reverts to Ready only when no task on that printer is *In progress*
-any more, and never overrides Maintenance. But this is a workflow question about
-your shop, not a code question, so tell me how it should behave.
-
-This also touches [decisions.md](decisions.md) — the three-state control was a
-deliberate simplification of an earlier four-state mess. Adding a fourth state
-that the app manages is defensible, but it is reopening that decision knowingly,
-and the doc should record why.
+The reconciliation effect returns the same array when nothing moved — the save
+layer diffs by identity, so anything else would PATCH every printer whenever a
+task changed.
 
 ### 9. Display filter by jobcode (11) — DONE
 

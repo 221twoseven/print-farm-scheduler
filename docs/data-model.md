@@ -88,22 +88,42 @@ in `DEFAULT_CHOICES`.
 
 ### Printer status
 
-One control, three states. It replaced an on/off toggle plus an availability pill
-which between them produced four states when only three mean anything.
+Three states the operator chooses, plus one the app sets.
 
-| Status | Accepts new work | Evicts queued jobs | Card dimmed |
-| --- | --- | --- | --- |
-| `Ready` | yes | no | no |
-| `Reserved` | no | no | no |
-| `Maintenance` | no | **yes — queued jobs return to staging** | yes |
+| Status | Set by | Accepts new work | Can a job be started | Evicts queued jobs | Card dimmed |
+| --- | --- | --- | --- | --- | --- |
+| `Ready` | operator | yes | yes | no | no |
+| `Busy` | **the app** | yes | yes | no | no |
+| `Reserved` | operator | no | **no** | no | no |
+| `Maintenance` | operator | no | **no** | yes — queued jobs return to staging | yes |
 
 Defined in `PRINTER_STATUS`. The old `Active` / `Available` pair is entirely
 gone now — the semantics went when the three-state control replaced them, and
 the column name went when the column was replaced.
 
-The SharePoint column also offers **`Busy`**, which nothing writes yet. Until
-item 8 lands, setting a printer to Busy directly in SharePoint will read back as
-Ready on the board, because `PRINTER_STATUS` has no entry for it.
+### Busy is derived, and automation never overrules a person
+
+One rule covers it: **automation only ever moves a printer between `Ready` and
+`Busy`.**
+
+- A printer with a task `In progress` becomes `Busy`; one without goes back to
+  `Ready`.
+- `Reserved` and `Maintenance` are the operator's word, and automation does not
+  touch them — an operator who reserves a machine mid-print still has it
+  reserved when the print ends.
+- `Busy` is **not offered in the status picker**. Choosing it manually would
+  give you a control that snaps back the moment nothing is running.
+- `Busy` still accepts new work, unlike `Reserved` and `Maintenance`. A printer
+  mid-print is exactly where the next job queues.
+
+`Reserved` and `Maintenance` also refuse to let a queued job be *started* —
+"In progress" is disabled, with the reason in its tooltip, in both the context
+menu and the detail modal. Previously they only refused new work arriving.
+
+The reconciliation lives in an effect in `PrintFarmScheduler` and returns the
+**same array** when nothing moved. That is load-bearing, not tidiness: the save
+layer diffs by object identity, so a fresh array each time tasks changed would
+PATCH every printer on every keystroke.
 
 ## Tasks
 
