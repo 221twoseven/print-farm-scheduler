@@ -32,6 +32,27 @@ and the numbers move.
 - **Storage behaviour** → the persistence section below the `SP` block, and
   `AppShell`.
 
+## Context efficiency
+
+This repo is maintained primarily through Claude Code, and
+`print-farm-scheduler.jsx` is long enough that reading it carelessly costs more
+than most changes to it. Minimize context use.
+
+- **Never read `print-farm-scheduler.jsx` in full** unless the task genuinely
+  spans the whole application.
+- **Locate the relevant section or component first**, then read only the
+  surrounding code the change needs. The layout table in
+  [docs/architecture.md](docs/architecture.md#layout-of-the-file) maps the whole
+  file; the `/* ---- name ---- */` comments are the reliable landmarks.
+- **Read docs selectively.** This file names the relevant document for each
+  concern — follow that pointer rather than sweeping `docs/`.
+- **Prefer surgical edits over broad refactors.**
+- **Don't re-read files or sections already understood**, unless new information
+  requires it.
+- **Don't explore unrelated code "for completeness."**
+- **After making a change, report only** what changed, anything that needs
+  verification, and any unresolved issue.
+
 ## Rules that are not style preferences
 
 1. **Mutation handlers must copy only what they change.** The save layer diffs by
