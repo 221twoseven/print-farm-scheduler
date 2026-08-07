@@ -533,6 +533,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState(null);
   const [removeGroupMode, setRemoveGroupMode] = useState(false);
+  const [editPrintersMode, setEditPrintersMode] = useState(false);
   const [showShopSettings, setShowShopSettings] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // {type, id, x, y}
   const [draggingTaskId, setDraggingTaskId] = useState(null);
@@ -1188,6 +1189,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         adding={addingTaskIn === STAGING}
         expandedTaskId={expandedTaskId}
         draggingTaskId={draggingTaskId}
+        operator={operator}
         onStartAdd={() => setAddingTaskIn(STAGING)}
         onCancelAdd={() => setAddingTaskIn(null)}
         onAdd={(fields) => addTask(STAGING, fields)}
@@ -1394,18 +1396,25 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                         onTaskContextMenu={openTaskMenu}
                         onPrinterContextMenu={openPrinterMenu}
                         operator={operator}
+                        editPrintersMode={editPrintersMode}
                         onDragStart={setDraggingTaskId}
                         onDragEnd={() => setDraggingTaskId(null)}
                       />
                     ))}
 
-                    {operator && (
+                    {/* Add printer only shows up inside Edit printers mode —
+                        the big dashed button every group used to carry was
+                        replaced with this compact tile, reached the same way
+                        a printer gets removed. */}
+                    {operator && editPrintersMode && (
                     <button
                       onClick={() => addPrinter(group.id)}
-                      className="w-full mt-2 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 py-6 text-sm font-medium hover:bg-white"
+                      className="w-full mt-2 rounded-lg border-2 border-dashed flex items-center justify-center gap-1.5 py-3 text-xs font-medium hover:bg-white"
                       style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
+                      title={`Add printer to ${group.name}`}
+                      aria-label={`Add printer to ${group.name}`}
                     >
-                      <Plus size={16} /> Add printer
+                      <Plus size={14} /> Add
                     </button>
                     )}
                   </div>
@@ -1468,6 +1477,15 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                 {removeGroupMode ? "Select a group to delete…" : "Remove group"}
               </button>
             )}
+            <button
+              onClick={() => setEditPrintersMode((v) => !v)}
+              className="flex items-center gap-2 text-sm font-medium px-3 py-2 rounded hover:bg-white"
+              style={{ color: editPrintersMode ? ACCENT : "#605E5C" }}
+              title="Add or remove printers"
+            >
+              <Pencil size={15} />
+              {editPrintersMode ? "Done editing printers" : "Edit printers"}
+            </button>
           </div>
         )}
       </div>
@@ -1828,6 +1846,7 @@ function StagingArea({
   adding,
   expandedTaskId,
   draggingTaskId,
+  operator,
   onStartAdd,
   onCancelAdd,
   onAdd,
@@ -2101,6 +2120,7 @@ function StagingArea({
                       onDropOnTask={onDropOnTask}
                       inStaging
                       dragging={draggingTaskId === task.id}
+                      operator={operator}
                     />
                   </React.Fragment>
                 );
@@ -2239,6 +2259,7 @@ function StatusPicker({ status, onSelect, readOnly }) {
 function PrinterColumn({
   printer,
   operator,
+  editPrintersMode,
   filteredOut,
   groupName,
   tasks,
@@ -2319,7 +2340,7 @@ function PrinterColumn({
         boxShadow: showDrop ? `0 0 0 2px ${stateColor}33` : "none",
       }}
       onDragOver={(e) => {
-        if (!accepts || !operator) return;
+        if (!accepts || !operator || editPrintersMode) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setDragOver(true);
@@ -2328,7 +2349,7 @@ function PrinterColumn({
         if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
       }}
       onDrop={(e) => {
-        if (!accepts || !operator) return;
+        if (!accepts || !operator || editPrintersMode) return;
         e.preventDefault();
         const id = e.dataTransfer.getData("text/plain");
         if (id) onDropTask(id);
@@ -2338,7 +2359,9 @@ function PrinterColumn({
       {/* ---- printer header (right-click for menu) ---- */}
       <div
         className="px-3 pt-2.5 pb-2 flex items-center gap-2"
-        onContextMenu={(e) => operator && onPrinterContextMenu(e, printer.id)}
+        onContextMenu={(e) =>
+          operator && !editPrintersMode && onPrinterContextMenu(e, printer.id)
+        }
       >
         <div className="flex-1 min-w-0 flex items-center gap-2" style={dim}>
           {editingName ? (
@@ -2370,7 +2393,7 @@ function PrinterColumn({
             </button>
           )}
 
-          {operator && (
+          {operator && !editPrintersMode && (
           <button
             onClick={onToggleSettings}
             className="p-1 rounded hover:bg-gray-100 flex-shrink-0"
@@ -2378,6 +2401,21 @@ function PrinterColumn({
             title="Printer settings"
           >
             <Settings size={15} style={{ color: settingsOpen ? ACCENT : "#605E5C" }} />
+          </button>
+          )}
+
+          {/* Edit printers mode: the settings gear is swapped for a direct
+              remove icon, so a printer can go without opening its settings
+              panel first. The panel's own delete button (below) still works
+              too — this is just a faster path to the same action. */}
+          {operator && editPrintersMode && (
+          <button
+            onClick={() => onDeletePrinter(printer.id)}
+            className="p-1 rounded hover:bg-red-50 flex-shrink-0"
+            aria-label={`Delete printer ${printer.name}`}
+            title="Delete printer (tasks go to staging)"
+          >
+            <Trash2 size={15} style={{ color: "#D13438" }} />
           </button>
           )}
         </div>
@@ -2549,8 +2587,8 @@ function PrinterColumn({
             <TaskCard
               key={task.id}
               task={task}
-              draggableCard={operator}
-              disabled={inactive || !operator}
+              draggableCard={operator && !editPrintersMode}
+              disabled={inactive || !operator || editPrintersMode}
               expanded={expandedTaskId === task.id}
               onExpand={() => !inactive && onExpandTask(task.id)}
               onContextMenu={onTaskContextMenu}
@@ -2622,8 +2660,8 @@ function PrinterColumn({
                   <TaskCard
                     key={task.id}
                     task={task}
-                    draggableCard={operator}
-                    disabled={inactive || !operator}
+                    draggableCard={operator && !editPrintersMode}
+                    disabled={inactive || !operator || editPrintersMode}
                     expanded={expandedTaskId === task.id}
                     onExpand={() => !inactive && onExpandTask(task.id)}
                     onContextMenu={onTaskContextMenu}
@@ -2695,9 +2733,15 @@ function TaskCard({
   onDropOnTask,
   inStaging,
   dragging,
+  operator,
 }) {
   const eta = formatEta(task.etaDate, task.etaTime);
   const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+  /* Operator view, staging only: reading the summary is enough — opening the
+     job or its context menu is the designer's job. Dragging stays live, since
+     that's how an operator assigns the job to a printer; only the click-to-
+     open and the right-click menu lock. */
+  const stagingLocked = inStaging && operator;
   /* An operator note is worth knowing about from the board, and a designer
      cannot open an assigned job at all. Hover alone would hide which cards
      have one, so the icon carries the fact and its tooltip carries the text. */
@@ -2745,7 +2789,9 @@ function TaskCard({
         if (id && id !== task.id) onDropOnTask(id, task.id, overPos || "before");
         setOverPos(null);
       }}
-      onContextMenu={(e) => !disabled && onContextMenu && onContextMenu(e, task.id)}
+      onContextMenu={(e) =>
+        !disabled && !stagingLocked && onContextMenu && onContextMenu(e, task.id)
+      }
       className="rounded-lg border"
       style={{
         borderColor: expanded ? ACCENT : "#E1DFDD",
@@ -2758,9 +2804,15 @@ function TaskCard({
       {/* collapsed row — minimal: name + status + ETA. Detail in modal. */}
       <button
         onClick={onExpand}
-        disabled={disabled}
+        disabled={disabled || stagingLocked}
         className="w-full text-left px-2.5 py-2"
-        title={disabled ? undefined : "Click for details · drag to move · right-click for menu"}
+        title={
+          disabled
+            ? undefined
+            : stagingLocked
+            ? "Drag to assign to a printer"
+            : "Click for details · drag to move · right-click for menu"
+        }
       >
         {/* line 1: title + qty + priority flag + status pill. No status dot —
             the pill two elements along says the same thing in words. */}
@@ -2824,17 +2876,29 @@ function TaskCard({
             board still means the ETA has passed (isOverdue), and quietly
             introducing a second, competing lateness signal is a behaviour
             change the shop has not asked for yet. */}
-        {needBy && (
+        {(needBy || stagingLocked) && (
           <div
-            className="mt-1 flex items-center gap-1.5"
+            className="mt-1 flex items-center gap-1.5 flex-wrap"
             style={{ color: "#8A8886", fontSize: 10 }}
           >
-            <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
-              Need by
-            </span>
-            <span className="tabular-nums" style={{ color: "#605E5C" }}>
-              {needBy.date}
-            </span>
+            {stagingLocked && task.jobcode && (
+              <span className="tabular-nums" style={{ color: "#605E5C" }}>
+                {task.jobcode}
+              </span>
+            )}
+            {stagingLocked && (
+              <span style={{ color: "#605E5C" }}>Qty {task.quantity || 1}</span>
+            )}
+            {needBy && (
+              <>
+                <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
+                  Need by
+                </span>
+                <span className="tabular-nums" style={{ color: "#605E5C" }}>
+                  {needBy.date}
+                </span>
+              </>
+            )}
           </div>
         )}
 
