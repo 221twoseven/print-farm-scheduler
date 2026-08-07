@@ -2353,10 +2353,13 @@ function PrinterColumn({
             />
           ) : (
             <button
-              onClick={() => !inactive && setEditingName(true)}
+              onClick={() => operator && !inactive && setEditingName(true)}
+              disabled={!operator}
               className="flex-1 min-w-0 text-left text-sm font-semibold truncate"
-              style={{ color: "#242424" }}
-              title="Rename printer (or right-click for more)"
+              style={{ color: "#242424", cursor: operator ? undefined : "default" }}
+              title={
+                operator ? "Rename printer (or right-click for more)" : printer.name
+              }
             >
               {printer.name}
             </button>
@@ -2542,7 +2545,7 @@ function PrinterColumn({
               key={task.id}
               task={task}
               draggableCard={operator}
-              disabled={inactive}
+              disabled={inactive || !operator}
               expanded={expandedTaskId === task.id}
               onExpand={() => !inactive && onExpandTask(task.id)}
               onContextMenu={onTaskContextMenu}
@@ -2615,7 +2618,7 @@ function PrinterColumn({
                     key={task.id}
                     task={task}
                     draggableCard={operator}
-                    disabled={inactive}
+                    disabled={inactive || !operator}
                     expanded={expandedTaskId === task.id}
                     onExpand={() => !inactive && onExpandTask(task.id)}
                     onContextMenu={onTaskContextMenu}
