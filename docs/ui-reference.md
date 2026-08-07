@@ -6,8 +6,8 @@ consistent with (or deliberately update).
 
 ## The board, top to bottom
 
-1. **Header** — purple bar, app name, live count of printers and tasks, and a
-   gear opening **Shop layout**.
+1. **Header** — purple bar, app name, live count of printers and tasks, the
+   **view toggle**, and a gear opening **Shop layout** (operator view only).
 2. **In-progress bar** — a chip per printer that has at least one `In progress`
    task, with a count, in the `In progress` status blue. Reads "No printers have
    tasks in progress" when empty.
@@ -16,6 +16,37 @@ consistent with (or deliberately update).
    Hidden entirely when no assigned job carries one.
 5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
+
+## Operator view and Designer view
+
+A toggle in the header. **Operator view** is the board as built. **Designer
+view** hides everything that configures the shop or assigns work:
+
+| Hidden in designer view | Still available |
+| --- | --- |
+| Shop layout gear | Staging area, in full — search, filters, **New task** |
+| Printer settings button and right-click menu | The whole board, read-only where it matters |
+| Printer status control — shown as a plain pill, not a menu | Printer status is still *legible*: a machine in maintenance looks it |
+| **Add task** on a printer | Task detail modal, including editing a job's own fields |
+| Specs summary | Jobcode filter |
+| Add / Remove group, Add printer, group rename | Task status, priority, slicing |
+| Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
+
+**This is not a permission boundary.** The toggle is one click for anybody and
+the data is untouched. It removes clutter and prevents accidents; it does not
+stop a determined designer from reassigning a print. Real enforcement would need
+SharePoint permissions and a server-side check, which this app deliberately does
+not have. Do not describe it to anyone as access control.
+
+The choice is remembered per browser (`localStorage`), unlike group collapse
+which resets each load — somebody who works as a designer should stay one
+without re-picking every morning. It is still per-person and still nothing
+SharePoint knows about.
+
+Three things are hidden that the original request did not list — **Add printer**,
+the **printer right-click menu**, and the **status control** — because leaving
+them would have made the mode pointless: a designer could still delete a printer
+or put one into maintenance.
 
 ## Shop layout (gear icon)
 
