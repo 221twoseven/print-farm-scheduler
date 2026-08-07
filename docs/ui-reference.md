@@ -60,10 +60,16 @@ printer belongs to is answered by the group it is sitting in.
   right-click menu. Moving a printer to **Maintenance** sends its queued jobs
   back to staging and greys out the card (but never the control that brings it
   back).
-- **Specs** — an expandable panel with the five dropdowns (nozzle size, nozzle
-  type, nozzle material, bed type, print material) plus free-text notes. Setting
-  print material to **Other** reveals a box for naming the actual material —
-  "Other" alone does not tell an operator what is loaded.
+- **Specs summary** — the collapsed line reads **Standard setup** when every
+  spec matches the shop default, and otherwise lists **only the fields that
+  differ**, as small chips. A printer running a 0.2mm nozzle on a smooth plate
+  shows those two and nothing else. Where a material was typed in by hand, the
+  chip shows the typed name rather than "Other".
+- **Specs** — expanding the summary shows all five dropdowns (nozzle size,
+  nozzle type, nozzle material, bed type, print material) plus free-text notes,
+  whether or not they are exceptions. Setting print material to **Other**
+  reveals a box for naming the actual material — "Other" alone does not tell an
+  operator what is loaded.
 - **Queue** — active (non-complete) jobs. Two slots are visible by default with a
   "+N more" expander; the queue force-opens if the task being edited sits below
   slot 2.

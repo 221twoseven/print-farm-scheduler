@@ -130,6 +130,30 @@ const optionsFor = (list, current) => {
   return current && !opts.includes(current) ? [...opts, current] : opts;
 };
 
+/* What a printer's spec fields say, once the ones matching the shop default
+   are dropped. An empty list means "standard setup" and the card can say so in
+   three words instead of five values.
+
+   "Default" is a code constant rather than a SharePoint read, deliberately:
+   "standard setup" is a shop convention, not data, and reading it from the
+   choice columns would mean the first value of each list silently became the
+   standard. The cost is that editing a choice column so a default value no
+   longer exists makes every printer read as an exception — visible immediately,
+   and fixed by editing defaultPrinterFields to match. */
+const specExceptions = (settings) => {
+  const defaults = defaultPrinterFields();
+  return PRINTER_FIELDS.filter(
+    (f) => (settings?.fields?.[f.key] || "") !== defaults[f.key]
+  ).map((f) => {
+    const value = settings.fields[f.key];
+    /* "Other" is not a material. If the operator named what is actually
+       loaded, show that instead — it is the whole point of asking. */
+    const manual =
+      f.key === "printMaterial" && isOtherMaterial(value) && settings.printMaterialOther;
+    return { key: f.key, label: f.label, text: manual || value };
+  });
+};
+
 /* The printer's list says "Other"; the task's says "Other (Discuss with
    Operator)" — the longer wording is a message to the designer choosing it,
    not to the operator. Both lists live in SharePoint and the shop can reword
@@ -280,7 +304,7 @@ const seedPrinters = reindex(
       groupId: "g1",
       status: "Ready",
       settings: {
-        fields: { nozzleSize: "0.6mm", nozzleType: "High Flow", nozzleMaterial: "Standard", bedType: "Textured", printMaterial: "ABS" },
+        fields: { nozzleSize: "0.4mm", nozzleType: "Standard", nozzleMaterial: "Standard", bedType: "Textured", printMaterial: "ABS" },
         notes: "",
       },
     },
@@ -290,8 +314,9 @@ const seedPrinters = reindex(
       groupId: "g2",
       status: "Maintenance",
       settings: {
-        fields: { nozzleSize: "0.8mm", nozzleType: "High Flow", nozzleMaterial: "Tungsten", bedType: "Textured", printMaterial: "Other (Discuss with Operator)" },
+        fields: { nozzleSize: "0.8mm", nozzleType: "High Flow", nozzleMaterial: "Tungsten", bedType: "Textured", printMaterial: "Other" },
         notes: "Down for hotend service until parts arrive.",
+        printMaterialOther: "PC-CF",
       },
     },
   ],
@@ -2027,6 +2052,8 @@ function PrinterColumn({
 
   /* running queue = active (non-complete) jobs; completed jobs collapse
      into a separate section at the bottom and leave the active slot count */
+  const exceptions = specExceptions(settings);
+
   const activeTasks = tasks.filter((t) => t.status !== "Complete");
   const doneTasks = tasks.filter((t) => t.status === "Complete");
 
@@ -2146,9 +2173,27 @@ function PrinterColumn({
             ) : (
               <ChevronRight size={11} style={{ color: "#8A8886" }} className="flex-shrink-0" />
             )}
-            <span className="text-xs italic truncate" style={{ color: "#8A8886" }}>
-              {PRINTER_FIELDS.map((f) => settings.fields[f.key]).join(" · ")}
-            </span>
+            {exceptions.length === 0 ? (
+              <span className="text-xs italic truncate" style={{ color: "#8A8886" }}>
+                Standard setup
+              </span>
+            ) : (
+              /* Only what differs. Chips rather than a joined string: at this
+                 width a five-value list truncated to "0.4mm · Standard · …"
+                 hid the one value worth reading. */
+              <span className="flex items-center gap-1 flex-wrap min-w-0">
+                {exceptions.map((e) => (
+                  <span
+                    key={e.key}
+                    className="px-1.5 py-0.5 rounded font-medium text-xs truncate"
+                    style={{ background: "#F3F2F1", color: "#605E5C", maxWidth: "100%" }}
+                    title={`${e.label}: ${e.text}`}
+                  >
+                    {e.text}
+                  </span>
+                ))}
+              </span>
+            )}
           </button>
           {specsOpen && (
             <div className="pl-4 pt-0.5">
