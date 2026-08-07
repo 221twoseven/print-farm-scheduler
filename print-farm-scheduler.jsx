@@ -1208,8 +1208,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           refuses work reads as a bug. */}
       {liveJobcodes.length > 0 && (
         <div
-          className="px-5 py-2 flex items-center gap-2 flex-wrap border-b"
-          style={{ background: "white", borderColor: "#E1DFDD" }}
+          className="mx-5 mt-3 mb-1 px-4 py-2.5 rounded-lg flex items-center gap-2 flex-wrap"
+          style={{ background: "white", border: "1px solid #E1DFDD" }}
         >
           <span
             className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
@@ -3374,8 +3374,11 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const needsSlicing =
     sliceStatus === "Not Sliced" || sliceStatus === "Needs Nesting";
 
+  const canSubmit =
+    title.trim() && jobcode.trim() && sentBy.trim() && giveTo.trim() && filepath.trim();
+
   const submit = () => {
-    if (!title.trim()) return;
+    if (!canSubmit) return;
     onAdd({
       title: title.trim(),
       jobcode: jobcode.trim(),
@@ -3404,36 +3407,36 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="Task name"
+        placeholder="Task name *"
         className="w-full text-sm px-2 py-1.5 rounded border outline-none"
         style={{ borderColor: "#C8C6C4" }}
-        aria-label="Task name"
+        aria-label="Task name (required)"
       />
       <input
         value={jobcode}
         onChange={(e) => setJobcode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="Jobcode"
+        placeholder="Jobcode *"
         className="w-full text-xs px-2 py-1.5 rounded border outline-none"
         style={{ borderColor: "#C8C6C4" }}
-        aria-label="Jobcode"
+        aria-label="Jobcode (required)"
       />
       <div className="flex gap-2">
         <input
           value={sentBy}
           onChange={(e) => setSentBy(e.target.value)}
-          placeholder="Sent by"
+          placeholder="Sent by *"
           className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
           style={{ borderColor: "#C8C6C4" }}
-          aria-label="Sent by"
+          aria-label="Sent by (required)"
         />
         <input
           value={giveTo}
           onChange={(e) => setGiveTo(e.target.value)}
-          placeholder="Give to"
+          placeholder="Give to *"
           className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
           style={{ borderColor: "#C8C6C4" }}
-          aria-label="Give to"
+          aria-label="Give to (required)"
         />
       </div>
       <textarea
@@ -3448,13 +3451,13 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       <input
         value={filepath}
         onChange={(e) => setFilepath(e.target.value)}
-        placeholder="Filepath, e.g. \\server\prints\part.3mf"
+        placeholder="Filepath, e.g. \\server\prints\part.3mf *"
         className="w-full text-xs px-2 py-1.5 rounded border outline-none"
         style={{
           borderColor: "#C8C6C4",
           fontFamily: "Consolas, 'Courier New', monospace",
         }}
-        aria-label="Filepath"
+        aria-label="Filepath (required)"
       />
       <div className="flex gap-2 items-end">
         <div className="text-xs" style={{ color: "#605E5C" }}>
@@ -3580,8 +3583,9 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       <div className="flex gap-2">
         <button
           onClick={submit}
-          className="flex-1 text-sm font-medium text-white py-1.5 rounded"
-          style={{ background: ACCENT }}
+          disabled={!canSubmit}
+          className="flex-1 text-sm font-medium text-white py-1.5 rounded disabled:cursor-not-allowed"
+          style={{ background: ACCENT, opacity: canSubmit ? 1 : 0.5 }}
         >
           Add task
         </button>
