@@ -1,6 +1,6 @@
 # Architecture
 
-Everything is one file: `print-farm-scheduler.jsx`, ~3,900 lines. `index.html`
+Everything is one file: `print-farm-scheduler.jsx`, ~4,500 lines. `index.html`
 loads React 18, Tailwind, lucide-react and MSAL from CDNs via an import map, then
 hands the JSX to Babel standalone, which transpiles it in the browser. There is
 no bundler, no `node_modules`, and no server.
@@ -13,23 +13,29 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 
 | Section | Lines | Contents |
 | --- | --- | --- |
-| Imports + persistence-seam note | 1–42 | React, lucide icons, the design note on ordering and the Settings list |
-| Constants | 44–212 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `PRINTER_STATUS`, `STATUSES`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
-| Order helpers | 214–230 | `bySortOrder`, `hydrate()`, `reindex()` |
-| Seed demo data | 232–368 | `seedGroups`, `seedPrinters`, `seedTasks` — unreachable when SharePoint is configured |
-| Helpers | 370–392 | `formatEta()`, `isOverdue()` |
-| `PrintFarmScheduler` | 394–1261 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid |
-| `ConfirmDialog` | 1263–1308 | Destructive-action confirmation |
-| `ContextMenu` | 1310–1524 | Right-click menu for tasks and printers |
-| `StagingArea` | 1526–1834 | Unassigned queue: search, priority filter, tier headers, batched loading |
-| `StatusPicker` | 1836–1939 | Task status control |
-| `PrinterColumn` | 1941–2353 | One printer card: specs, queue, completed section, drop targets |
-| `TaskCard` | 2355–2502 | Collapsed card |
-| `TaskDetailModal` | 2504–2817 | Full task editor |
-| `NumberStepper`, `AddTaskForm` | 2819–3090 | Quantity control and the inline new-task form |
-| Persistence | 3092–3675 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
-| `AppShell` | 3677–3921 | Auth phases, save orchestration, `StatusPill` |
-| Mount | 3923–3929 | `createRoot(...).render(<AppShell />)` if `#root` exists |
+| Imports + persistence-seam note | 1–43 | React, lucide icons, the design note on ordering and the Settings list |
+| Constants | 45–289 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
+| Order helpers | 291–307 | `bySortOrder`, `hydrate()`, `reindex()` |
+| Seed demo data | 309–455 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
+| Helpers | 457–499 | `formatEta()`, `useBackdropClose()`, `isOverdue()` |
+| `PrintFarmScheduler` | 501–1524 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid |
+| `ConfirmDialog` | 1526–1572 | Destructive-action confirmation |
+| `ContextMenu` | 1574–1815 | Right-click menu for tasks and printers |
+| `StagingArea` | 1817–2124 | Unassigned queue: search, priority filter, tier headers, batched loading |
+| `StatusPicker` | 2126–2234 | Task status control |
+| `PrinterColumn` | 2236–2681 | One printer card: specs, queue, completed section, drop targets |
+| `TaskCard` | 2683–2875 | Collapsed card |
+| `TaskDetailModal` | 2877–3281 | Full task editor, plus the shared `Field` wrapper and modal input styles |
+| `NumberStepper`, `AddTaskForm` | 3283–3597 | Quantity control and the inline new-task form |
+| Persistence | 3599–4229 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
+| `AppShell` | 4231–4475 | Auth phases, save orchestration, `StatusPill`, `Centered` |
+| Mount | 4477–4483 | `createRoot(...).render(<AppShell />)` if `#root` exists |
+
+To refresh these numbers after the file has drifted, the section banners are
+greppable — `grep -n -A1 '^/\* [-=]\{10,\}' print-farm-scheduler.jsx` prints
+each landmark with its title, which is enough to rebuild the table without
+reading the file. (The character class matters: the persistence seam is ruled
+with `=`, the rest with `-`.)
 
 ## The seam
 
