@@ -15,6 +15,7 @@ import {
   Copy,
   Flag,
   Search,
+  StickyNote,
 } from "lucide-react";
 
 /* =====================================================================
@@ -357,6 +358,8 @@ const buildSeedTasks = () => {
       title: "Bracket set — 12pcs",
       jobcode: "AX112",
       needByDate: "2026-06-18",
+      notes: "Two of these are spares — flag if the first comes out clean.",
+      operatorNotes: "Bed re-levelled before this run. Watch layer 40.",
       status: "In progress",
       etaDate: "2026-06-15",
       etaTime: "14:30",
@@ -395,6 +398,7 @@ const buildSeedTasks = () => {
       id: "t5",
       printerId: STAGING,
       title: "Prototype housing rev B",
+      notes: "Rev B only — rev A files are still on the share, ignore them.",
       status: "Not started",
       etaDate: "2026-06-20",
       etaTime: "10:00",
@@ -2693,6 +2697,10 @@ function TaskCard({
 }) {
   const eta = formatEta(task.etaDate, task.etaTime);
   const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+  /* An operator note is worth knowing about from the board, and a designer
+     cannot open an assigned job at all. Hover alone would hide which cards
+     have one, so the icon carries the fact and its tooltip carries the text. */
+  const operatorNote = (task.operatorNotes || "").trim();
   const overdue = isOverdue(task);
   const st = STATUS_STYLE[task.status];
   const [overPos, setOverPos] = useState(null); // 'before' | 'after' | null
@@ -2773,6 +2781,15 @@ function TaskCard({
               title={`Quantity: ${task.quantity}`}
             >
               ×{task.quantity}
+            </span>
+          )}
+          {operatorNote && (
+            <span
+              className="flex-shrink-0"
+              title={`Operator notes: ${operatorNote}`}
+              aria-label={`Operator notes: ${operatorNote}`}
+            >
+              <StickyNote size={11} style={{ color: "#8A8886" }} />
             </span>
           )}
           {task.priority && task.priority !== "Normal" && (
@@ -3003,6 +3020,55 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
               />
             </Field>
           </div>
+
+          {/* The requester's note. Editable only while the job is in staging:
+              once it is on a printer it is a record of what was asked for, and
+              a record that can be rewritten afterwards is not one. Read-only
+              for everybody, operator included — the operator has their own
+              field below. Hidden entirely when assigned and empty, rather than
+              showing a permanent blank. */}
+          {inStaging ? (
+            <Field label="Notes">
+              <textarea
+                rows={3}
+                value={val("notes")}
+                onChange={(e) => edit("notes", e.target.value)}
+                onBlur={flush}
+                placeholder="Anything the operator should know"
+                className={`${MODAL_INPUT} resize-none`}
+                style={MODAL_STYLE}
+                aria-label="Notes"
+              />
+            </Field>
+          ) : (
+            val("notes") && (
+              <Field label="Notes — from the requester">
+                <div
+                  className="whitespace-pre-wrap"
+                  style={{ color: "#8A8886", fontSize: 13, lineHeight: 1.45 }}
+                >
+                  {val("notes")}
+                </div>
+              </Field>
+            )
+          )}
+
+          {/* The operator's note, which only exists once there is an operator:
+              a job in staging has no one working it yet. */}
+          {!inStaging && (
+            <Field label="Operator notes">
+              <textarea
+                rows={3}
+                value={val("operatorNotes")}
+                onChange={(e) => edit("operatorNotes", e.target.value)}
+                onBlur={flush}
+                placeholder="Notes while running this job"
+                className={`${MODAL_INPUT} resize-none`}
+                style={MODAL_STYLE}
+                aria-label="Operator notes"
+              />
+            </Field>
+          )}
 
           <Field label="Filepath">
             <input
@@ -3290,6 +3356,7 @@ function NumberStepper({
 function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [title, setTitle] = useState("");
   const [jobcode, setJobcode] = useState("");
+  const [notes, setNotes] = useState("");
   const [needByDate, setNeedByDate] = useState("");
   const [etaDate, setEtaDate] = useState("");
   const [etaTime, setEtaTime] = useState("");
@@ -3311,6 +3378,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
     onAdd({
       title: title.trim(),
       jobcode: jobcode.trim(),
+      notes: notes.trim(),
       needByDate,
       etaDate: showEta ? etaDate : "",
       etaTime: showEta ? etaTime : "",
@@ -3367,6 +3435,15 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           aria-label="Give to"
         />
       </div>
+      <textarea
+        rows={2}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes — anything the operator should know"
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
+        style={{ borderColor: "#C8C6C4" }}
+        aria-label="Notes"
+      />
       <input
         value={filepath}
         onChange={(e) => setFilepath(e.target.value)}
@@ -3590,6 +3667,14 @@ const COLS = {
     printerId: "PrinterID", // holds the literal string "staging" when unassigned
     title: "Title",
     jobcode: "Jobcode",
+    /* The requester's note, written while the job is in staging and frozen
+       once it reaches a printer — a record of what was asked for, not a live
+       field. Distinct from the Printers list's Notes column of the same name;
+       different list, no clash. */
+    notes: "Notes",
+    /* The operator's working note, and the only one of the two that stays
+       editable once the job is assigned. */
+    operatorNotes: "OperatorNotes",
     status: "Status",
     priority: "Priority",
     sliceStatus: "SliceStatus",
@@ -3890,6 +3975,8 @@ const taskFromRow = (f) => ({
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
   title: str(f[COLS.tasks.title]),
   jobcode: str(f[COLS.tasks.jobcode]),
+  notes: str(f[COLS.tasks.notes]),
+  operatorNotes: str(f[COLS.tasks.operatorNotes]),
   status: str(f[COLS.tasks.status]) || "Not started",
   priority: str(f[COLS.tasks.priority]) || "Normal",
   sliceStatus: str(f[COLS.tasks.sliceStatus]) || "Not Sliced",
@@ -3911,6 +3998,8 @@ const taskToRow = (t) => ({
   [COLS.tasks.printerId]: t.printerId || STAGING,
   [COLS.tasks.title]: t.title || "",
   [COLS.tasks.jobcode]: t.jobcode || "",
+  [COLS.tasks.notes]: t.notes || "",
+  [COLS.tasks.operatorNotes]: t.operatorNotes || "",
   [COLS.tasks.status]: t.status || "Not started",
   [COLS.tasks.priority]: t.priority || "Normal",
   [COLS.tasks.sliceStatus]: t.sliceStatus || "Not Sliced",
