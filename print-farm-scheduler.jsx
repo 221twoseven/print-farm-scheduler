@@ -2594,6 +2594,21 @@ function TaskCard({
             </span>
           </div>
         )}
+
+        {/* Name the state rather than leaving red to carry it alone. Red is
+            also doing work elsewhere on this board — urgent priority, delete
+            actions — so a date being red is not self-explanatory. Says
+            "overdue" only where it is true: the ETA has passed and the job is
+            not finished (isOverdue). A passed Need by is not called overdue,
+            because the board has never defined it that way. */}
+        {!inStaging && overdue && (
+          <div
+            className="font-semibold uppercase tracking-wide"
+            style={{ color: "#D13438", fontSize: 9, marginTop: 1 }}
+          >
+            Overdue
+          </div>
+        )}
       </button>
     </div>
   );
