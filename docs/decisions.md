@@ -82,8 +82,9 @@ with it.
 
 `Ready` / `Reserved` / `Maintenance`, replacing an on/off toggle plus a separate
 availability pill — two booleans that between them produced four states when only
-three mean anything. The SharePoint column is still internally named `Active`
-from that era.
+three mean anything. The SharePoint column carried the internal name `Active`
+from that era until 2026-08-07, when it was replaced by one actually named
+`Status` — see [data-model.md](data-model.md#the-one-that-got-fixed).
 
 ### Group collapse is per-person and not persisted
 

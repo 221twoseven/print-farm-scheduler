@@ -97,8 +97,13 @@ which between them produced four states when only three mean anything.
 | `Reserved` | no | no | no |
 | `Maintenance` | no | **yes — queued jobs return to staging** | yes |
 
-Defined in `PRINTER_STATUS`. The old `Active` and `Available` semantics are gone;
-only the column name survives.
+Defined in `PRINTER_STATUS`. The old `Active` / `Available` pair is entirely
+gone now — the semantics went when the three-state control replaced them, and
+the column name went when the column was replaced.
+
+The SharePoint column also offers **`Busy`**, which nothing writes yet. Until
+item 8 lands, setting a printer to Busy directly in SharePoint will read back as
+Ready on the board, because `PRINTER_STATUS` has no entry for it.
 
 ## Tasks
 

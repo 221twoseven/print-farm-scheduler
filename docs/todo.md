@@ -46,9 +46,10 @@ debugging cycles. See [data-model.md](data-model.md).
 Note that `PrintMaterial` on **Tasks** is a new column even though a column of
 that name already exists on **Printers** — different lists, no clash.
 
-The `Active` change is different from the rest: it is an edit to an existing
-choice column, and until `Busy` is one of its values SharePoint will reject any
-row trying to store it.
+The Printers status column was **replaced** rather than edited, so its internal
+name would finally match its display name — see
+[data-model.md](data-model.md#the-one-that-got-fixed). The new one already
+carries `Busy`, so item 8 needs nothing further from SharePoint.
 
 ---
 
