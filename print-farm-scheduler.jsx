@@ -199,9 +199,10 @@ const PRINTER_STATUS = {
     evicts: false,
     dim: false,
   },
-  /* Set by the app, never chosen. See reconcilePrinterBusy: automation only
-     ever moves a printer between Ready and Busy, so an operator's Reserved or
-     Maintenance always outlives whatever the jobs are doing.
+  /* Set by the app, never chosen. See the Busy-reconciliation effect in
+     PrintFarmScheduler: automation only ever moves a printer between Ready
+     and Busy, so an operator's Reserved or Maintenance always outlives
+     whatever the jobs are doing.
 
      Shares the "In progress" blue on purpose — the printer is busy *because* a
      task is in progress, and one colour for one fact is the rule this board
@@ -4349,17 +4350,19 @@ function AppShell() {
     if (writing.current || !pending.current) return;
     writing.current = true;
     setSaveState("saving");
+    let inFlight = null;
     try {
       while (pending.current) {
-        const next = pending.current;
+        inFlight = pending.current;
         pending.current = null;
         const prev = saved.current;
         let n = 0;
-        n += await saveList("groups", prev.groups, next.groups, itemIds.current);
-        n += await saveList("printers", prev.printers, next.printers, itemIds.current);
-        n += await saveList("tasks", prev.tasks, next.tasks, itemIds.current);
-        n += await saveSettings(prev.appSettings, next.appSettings, itemIds.current);
-        saved.current = next;
+        n += await saveList("groups", prev.groups, inFlight.groups, itemIds.current);
+        n += await saveList("printers", prev.printers, inFlight.printers, itemIds.current);
+        n += await saveList("tasks", prev.tasks, inFlight.tasks, itemIds.current);
+        n += await saveSettings(prev.appSettings, inFlight.appSettings, itemIds.current);
+        saved.current = inFlight;
+        inFlight = null;
         setSaveDetail(n ? `${n} change${n === 1 ? "" : "s"} written` : "");
       }
       setSaveState("saved");
@@ -4367,6 +4370,12 @@ function AppShell() {
       console.error(err);
       setSaveDetail(err.message || String(err));
       setSaveState("error");
+      /* The snapshot that failed was already cleared from `pending` before the
+         attempt, so Retry would otherwise find nothing to do. Put it back —
+         unless a newer edit already landed in `pending` while this write was
+         in flight, in which case that snapshot supersedes it and must not be
+         clobbered. */
+      if (inFlight && !pending.current) pending.current = inFlight;
     } finally {
       writing.current = false;
     }

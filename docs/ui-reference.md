@@ -29,7 +29,7 @@ view** hides everything that configures the shop or assigns work:
 | Printer status control — shown as a plain pill, not a menu | Printer status is still *legible*: a machine in maintenance looks it |
 | **Add task** on a printer | Jobcode filter |
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
-| Add / Remove group, Add printer, group rename, **printer rename** | Context menu on staging jobs — status, priority, slicing |
+| Add / Remove group, Add printer, group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
 | Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
 | **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
 

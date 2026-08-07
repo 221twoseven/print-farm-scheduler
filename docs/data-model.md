@@ -70,7 +70,7 @@ One row per printer group (the shop's physical or logical clusters).
 | `id` | `PrinterID` | Text | UUID |
 | `name` | `Title` | Text | |
 | `groupId` | `GroupID` | Text | The group's UUID |
-| `status` | `Status` | Choice | `Ready` / `Reserved` / `Maintenance`, plus `Busy` in the column but not yet used by the app — see [todo.md](todo.md) item 8 |
+| `status` | `Status` | Choice | `Ready` / `Reserved` / `Maintenance`, plus `Busy`, which the app sets automatically — see below |
 | `settings.notes` | `Notes` | Text | Free-form |
 | `settings.printMaterialOther` | `PrintMaterialOther` | Text | The actual material, when `PrintMaterial` is an "Other". Written always, read only when it applies |
 | `sortOrder` | `SortOrder` | Number | Position within its group |

@@ -164,9 +164,12 @@ Write order per pass is groups → printers → tasks → settings.
    - `loadChoices()` and `loadSettings()`.
 3. The result becomes both the `initial` prop and the first saved snapshot.
 
-Graph calls go through `graph()`, which retries once on 429 or 5xx after the
-`Retry-After` interval and otherwise throws with the status, path and the first
-300 characters of the body.
+Graph calls go through `graph()`, which retries repeatedly on 429 or 5xx —
+waiting the `Retry-After` interval (default 2s) before each retry, with no
+retry cap — and otherwise throws with the status, path and the first 300
+characters of the body. A sustained outage therefore hangs the "Loading the
+board…" screen rather than surfacing an error, since nothing ever reaches
+the `throw`.
 
 ## Rendering and layout
 
