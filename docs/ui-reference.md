@@ -103,15 +103,21 @@ staging carries `printerId === "staging"`.
 - **Search** — matches title, jobcode, sent by, give to, and filepath.
 - **Priority filter** — All / Urgent / High / Normal / Low.
 - **Priority ordering** — Urgent first, then High, Normal, Low, with a small
-  header the first time each tier appears. Manual `sortOrder` is the tiebreaker
-  *within* a tier, never an override of it: a card dragged above an Urgent job
-  does not become more urgent.
+  header the first time each tier appears. **Order within a tier is fully
+  computed, not manual**: soonest need-by first, then oldest-created first as
+  the final tiebreaker (jobs with neither sort after ones that have them). A
+  card dragged above an Urgent job does not become more urgent — that part
+  hasn't changed — and dragging *within* a tier no longer reorders it either,
+  since there's nothing left for a manual position to override. Dragging a
+  card onto a printer, or onto the staging panel to send it back, both still
+  work exactly as before.
 - **Batched loading** — 60 cards render initially (`STAGING_PAGE`), another 60
   each time the scroll nears the bottom. One flick of the wheel loads one batch,
   not one per scroll event. Chosen over virtualization so drag-and-drop and
   browser find-in-page keep working.
 - **Collapse** — a chevron folds the whole panel.
-- **Add task** — inline form.
+- **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
+  are all required; **Add task** stays disabled until every one is filled in.
 - Drop a card anywhere on the panel to send it back to staging.
 - **Operator view only**: the collapsed card also shows jobcode and quantity,
   grey, on the same line as need-by (see "One asymmetry runs the other way"
@@ -205,6 +211,10 @@ modal open — the same applies to the shop layout and confirmation dialogs.
 
 Tasks in staging hide the fields that only mean something once assigned.
 
+A small grey line above the footer reads **Created** with a timestamp, and
+**Completed** alongside it once the job has one — read-only facts, not fields
+anyone edits. Completed disappears again if the job leaves `Complete`.
+
 ### Context menu
 
 **On a task:**
@@ -222,8 +232,12 @@ Tasks in staging hide the fields that only mean something once assigned.
 
 - Drop on a **column's open area** → the task moves to that printer, at the end
   of its queue.
-- Drop **on a card** → the task inserts before or after it, depending on which
-  half you release over; an accent-coloured edge shows where it will land.
+- Drop **on a printer card** → the task inserts before or after it, depending on
+  which half you release over; an accent-coloured edge shows where it will
+  land. **Staging cards don't accept this** — staging's order is computed, not
+  manual (see Staging area above), so there's nothing for a drop position to
+  do. Dropping anywhere on the staging panel still sends a task there, just not
+  onto a specific card within it.
 - Only **Ready** printers and staging accept drops. Drops elsewhere are ignored,
   not queued.
 - Moving a task **out of staging onto a printer opens its detail modal**, because

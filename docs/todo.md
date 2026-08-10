@@ -45,8 +45,8 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Printers~~ | ~~Active *(existing)*~~ | ~~add `Busy`~~ | superseded — the column was replaced, see below |
 | ~~Printers~~ | ~~Status *(new)*~~ | ~~Choice — Ready / Reserved / Maintenance / **Busy**~~ | created — replaces the old `Active`-named column. `Busy` is already a valid value; item 8 is now code-only |
 | ~~Printers~~ | ~~Status (legacy)~~ | ~~delete~~ | deleted; the code fallback went with it in #19 |
-| Tasks | `CompletedAt` | Date and Time | needed by — item 20 |
-| Tasks | `CreatedAt` | Date and Time | needed by — item 21 (also feeds item 22's sort) |
+| ~~Tasks~~ | ~~CompletedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CompletedAt`, matches display name; needed by item 20 |
+| ~~Tasks~~ | ~~CreatedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CreatedAt`, matches display name; needed by item 21 (also feeds item 22's sort) |
 
 **After creating each column, send me its internal name** — List settings → click
 the column → the `Field=` value at the end of the address bar. Do not assume it
@@ -344,9 +344,9 @@ before writing new code.
 
 Three quick wins, same shape as Tier 1. Can go out together.
 
-### 15. Give the jobcode filter its own container (9)
+### 15. Give the jobcode filter its own container (9) — DONE
 
-*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged.*
+*Shipped in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25), merged 2026-08-07.*
 
 **Risk: Low.** Layout only — no state or logic changes.
 
@@ -360,9 +360,9 @@ from both neighbours.
 Purely visual — `liveJobcodes.length > 0` still decides whether it renders at
 all, and nothing about `jobcodeFilter` / `jobcodeMatches` changes.
 
-### 16. Require jobcode, task name, sent by, give to, and filepath on new tasks (8)
+### 16. Require jobcode, task name, sent by, give to, and filepath on new tasks (8) — DONE
 
-*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged. Decided: all five hard-block.*
+*Shipped in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25), merged 2026-08-07. Decided with the user: all five hard-block.*
 
 **Risk: Low.** Client-side form validation in `AddTaskForm`; no schema change,
 since all five columns already exist.
@@ -376,31 +376,21 @@ merely encouraged. `AddTaskForm`'s Add task button disables until all five are
 filled in, each marked with a trailing `*`. This does not touch existing tasks
 — a blank field on a row already in SharePoint stays exactly as it is.
 
-### 17. Confirm the view toggle survives a full Teams restart (3)
+### 17. Confirm the view toggle survives a full Teams restart (3) — DONE
 
-*Still open — needs a manual check in the actual Teams desktop client, which
-isn't something a remote coding session can do. Not addressed in PR #25.*
+*Verified 2026-08-08, manually, in the actual Teams desktop client: closed and
+reopened Teams, restarted the app, Designer/Operator view held. No code change
+— item 10's `localStorage` persistence (shipped in #21) already covered this.*
 
-**Risk: Low — likely a verification task, not a code change.**
-
-Operator/Designer view already persists via `localStorage` (item 10, shipped in
-#21), which should survive both a page reload and a full quit-and-reopen of the
-Teams client, since `localStorage` is disk-backed and keyed to origin, not to
-the session. Verify that in the actual Teams desktop client before writing any
-code — if it already holds, this item closes as confirmed rather than built.
-
-If it *doesn't* hold, the likely cause is Teams' own content cache clearing
-storage on quit, which would need investigating in Teams itself rather than in
-this app — see [operations.md](operations.md) on the two caches that have bitten
-this project before.
+**Risk: Low — verification task, not a code change.** Closed as confirmed.
 
 ---
 
 ## Tier 5 — moderate, no SharePoint (2026-08-07 request)
 
-### 18. Operator-view staging cards: summary info, read-only (1)
+### 18. Operator-view staging cards: summary info, read-only (1) — DONE
 
-*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged.*
+*Shipped in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25), merged 2026-08-07.*
 
 **Risk: Medium.** Changes what staging cards do in one view but not the other —
 worth getting the split right.
@@ -426,9 +416,9 @@ Follows the same `disabled` pattern already used for assigned-task cards in
 designer view (`TaskCard`'s `disabled` prop) — the plumbing exists, this extends
 it to a new case rather than inventing a new one.
 
-### 19. Replace "Add printer" with an "Edit printers" mode (2)
+### 19. Replace "Add printer" with an "Edit printers" mode (2) — DONE
 
-*PR [#25](https://github.com/221twoseven/print-farm-scheduler/pull/25) open — not yet merged. Decided: one global toggle, not per-group.*
+*Shipped in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25), merged 2026-08-07. Decided: one global toggle, not per-group.*
 
 **Risk: Medium.** Interaction change to a control every operator uses
 regularly; get the affordance right before shipping.
@@ -455,56 +445,58 @@ this only changes how they're reached.
 
 Same recipe as Tier 2. Columns are in the SharePoint table above.
 
-### 20. Job completion timestamp (4)
+### 20. Job completion timestamp (4) — DONE
 
-**Risk: Medium** — new stored field, plus an automation question.
+*Shipped 2026-08-08.* `CompletedAt` created (internal name confirmed matching);
+`updateTask` stamps it the instant a `status` patch sets `Complete`, and clears
+it the instant a `status` patch sets anything else — including the ambiguity
+this item flagged: a completed job moved back to `Not started` or `In
+progress` loses its stamp, re-completing later writes a fresh one. No separate
+history is kept. `copyTask` also resets it to blank on a duplicate, for the
+same reason `createdAt` gets a fresh value there (see item 21).
 
-`CompletedAt`, a real Date and Time column, written when a task's status
-becomes `Complete` — not noon-UTC-fudged; see the note in the SharePoint table
-above.
+**Risk: Medium** — new stored field, plus an automation question, now settled.
 
-**Decide before starting:** what happens if a completed job is moved back to
-`Not started` or `In progress`. Clearing the timestamp is the simpler rule and
-matches what the field means (*when this job was completed* — if it isn't
-complete, there's nothing to record); keeping the old value around as history is
-also defensible but adds a case to reason about for no asked-for benefit. I'd
-default to clearing it unless told otherwise.
+Displayed as a small grey line in the detail modal ("Completed Aug 8, 2026,
+9:02 AM"), alongside `createdAt` — not asked for explicitly, but a timestamp
+nobody can see anywhere felt like half a feature; easy to pull back out if
+that's not wanted. Not shown on the collapsed card — keeping that minimal is a
+settled decision (see [decisions.md](decisions.md)), and this is exactly the
+kind of secondary fact item 23's completed-jobs table exists for.
 
-### 21. Job creation timestamp (5)
+### 21. Job creation timestamp (5) — DONE
+
+*Shipped 2026-08-08.* `CreatedAt` created (internal name confirmed matching);
+`addTask` stamps it once via `nowIso()`, `copyTask` gives a duplicate its own
+fresh value rather than inheriting the original's. Displayed alongside
+`completedAt` in the modal — see item 20.
 
 **Risk: Medium** — new stored field.
 
-`CreatedAt`, a real Date and Time column, written once at task creation
-(`addTask`) and never touched afterward — copies (`copyTask`) get their own
-fresh value rather than inheriting the original's, since a duplicate is a new
-job. Same noon-UTC exemption as item 20.
+**Fed item 22's sort**, landed in the same pass.
 
-**Feeds item 22's sort** — land this one first.
+### 22. Staging sort: need-by, then created-at, as tiebreakers (7) — DONE
 
-### 22. Staging sort: need-by, then created-at, as tiebreakers (7)
+*Shipped 2026-08-08.* Both open questions resolved with the defaults this
+entry proposed, since nobody objected before the SharePoint columns landed:
 
-**Risk: Medium — reopens a settled decision.** Depends on item 21.
+- Undated/unstamped jobs sort **after** dated/stamped ones in both the
+  need-by and created-at passes — a missing value never jumps a real one.
+- Manual reordering **within a tier is removed**, not left cosmetically inert.
+  Staging `TaskCard`s no longer accept a relative drop at all (`onDropOnTask`
+  isn't wired to them anymore); dragging a card onto a printer, or anywhere on
+  the staging panel to send it back, is untouched.
 
-Today's staging sort is priority tier (Urgent → High → Normal → Low), then
-`sortOrder` — manual drag order — as the tiebreaker within a tier. That's a
-decision recorded in [decisions.md](decisions.md#priority-sorting-beats-manual-order-in-staging).
-The new request replaces that tiebreaker: within a priority tier, sort by
-need-by date (soonest first), then by creation time (oldest first) as the final
-tiebreaker. Dragging a card within a tier would stop having any visible
-effect, since order becomes fully computed rather than partly manual.
+Today's staging sort was priority tier (Urgent → High → Normal → Low), then
+`sortOrder` — manual drag order — as the tiebreaker within a tier, a decision
+recorded in [decisions.md](decisions.md#priority-sorting-beats-manual-order-in-staging).
+That tiebreaker is now need-by (soonest first), then created-at (oldest
+first). `decisions.md` records the change in place rather than as a fully
+superseded entry, since the headline claim — priority beats manual order —
+didn't change, only what breaks a tie within a tier did.
 
-**Decide before starting:**
-- Where undated jobs sort in the need-by pass — before or after dated ones. I'd
-  default to after (a job with no deadline shouldn't jump ahead of one that has
-  one).
-- Whether manual reordering within a tier should be removed from the interface
-  entirely (dragging within staging currently exists for this purpose per
-  [ui-reference.md](ui-reference.md)) or just stop mattering silently. Leaving a
-  drag interaction that no longer does anything reads as a bug once this ships.
-
-If this lands, update [decisions.md](decisions.md) to record the new tiebreaker
-rather than silently overwriting the old entry — the file's own convention for
-a superseded decision (see the group-colour entry).
+**Risk: Medium — changed a settled decision**, now recorded as changed.
+Depended on item 21; both landed together.
 
 ---
 
@@ -630,28 +622,23 @@ Treat this item as "propose an approach and get it signed off", not
 ## Suggested sequencing
 
 Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
+**Tiers 4–6 are now closed too**: items 15–22 all shipped.
 
 **2026-08-07 request, in order:**
 
-1. **Tier 4** (15, 16, 17) — no SharePoint, can go out as one PR. 15 and 16
-   are code, in [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25)
-   (open). 17 is verify-only and still needs a manual check in the Teams
-   desktop client — not done yet.
-2. **Tier 5** (18, 19) — moderate UI/interaction changes, no SharePoint. Both
-   in PR #25 alongside 15/16.
-3. **SharePoint**: create `CompletedAt` and `CreatedAt`, send back the internal
-   names, then **Tier 6** (20, 21, then 22 once 21's column exists). **Blocked
-   — waiting on the two columns.**
-4. **Tier 7** (23) — the completed-jobs table, ideally after item 20 so it has
-   something to sort by.
+1. ~~**Tier 4** (15, 16, 17)~~ — done. 15 and 16 shipped in
+   [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25)
+   (merged). 17 verified manually in the Teams desktop client 2026-08-08.
+2. ~~**Tier 5** (18, 19)~~ — done, shipped in PR #25 alongside 15/16.
+3. ~~**SharePoint**: `CompletedAt` and `CreatedAt`~~ — created, internal names
+   confirmed matching. ~~**Tier 6** (20, 21, 22)~~ — done, shipped 2026-08-08.
+4. **Tier 7** (23) — the completed-jobs table. Next up; item 20 (completion
+   timestamp) is now in place for it to sort by.
 5. **Tier 8** — 11 and 12 as before (design discussion / research
    respectively), plus **24** (dark mode) as a third item needing a proposal
    before any code. None of the three share a branch with each other or with
    anything above.
 
-Nothing in Tiers 4–7 is blocked on SharePoint except Tier 6 itself and 23's
-soft dependency on 20 — everything else can start immediately.
-
-**Current state (2026-08-07):** PR #25 covers 15, 16, 18, and 19, open against
-`main`, not yet merged or verified in Teams. 17 is still outstanding. Tier 6
-is blocked on the two SharePoint columns above.
+**Current state (2026-08-08):** everything through Tier 6 is shipped. Item 23
+is the only thing left before Tier 8, which still needs a decision or research
+before any code on all three of its items.

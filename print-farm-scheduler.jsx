@@ -370,6 +370,7 @@ const buildSeedTasks = () => {
       filepath: "\\\\farm\\queue\\bracket_set_x12.3mf",
       quantity: 12,
       priority: "High",
+      createdAt: "2026-06-12T15:05:00Z",
     },
     {
       id: "t2",
@@ -382,6 +383,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Needs Nesting",
       sentBy: "Marco",
       giveTo: "QA",
+      createdAt: "2026-06-14T09:30:00Z",
     },
     {
       id: "t3",
@@ -394,6 +396,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Sliced",
       sentBy: "Priya",
       giveTo: "Dana",
+      createdAt: "2026-06-11T11:20:00Z",
     },
     {
       id: "t5",
@@ -406,6 +409,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Not Sliced",
       sentBy: "Front desk",
       giveTo: "",
+      createdAt: "2026-06-13T08:00:00Z",
     },
     {
       id: "t6",
@@ -419,6 +423,8 @@ const buildSeedTasks = () => {
       giveTo: "Assembly",
       quantity: 40,
       priority: "Normal",
+      createdAt: "2026-06-08T13:45:00Z",
+      completedAt: "2026-06-10T15:52:00Z",
     },
   ];
 
@@ -448,6 +454,9 @@ const buildSeedTasks = () => {
       giveTo: people[(i + 3) % people.length],
       quantity: (i % 5) + 1,
       priority: prios[i % prios.length],
+      /* staggered so same-tier, same-need-by jobs still have a real
+         created-at order to exercise the sort's 3rd tiebreaker */
+      createdAt: new Date(Date.now() - (48 - i) * 6 * 3600 * 1000).toISOString(),
     });
   }
   return base;
@@ -497,6 +506,19 @@ function isOverdue(task) {
     ? new Date(y, m - 1, d, ...task.etaTime.split(":").map(Number))
     : new Date(y, m - 1, d, 23, 59, 59);
   return due.getTime() < Date.now();
+}
+
+/* CreatedAt/CompletedAt stamp. A real instant, not a date-input string —
+   see the note by taskFromRow/taskToRow before touching either field. */
+const nowIso = () => new Date().toISOString();
+
+/* Display only, for the two stamps above — not used for sorting or storage. */
+function formatTimestamp(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 /* ------------------------------- app ---------------------------------- */
@@ -728,8 +750,21 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     return !!p && PRINTER_STATUS[p.status]?.accepts;
   };
 
+  /* completedAt tracks the status patch, not a field anyone edits directly:
+     stamped the instant a task becomes Complete, cleared the instant it
+     doesn't — a completed-at value on a task that isn't Complete would be a
+     stale fact with no visible meaning. */
   const updateTask = (id, patch) =>
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const next = { ...t, ...patch };
+        if ("status" in patch) {
+          next.completedAt = patch.status === "Complete" ? nowIso() : "";
+        }
+        return next;
+      })
+    );
 
   const deleteTask = (id) => {
     setTasksOrdered((ts) => ts.filter((t) => t.id !== id));
@@ -785,6 +820,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         id: uid(),
         title: `${ts[idx].title} (copy)`,
         status: "Not started",
+        /* a duplicate is a new job, not a continuation of the original's
+           history — fresh creation stamp, no inherited completion */
+        createdAt: nowIso(),
+        completedAt: "",
       };
       return [...ts.slice(0, idx + 1), copy, ...ts.slice(idx + 1)];
     });
@@ -793,7 +832,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const addTask = (printerId, fields) => {
     setTasksOrdered((ts) => [
       ...ts,
-      { id: uid(), printerId, status: "Not started", ...fields },
+      /* createdAt last, so nothing in `fields` can pass off a stale value
+         as the creation instant */
+      { id: uid(), printerId, status: "Not started", ...fields, createdAt: nowIso() },
     ]);
     setAddingTaskIn(null);
   };
@@ -1194,7 +1235,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         onCancelAdd={() => setAddingTaskIn(null)}
         onAdd={(fields) => addTask(STAGING, fields)}
         onDropTask={(taskId) => moveTask(taskId, STAGING)}
-        onDropOnTask={moveTaskRelative}
+        /* No onDropOnTask: staging order is fully computed (item 22), so
+           dropping onto a specific card to reposition it would be a dead
+           gesture. Dropping anywhere on the panel (onDropTask above) still
+           moves a task into or out of staging. */
         onExpandTask={(id) =>
           setExpandedTaskId((cur) => (cur === id ? null : id))
         }
@@ -1838,6 +1882,12 @@ function ContextMenu({
 const PRIORITY_RANK = { Urgent: 0, High: 1, Normal: 2, Low: 3 };
 const STAGING_PAGE = 60; // cap initial render; more loads as you scroll
 
+/* Staging's 2nd/3rd sort keys, both ascending with undated/unstamped last —
+   a job with no deadline or no recorded creation time shouldn't jump ahead
+   of one that has either. Infinity sorts after any real timestamp. */
+const needByKey = (t) => (t.needByDate ? Date.parse(`${t.needByDate}T00:00:00Z`) : Infinity);
+const createdKey = (t) => (t.createdAt ? Date.parse(t.createdAt) : Infinity);
+
 function StagingArea({
   name,
   onRename,
@@ -1851,7 +1901,6 @@ function StagingArea({
   onCancelAdd,
   onAdd,
   onDropTask,
-  onDropOnTask,
   onExpandTask,
   onContextMenu,
   onDragStart,
@@ -1884,13 +1933,24 @@ function StagingArea({
     });
   }, [tasks, query, priorityFilter]);
 
+  /* Within a priority tier, order is fully computed — need-by (soonest
+     first), then created-at (oldest first) — rather than manual drag order.
+     Array index is the final fallback, purely for a deterministic sort when
+     every other key ties. */
   const sorted = useMemo(() => {
     return filtered
       .map((t, i) => [t, i])
       .sort((a, b) => {
         const pa = PRIORITY_RANK[a[0].priority || "Normal"];
         const pb = PRIORITY_RANK[b[0].priority || "Normal"];
-        return pa !== pb ? pa - pb : a[1] - b[1]; // stable within tier
+        if (pa !== pb) return pa - pb;
+        const na = needByKey(a[0]);
+        const nb = needByKey(b[0]);
+        if (na !== nb) return na - nb;
+        const ca = createdKey(a[0]);
+        const cb = createdKey(b[0]);
+        if (ca !== cb) return ca - cb;
+        return a[1] - b[1]; // stable
       })
       .map(([t]) => t);
   }, [filtered]);
@@ -2117,7 +2177,6 @@ function StagingArea({
                       onContextMenu={onContextMenu}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
-                      onDropOnTask={onDropOnTask}
                       inStaging
                       dragging={draggingTaskId === task.id}
                       operator={operator}
@@ -3295,6 +3354,20 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
           )}
         </div>
 
+        {/* Created / completed stamps — read-only facts, not fields anyone
+            edits, so they sit outside the form body rather than as a Field.
+            Completed only appears once the task has actually completed. */}
+        {(formatTimestamp(task.createdAt) || formatTimestamp(task.completedAt)) && (
+          <div
+            className="px-4 pb-2 flex-shrink-0"
+            style={{ color: "#A19F9D", fontSize: 10 }}
+          >
+            {formatTimestamp(task.createdAt) && <>Created {formatTimestamp(task.createdAt)}</>}
+            {formatTimestamp(task.createdAt) && formatTimestamp(task.completedAt) && " · "}
+            {formatTimestamp(task.completedAt) && <>Completed {formatTimestamp(task.completedAt)}</>}
+          </div>
+        )}
+
         {/* modal footer */}
         <div
           className="flex items-center justify-between px-4 py-3 border-t flex-shrink-0"
@@ -3763,6 +3836,10 @@ const COLS = {
        is currently loaded with. Same name, different list, no clash. */
     printMaterial: "PrintMaterial",
     sortOrder: "SortOrder",
+    /* Machine-set instants, not user-picked dates — see the note by
+       dateToIso/isoToDate below before touching either of these. */
+    createdAt: "CreatedAt",
+    completedAt: "CompletedAt",
   },
 };
 
@@ -3994,6 +4071,11 @@ const dateToIso = (ymd) =>
 
 const isoToDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
+/* CreatedAt/CompletedAt (stamped in PrintFarmScheduler via nowIso()) are a
+   different kind of date from EtaDate/NeedByDate: real machine-set instants,
+   not a date-input string, so the noon-UTC fudge above doesn't apply and
+   would only throw away the time of day. Round-trip the ISO string as-is. */
+
 const groupFromRow = (f) => ({
   id: str(f[COLS.groups.uuid]) || uid(),
   name: str(f[COLS.groups.name]),
@@ -4060,6 +4142,8 @@ const taskFromRow = (f) => ({
   printStrength: str(f[COLS.tasks.printStrength]) || "Standard",
   printMaterial: str(f[COLS.tasks.printMaterial]) || "ABS",
   sortOrder: num(f[COLS.tasks.sortOrder]),
+  createdAt: str(f[COLS.tasks.createdAt]),
+  completedAt: str(f[COLS.tasks.completedAt]),
 });
 
 const taskToRow = (t) => ({
@@ -4083,6 +4167,8 @@ const taskToRow = (t) => ({
   [COLS.tasks.printStrength]: t.printStrength || "Standard",
   [COLS.tasks.printMaterial]: t.printMaterial || "ABS",
   [COLS.tasks.sortOrder]: num(t.sortOrder),
+  [COLS.tasks.createdAt]: t.createdAt || null,
+  [COLS.tasks.completedAt]: t.completedAt || null,
 });
 
 const LISTS = {
