@@ -2942,12 +2942,18 @@ function PrinterColumn({
           )}
         </div>
 
-        {/* ---- completed jobs: collapsed section ---- */}
+        {/* ---- completed jobs: collapsed section ----
+            Same block chrome as the jobcode filter strip and group cards —
+            rounded/bordered container, chevron header row, body on a shaded
+            background — rather than a bare button floating in the queue. */}
         {doneTasks.length > 0 && (
-          <div className="px-3 pt-1">
+          <div
+            className="mx-3 mt-1 mb-2 rounded-lg overflow-hidden"
+            style={{ border: "1px solid #E1DFDD" }}
+          >
             <button
               onClick={() => setDoneOpen((v) => !v)}
-              className="w-full flex items-center gap-1.5 text-xs font-medium py-1.5 px-1 rounded hover:bg-gray-50"
+              className="w-full flex items-center gap-1.5 text-xs font-medium py-2 px-3 hover:bg-gray-50"
               style={{ color: "#498205" }}
               aria-expanded={doneOpen}
             >
@@ -2962,22 +2968,27 @@ function PrinterColumn({
               </span>
             </button>
             {doneOpen && (
-              <div className="space-y-2 pt-1 pb-1 max-h-48 overflow-y-auto">
-                {doneTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    draggableCard={operator && !editPrintersMode}
-                    disabled={inactive || !operator || editPrintersMode}
-                    expanded={expandedTaskId === task.id}
-                    onExpand={() => !inactive && onExpandTask(task.id)}
-                    onContextMenu={onTaskContextMenu}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                    onDropOnTask={accepts ? onDropOnTask : undefined}
-                    dragging={draggingTaskId === task.id}
-                  />
-                ))}
+              <div
+                className="space-y-2 px-3 pt-2 pb-3"
+                style={{ background: "#FAFAFA" }}
+              >
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {doneTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      draggableCard={operator && !editPrintersMode}
+                      disabled={inactive || !operator || editPrintersMode}
+                      expanded={expandedTaskId === task.id}
+                      onExpand={() => !inactive && onExpandTask(task.id)}
+                      onContextMenu={onTaskContextMenu}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                      onDropOnTask={accepts ? onDropOnTask : undefined}
+                      dragging={draggingTaskId === task.id}
+                    />
+                  ))}
+                </div>
                 <button
                   onClick={() => onPurgeDone(printer.id)}
                   className="w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded border border-dashed hover:bg-red-50"
