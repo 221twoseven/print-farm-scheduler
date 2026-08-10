@@ -237,6 +237,17 @@ const PRINTER_STATUS = {
   },
 };
 
+/* Bumped by hand in every commit that changes this file. It exists so that
+   "is the change live yet?" is answerable by looking at the board instead of
+   trusting a cache, a deploy log, or somebody's word — a stale Teams tab shows
+   the old stamp. Deploys land silently and several caches sit in the way
+   (GitHub's CDN, the browser's, Babel's separate fetch of this file, and Teams'
+   own content cache), so a visible stamp is the only cheap way to tell a
+   not-yet-deployed change apart from a not-yet-refreshed one. If you change
+   this file and don't bump this, the stamp lies — which is worse than not
+   having it. See docs/operations.md#deploying-a-change. */
+const BUILD = "2026-08-10.1";
+
 const STATUSES = ["Not started", "In progress", "Complete"];
 
 /* A held or out-of-service machine must not have a job started on it. Reserved
@@ -1073,7 +1084,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         <div>
           <div className="font-semibold leading-tight">Print Farm Scheduler</div>
           <div className="text-xs opacity-80 leading-tight">
-            Team tab · {printers.length} printers · {tasks.length} tasks
+            Team tab · {printers.length} printers · {tasks.length} tasks ·{" "}
+            <span title="Code version this tab is running. If this doesn't match the latest build, you're on a cached copy — hard-refresh, or fully quit and reopen Teams.">
+              build {BUILD}
+            </span>
           </div>
         </div>
         {/* View toggle. Deliberately says what you get, not what you are:
@@ -4829,6 +4843,11 @@ function AppShell() {
         </h1>
         <p className="mt-1 mb-4 text-sm" style={{ color: "#605E5C" }}>
           Sign in with your work account to load the board.
+          {/* also stamped here: a tab that never gets past sign-in still needs
+              to be able to say which code it is running */}
+          <span className="block mt-1 text-xs" style={{ color: "#8A8886" }}>
+            build {BUILD}
+          </span>
         </p>
         <button
           onClick={doSignIn}
