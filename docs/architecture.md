@@ -1,6 +1,6 @@
 # Architecture
 
-Everything is one file: `print-farm-scheduler.jsx`, ~4,700 lines. `index.html`
+Everything is one file: `print-farm-scheduler.jsx`, ~4,900 lines. `index.html`
 loads React 18, Tailwind, lucide-react and MSAL from CDNs via an import map, then
 hands the JSX to Babel standalone, which transpiles it in the browser. There is
 no bundler, no `node_modules`, and no server.
@@ -18,18 +18,19 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | Order helpers | 292–309 | `bySortOrder`, `hydrate()`, `reindex()` |
 | Seed demo data | 310–466 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
 | Helpers | 467–523 | `formatEta()`, `useBackdropClose()`, `isOverdue()`, `nowIso()`, `formatTimestamp()` |
-| `PrintFarmScheduler` | 524–1600 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid |
-| `ConfirmDialog` | 1601–1648 | Destructive-action confirmation |
-| `ContextMenu` | 1649–1891 | Right-click menu for tasks and printers |
-| `StagingArea` | 1892–2226 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
-| `StatusPicker` | 2227–2336 | Task status control |
-| `PrinterColumn` | 2337–2801 | One printer card: specs, queue, completed section, drop targets |
-| `TaskCard` | 2802–3021 | Collapsed card |
-| `TaskDetailModal` | 3022–3444 | Full task editor, plus the shared `Field` wrapper and modal input styles |
-| `NumberStepper`, `AddTaskForm` | 3445–3764 | Quantity control and the inline new-task form |
-| Persistence | 3765–4409 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
-| `AppShell` | 4410–4663 | Auth phases, save orchestration, `StatusPill`, `Centered` |
-| Mount | 4664–4670 | `createRoot(...).render(<AppShell />)` if `#root` exists |
+| `PrintFarmScheduler` | 530–1626 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid, `CompletedJobsPanel` mount |
+| `ConfirmDialog` | 1627–1674 | Destructive-action confirmation |
+| `ContextMenu` | 1675–1917 | Right-click menu for tasks and printers |
+| `StagingArea` | 1918–2252 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
+| `CompletedJobsPanel` | 2253–2449 | Designer view only: every completed job, newest first, fixed to the bottom of the screen, batched loading, read-only |
+| `StatusPicker` | 2450–2559 | Task status control |
+| `PrinterColumn` | 2560–3024 | One printer card: specs, queue, completed section, drop targets |
+| `TaskCard` | 3025–3244 | Collapsed card |
+| `TaskDetailModal` | 3245–3667 | Full task editor, plus the shared `Field` wrapper and modal input styles |
+| `NumberStepper`, `AddTaskForm` | 3668–3987 | Quantity control and the inline new-task form |
+| Persistence | 3988–4632 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
+| `AppShell` | 4633–4886 | Auth phases, save orchestration, `StatusPill`, `Centered` |
+| Mount | 4887–4893 | `createRoot(...).render(<AppShell />)` if `#root` exists |
 
 To refresh these numbers after the file has drifted, the section banners are
 greppable — `grep -n -A1 '^/\* [-=]\{10,\}' print-farm-scheduler.jsx` prints

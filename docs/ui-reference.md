@@ -16,6 +16,8 @@ consistent with (or deliberately update).
    Hidden entirely when no assigned job carries one.
 5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
+6. **Completed jobs panel** — designer view only, fixed to the bottom of the
+   screen.
 
 ## Operator view and Designer view
 
@@ -31,7 +33,7 @@ view** hides everything that configures the shop or assigns work:
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
 | Dragging a task onto a printer, and **Move to** in the context menu | — (dragging *within* staging no longer reorders anything, in either view: staging order is computed) |
-| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
+| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it. **Completed jobs**, read-only, via the bottom completed-jobs panel |
 
 **The dividing line is assignment.** A job in staging belongs to the designer
 who raised it and stays fully editable. The moment it is on a printer it is the
@@ -122,6 +124,31 @@ staging carries `printerId === "staging"`.
 - **Operator view only**: the collapsed card also shows jobcode and quantity,
   grey, on the same line as need-by (see "One asymmetry runs the other way"
   above).
+
+## Completed jobs panel (designer view)
+
+Designer view hides every assigned job's card entirely, including finished
+ones — this panel is the one place that history stays visible there. Fixed to
+the bottom of the screen, but stops short of the bottom-right corner so it
+never sits under the save-status pill (with the **Retry** link) that floats
+there in every view. Collapsed by default so it doesn't compete with the
+groups grid for space; a chevron on its bar expands it.
+
+- **Every task with status Complete, across every printer** — not scoped to
+  one group or printer.
+- **Sort: most recently completed first.** A job with no completion stamp (or
+  an unparseable one) sorts last regardless — same "missing sorts last"
+  principle staging's need-by/created-at tiebreakers use, just applied to a
+  newest-first order instead of soonest-first.
+- **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
+  Notes (an icon, hover reads the operator's note — same convention as the
+  card). Blank where a task has no value for that column, not omitted.
+- **Read-only, like every assigned job in designer view** — no click, no
+  drag, no context menu; the table exists to show history, not to edit it.
+- **Batched loading**, same pattern and page size as staging (`COMPLETED_PAGE`,
+  60 rows).
+- Not shown in operator view — the printer's own Completed section (below)
+  already covers this for that view.
 
 ## Printer cards
 

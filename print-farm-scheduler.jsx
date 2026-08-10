@@ -16,6 +16,7 @@ import {
   Flag,
   Search,
   StickyNote,
+  CheckCircle2,
 } from "lucide-react";
 
 /* =====================================================================
@@ -269,6 +270,11 @@ const PRINTER_MIN_W = 230;
 const PRINTER_GAP = 12;
 const GROUP_PAD = 32;
 const GROUP_GAP = 16;
+
+/* CompletedJobsPanel's collapsed bar height, fixed to the viewport bottom
+   in designer view — shared with PrintFarmScheduler's padding-bottom so
+   the bar never sits over the last row of printer groups. */
+const COMPLETED_PANEL_BAR_HEIGHT = 40;
 
 /* board-wide preferences — persisted in the Settings list.
    defaults match a 12-printer shop: groups of 4 shown 2-wide, 3 groups per row */
@@ -630,6 +636,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   }, [tasks]);
 
   const stagingTasks = tasksByPrinter[STAGING] || [];
+
+  /* Designer view's completed-jobs table needs every finished task
+     regardless of printer — the one category of assigned-job info that
+     view otherwise hides entirely (ui-reference.md). */
+  const completedTasks = useMemo(
+    () => tasks.filter((t) => t.status === "Complete"),
+    [tasks]
+  );
 
   /* printers with in-progress tasks, for the status bar */
   const inProgressPrinters = useMemo(() => {
@@ -1030,6 +1044,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         background: "#F0F0F2",
         fontFamily:
           "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif",
+        /* room for CompletedJobsPanel's collapsed bar, fixed to the
+           viewport bottom in designer view, so it doesn't sit over the
+           last row of printer groups */
+        paddingBottom: operator ? 0 : COMPLETED_PANEL_BAR_HEIGHT,
       }}
     >
       {/* board scrolls horizontally below its minimum width; thin styled bar */}
@@ -1545,6 +1563,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           </div>
         )}
       </div>
+      )}
+
+      {/* ---------------- completed jobs (designer view only) ----------------
+          The one category of assigned-job info designer view otherwise hides
+          entirely — see ui-reference.md. Read-only, same as every assigned
+          job in this view: no click, no drag, no context menu. */}
+      {!operator && (
+        <CompletedJobsPanel tasks={completedTasks} printers={printers} />
       )}
 
       {/* ---------------- task detail modal (single instance, app level) ----
@@ -2220,6 +2246,207 @@ function StagingArea({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ----------------------- completed jobs panel -------------------------- */
+
+const COMPLETED_PAGE = 60; // same batching pattern as staging
+
+/* Most-recent-first. Missing/unparseable completedAt sorts last regardless
+   of direction — same principle as staging's timeKey, kept separate here
+   since the ordering itself is reversed (newest first, not soonest first). */
+const completedAtKey = (t) => {
+  if (!t.completedAt) return null;
+  const v = Date.parse(t.completedAt);
+  return Number.isNaN(v) ? null : v;
+};
+
+function CompletedJobsPanel({ tasks, printers }) {
+  const [collapsed, setCollapsed] = useState(true);
+  const [limit, setLimit] = useState(COMPLETED_PAGE);
+  const scrollRef = useRef(null);
+  const loadingRef = useRef(false);
+
+  const printerName = useMemo(() => {
+    const map = {};
+    printers.forEach((p) => {
+      map[p.id] = p.name;
+    });
+    return map;
+  }, [printers]);
+
+  const sorted = useMemo(() => {
+    return tasks
+      .map((t, i) => [t, i])
+      .sort((a, b) => {
+        const ka = completedAtKey(a[0]);
+        const kb = completedAtKey(b[0]);
+        if (ka === null && kb === null) return a[1] - b[1]; // stable
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        return kb - ka;
+      })
+      .map(([t]) => t);
+  }, [tasks]);
+
+  const visible = sorted.slice(0, limit);
+  const hidden = sorted.length - visible.length;
+
+  useEffect(() => {
+    loadingRef.current = false;
+  }, [limit]);
+
+  const loadMore = () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLimit((l) => l + COMPLETED_PAGE);
+  };
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el || hidden <= 0) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        /* stop short of the bottom-right corner — StatusPill (the save
+           indicator, with the Retry link) floats fixed there in every view,
+           and a full-width bar would sit directly under it */
+        right: 190,
+        bottom: 0,
+        zIndex: 30,
+        background: "white",
+        borderTop: "1px solid #E1DFDD",
+        borderRight: "1px solid #E1DFDD",
+        boxShadow: "0 -2px 8px rgba(0,0,0,0.08)",
+      }}
+    >
+      {!collapsed && (
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="overflow-y-auto"
+          style={{ maxHeight: 260 }}
+        >
+          {sorted.length === 0 ? (
+            <div
+              className="text-xs italic py-6 text-center"
+              style={{ color: "#8A8886" }}
+            >
+              No completed jobs yet.
+            </div>
+          ) : (
+            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    background: "#FAFAF9",
+                    color: "#605E5C",
+                  }}
+                >
+                  {["Printer", "Jobcode", "Job", "Qty", "Priority", "Need by", "Completed", "Notes"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="text-left font-semibold uppercase tracking-wide px-3 py-1.5"
+                        style={{ fontSize: 10, borderBottom: "1px solid #E1DFDD" }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((task) => {
+                  const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+                  const completed = formatTimestamp(task.completedAt);
+                  const operatorNote = (task.operatorNotes || "").trim();
+                  return (
+                    <tr key={task.id} style={{ borderBottom: "1px solid #F3F2F1" }}>
+                      <td className="px-3 py-1.5" style={{ color: "#605E5C" }}>
+                        {printerName[task.printerId] || "—"}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {task.jobcode || ""}
+                      </td>
+                      <td
+                        className="px-3 py-1.5"
+                        style={{ color: "#242424", textDecoration: "line-through" }}
+                      >
+                        {task.title}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {task.quantity || 1}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span style={{ color: PRIORITY_STYLE[task.priority || "Normal"]?.text }}>
+                          {task.priority || "Normal"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {needBy ? needBy.date : ""}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {completed || ""}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {operatorNote && (
+                          <span title={`Operator notes: ${operatorNote}`}>
+                            <StickyNote size={11} style={{ color: "#8A8886" }} />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {hidden > 0 && (
+            <button
+              onClick={loadMore}
+              className="w-full flex items-center justify-center gap-1.5 text-xs py-2 hover:bg-gray-50"
+              style={{ color: "#8A8886" }}
+              title="Loads automatically as you scroll — click to load now"
+            >
+              <ChevronDown size={12} />
+              Load {Math.min(hidden, COMPLETED_PAGE)} more ({hidden} remaining)
+            </button>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full px-4 flex items-center gap-2"
+        style={{ height: COMPLETED_PANEL_BAR_HEIGHT, background: "white" }}
+        aria-label={collapsed ? "Expand completed jobs" : "Collapse completed jobs"}
+      >
+        {collapsed ? (
+          <ChevronUp size={15} style={{ color: "#605E5C" }} />
+        ) : (
+          <ChevronDown size={15} style={{ color: "#605E5C" }} />
+        )}
+        <CheckCircle2 size={15} style={{ color: "#498205" }} />
+        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+          Completed jobs
+        </span>
+        <span
+          className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+          style={{ background: "#DFF6DD", color: "#498205", fontSize: 11 }}
+        >
+          {tasks.length}
+        </span>
+      </button>
     </div>
   );
 }

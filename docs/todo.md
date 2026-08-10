@@ -502,29 +502,35 @@ Depended on item 21; both landed together.
 
 ## Tier 7 — larger build, no SharePoint (2026-08-07 request)
 
-### 23. Designer view: scrollable completed-jobs table (6)
+### 23. Designer view: scrollable completed-jobs table (6) — DONE
+
+*Shipped 2026-08-10.* `CompletedJobsPanel`, fixed to the bottom of the screen,
+designer view only — the one place completed jobs stay visible there, since
+designer view otherwise hides assigned jobs (finished or not) entirely.
+Read-only: no click, no drag, no context menu, matching every other assigned
+job in that view.
+
+Both open questions decided with the user before building: **most recently
+completed first**, and **collapsible**, collapsed by default so it doesn't
+compete with the groups grid on load. Columns: Printer, Jobcode, Job, Qty,
+Priority, Need by, Completed, Notes — blank where a task has no value, not
+omitted. Batched loading, same pattern and page size as staging
+(`COMPLETED_PAGE`, 60 rows). Missing/unparseable `completedAt` sorts last
+regardless of direction, same "missing sorts last" principle as staging's
+tiebreakers.
 
 **Risk: Medium.** New component, read-only — doesn't touch the save layer or
-any mutation handler, but it's the biggest single build in this batch.
+any mutation handler.
 
-A table anchored to the bottom of the screen, designer view only, listing
-completed jobs — the one category of assigned-job information designer view
-otherwise hides entirely (see [ui-reference.md](ui-reference.md) on assigned
-jobs being fully inert in that view). Columns cover everything the operator-view
-collapsed card shows, blank where a task has no value rather than omitting the
-column. Loads incrementally as the list is scrolled, same batching pattern as
-staging (`STAGING_PAGE`) rather than rendering the full completed history at
-once — this list only grows.
-
-**Sequencing note:** columns read better with item 20 (completion timestamp)
-landed first — "completed 3 days ago" is more useful than a table with no sense
-of when. Not a hard dependency, but do this one last among the 2026-08-07 items
-if possible.
-
-**Decide before starting:** sort order for the table (most-recently-completed
-first is the obvious default) and whether it's collapsible the way staging is,
-since a fixed bottom panel competes for vertical space with the groups grid on
-a busy board.
+**Not verified in a browser** — this sandbox's egress still blocks the CDN
+hosts the app loads (unpkg, esm.sh, cdn.tailwindcss.com), same limitation
+recorded in [handoff-2026-08-08.md](handoff-2026-08-08.md). What *was*
+checked: the file transpiles cleanly through Babel with the React preset, the
+new sort comparator was extracted and run against table-driven cases
+(descending order, missing/unparseable-last, stable ties), and the repo
+serves over `python3 -m http.server` with both `index.html` and the JSX
+fetching 200. Still needs: serve locally, load the board, watch the console,
+then deploy and confirm in Teams.
 
 ---
 
@@ -622,7 +628,7 @@ Treat this item as "propose an approach and get it signed off", not
 ## Suggested sequencing
 
 Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
-**Tiers 4–6 are now closed too**: items 15–22 all shipped.
+**Tiers 4–7 are now closed too**: items 15–23 all shipped.
 
 **2026-08-07 request, in order:**
 
@@ -632,13 +638,12 @@ Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
 2. ~~**Tier 5** (18, 19)~~ — done, shipped in PR #25 alongside 15/16.
 3. ~~**SharePoint**: `CompletedAt` and `CreatedAt`~~ — created, internal names
    confirmed matching. ~~**Tier 6** (20, 21, 22)~~ — done, shipped 2026-08-08.
-4. **Tier 7** (23) — the completed-jobs table. Next up; item 20 (completion
-   timestamp) is now in place for it to sort by.
+4. ~~**Tier 7** (23)~~ — done, shipped 2026-08-10.
 5. **Tier 8** — 11 and 12 as before (design discussion / research
    respectively), plus **24** (dark mode) as a third item needing a proposal
    before any code. None of the three share a branch with each other or with
    anything above.
 
-**Current state (2026-08-08):** everything through Tier 6 is shipped. Item 23
-is the only thing left before Tier 8, which still needs a decision or research
-before any code on all three of its items.
+**Current state (2026-08-10):** everything through Tier 7 is shipped. Only
+Tier 8 remains, and all three of its items need a decision or research before
+any code.
