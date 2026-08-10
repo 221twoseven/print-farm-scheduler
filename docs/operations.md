@@ -2,11 +2,25 @@
 
 ## Deploying a change
 
-1. Edit `print-farm-scheduler.jsx` and commit to `main`.
-2. Wait for the run in the **Actions** tab to finish, and check that the
+1. Edit `print-farm-scheduler.jsx`, **bump `BUILD`** at the top of the file, and
+   push to a branch. Open a PR — nothing reaches `main` directly.
+2. **Merge the PR.** Until it is merged the change is not on `main`, and Pages
+   serves `main` and nothing else. A pushed branch is not a deploy: the site is
+   byte-for-byte unchanged, so hard-refreshing, private windows, other browsers,
+   and restarting Teams all correctly show you the old build. **If you are
+   staring at an unchanged board, check this before anything else** — it is the
+   cheapest thing on the list and the easiest to overlook.
+3. Wait for the run in the **Actions** tab to finish, and check that the
    **deploy** job went green — not just the build. See below: they fail
-   independently, and a green build is not a deployed site.
-3. **Confirm what is actually live** before touching a browser cache. Open
+   independently, and a green build is not a deployed site. A healthy run is
+   about a minute from merge to live.
+4. **Read the build stamp in the app.** It is in the header, after the printer
+   and task counts, and on the sign-in screen. If it matches the `BUILD` you
+   just merged, you are looking at the new code and anything still "wrong" is a
+   real bug, not a stale tab. If it shows the old value, continue to the cache
+   steps below. This is the whole reason the stamp exists — it turns "is it live
+   yet?" from a guess into something you can read off the screen.
+5. **Confirm what is actually live** before touching a browser cache. Open
    the raw file and search it for something the change introduced:
 
    ```
@@ -15,16 +29,22 @@
 
    If the new code is not in there, the deploy did not land and no amount of
    refreshing will help.
-4. Hard-refresh, or use a private window. **Babel fetches the JSX separately from
+6. Hard-refresh, or use a private window. **Babel fetches the JSX separately from
    the page, so it caches on its own** — reloading `index.html` is not enough.
-5. Inside Teams, fully quit the client from the system tray and reopen. Teams
+7. Inside Teams, fully quit the client from the system tray and reopen. Teams
    holds tab content harder than a browser and has no hard refresh.
 
 Two separate caches — the browser's HTTP cache on `print-farm-scheduler.jsx`, and
 the Teams client's own content cache — bit this project twice during deployment.
-But a failed deploy looks exactly like a caching problem from inside Teams, and
-cache is the more expensive thing to chase. **Confirm the file on the server
-first (step 3), then blame cache.**
+But an unmerged PR and a failed deploy both look exactly like a caching problem
+from inside Teams, and cache is the more expensive thing to chase. **Check the
+merge (step 2) and the build stamp (step 4) first, then blame cache.**
+
+On 2026-08-10 this cost a round of hard-refreshing, private windows, two
+browsers, and a Teams restart against a change that was still sitting unmerged
+on a branch. Nothing client-side can fix a file the server was never given. The
+build stamp was added the same day so the question is answerable from the
+screen.
 
 ### When the deploy hangs
 

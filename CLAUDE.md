@@ -82,10 +82,18 @@ infrastructure problems, so a syntax error ships and shows up as a blank board.
 At minimum:
 
 - Re-read the diff.
+- **Bump `BUILD`** at the top of `print-farm-scheduler.jsx` in the same commit.
+  It is what tells whoever is looking at Teams whether they are seeing this
+  change or a cached copy, and a stamp that wasn't bumped lies — worse than
+  having none. Only skip it for changes that touch no code, such as docs.
 - If the change is non-trivial, serve the repo locally
   (`python3 -m http.server 8080`) and load it; a Babel error appears in the
   console immediately.
 - State plainly in the commit what changed and why.
+- **Say what you actually verified, and what you didn't.** "Pushed" and "PR
+  opened" are not "deployed", and "it parses" is not "it renders". Claiming more
+  than was checked is how an unmerged branch turns into an afternoon of
+  hard-refreshing.
 
 Deploy is: merge to `main` → Pages build → hard-refresh → restart Teams. When a
 change appears not to have taken effect, **suspect cache before suspecting the

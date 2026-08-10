@@ -7,7 +7,17 @@ consistent with (or deliberately update).
 ## The board, top to bottom
 
 1. **Header** — purple bar, app name, live count of printers and tasks, the
-   **view toggle**, and a gear opening **Shop layout** (operator view only).
+   **build stamp**, the **view toggle**, and a gear opening **Shop layout**
+   (operator view only).
+
+   The **build stamp** reads `build <version>` after the counts, and repeats on
+   the sign-in screen so a tab that never loads the board can still report which
+   code it is running. It comes from the `BUILD` constant at the top of
+   `print-farm-scheduler.jsx`, which is **bumped by hand in every commit that
+   changes that file**. Compare it against the version that was merged to tell a
+   not-yet-deployed change apart from a cached tab — see
+   [operations.md](operations.md#deploying-a-change). It is deliberately plain
+   text, not a link or a control: it is diagnostic, and nothing acts on it.
 2. **In-progress bar** — a chip per printer that has at least one `In progress`
    task, with a count, in the `In progress` status blue. Reads "No printers have
    tasks in progress" when empty.
