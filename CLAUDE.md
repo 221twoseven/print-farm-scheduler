@@ -87,9 +87,16 @@ At minimum:
   console immediately.
 - State plainly in the commit what changed and why.
 
-Deploy is: commit to `main` → Pages build → hard-refresh → restart Teams. When a
+Deploy is: merge to `main` → Pages build → hard-refresh → restart Teams. When a
 change appears not to have taken effect, **suspect cache before suspecting the
 code** — see [docs/operations.md](docs/operations.md#deploying-a-change).
+
+## Always open a PR
+
+Every change lands on `main` through a pull request — never push a change
+directly to `main`. There's no CI gate here, so the PR review is the only
+checkpoint before a mistake reaches production; skipping it defeats the point.
+Push the work to a branch and open the PR even for small or docs-only changes.
 
 ## Things to check before proposing a change
 
