@@ -148,7 +148,7 @@ PATCH every printer on every keystroke.
 | `printQuality` | `PrintQuality` | Choice | |
 | `printStrength` | `PrintStrength` | Choice | |
 | `printMaterial` | `PrintMaterial` | Choice | What the **job** asks for. A different column on a different list from the Printers one of the same name |
-| `sortOrder` | `SortOrder` | Number | Position within its printer. Within staging it's the final tiebreaker only — see below |
+| `sortOrder` | `SortOrder` | Number | Position within its printer. **Staging does not order by it** — see below; it survives there only as the array position that breaks a total tie |
 | `createdAt` | `CreatedAt` | Date and Time | Stamped once, at task creation (`nowIso()`). A real instant, not a user-picked date — see below |
 | `completedAt` | `CompletedAt` | Date and Time | Stamped when `status` becomes `Complete`, cleared the instant it doesn't. Same real-instant treatment as `createdAt` |
 

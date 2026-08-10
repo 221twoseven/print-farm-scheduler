@@ -30,7 +30,7 @@ view** hides everything that configures the shop or assigns work:
 | **Add task** on a printer | Jobcode filter |
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
-| Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
+| Dragging a task onto a printer, and **Move to** in the context menu | — (dragging *within* staging no longer reorders anything, in either view: staging order is computed) |
 | **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
 
 **The dividing line is assignment.** A job in staging belongs to the designer

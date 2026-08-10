@@ -753,13 +753,18 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   /* completedAt tracks the status patch, not a field anyone edits directly:
      stamped the instant a task becomes Complete, cleared the instant it
      doesn't — a completed-at value on a task that isn't Complete would be a
-     stale fact with no visible meaning. */
+     stale fact with no visible meaning.
+
+     Only on an actual *transition*. The context menu offers every status
+     including the one already set, so re-picking Complete on a finished job
+     would otherwise rewrite its completion time to now — and PATCH the row
+     to record that it finished at the moment someone looked at the menu. */
   const updateTask = (id, patch) =>
     setTasks((ts) =>
       ts.map((t) => {
         if (t.id !== id) return t;
         const next = { ...t, ...patch };
-        if ("status" in patch) {
+        if ("status" in patch && patch.status !== t.status) {
           next.completedAt = patch.status === "Complete" ? nowIso() : "";
         }
         return next;
@@ -776,6 +781,13 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     setDraggingTaskId(null);
     if (!acceptsTasks(destPrinterId)) return;
     const source = tasks.find((t) => t.id === taskId);
+    /* Dropping a staging job back on staging has nothing left to do: staging
+       order is computed (priority → need-by → created-at), so the move would
+       be invisible — while still shuffling array position and renumbering
+       every staging row after it, i.e. a PATCH per row for no visible effect.
+       A printer queue is different: it still orders by sortOrder, so dropping
+       a job on its own printer legitimately sends it to the back. */
+    if (destPrinterId === STAGING && source?.printerId === STAGING) return;
     setTasksOrdered((ts) => {
       const dragged = ts.find((t) => t.id === taskId);
       if (!dragged) return ts;
@@ -1884,9 +1896,18 @@ const STAGING_PAGE = 60; // cap initial render; more loads as you scroll
 
 /* Staging's 2nd/3rd sort keys, both ascending with undated/unstamped last —
    a job with no deadline or no recorded creation time shouldn't jump ahead
-   of one that has either. Infinity sorts after any real timestamp. */
-const needByKey = (t) => (t.needByDate ? Date.parse(`${t.needByDate}T00:00:00Z`) : Infinity);
-const createdKey = (t) => (t.createdAt ? Date.parse(t.createdAt) : Infinity);
+   of one that has either. Infinity sorts after any real timestamp, and an
+   unparseable value counts as absent rather than yielding NaN: NaN survives
+   every comparison below and would make the comparator itself inconsistent. */
+const timeKey = (v) => {
+  if (!v) return Infinity;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? Infinity : t;
+};
+/* A date-only "YYYY-MM-DD" parses as UTC midnight, which is fine: every
+   need-by is read the same way, so the comparison is offset-free. */
+const needByKey = (t) => timeKey(t.needByDate);
+const createdKey = (t) => timeKey(t.createdAt);
 
 function StagingArea({
   name,
@@ -1916,7 +1937,7 @@ function StagingArea({
   const loadingRef = useRef(false);
   const showDrop = dragOver && !!draggingTaskId;
 
-  /* filter → then sort by priority (Urgent first), stable within a tier */
+  /* filter → then sort: priority tier, then need-by, then created-at */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tasks.filter((t) => {
@@ -3052,6 +3073,9 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
     val("sliceStatus", "Not Sliced") === "Not Sliced" ||
     val("sliceStatus", "Not Sliced") === "Needs Nesting";
   const priority = val("priority", "Normal");
+  /* read straight off the task, not the draft — neither is editable here */
+  const created = formatTimestamp(task.createdAt);
+  const completed = formatTimestamp(task.completedAt);
 
   return (
     <div
@@ -3357,14 +3381,14 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
         {/* Created / completed stamps — read-only facts, not fields anyone
             edits, so they sit outside the form body rather than as a Field.
             Completed only appears once the task has actually completed. */}
-        {(formatTimestamp(task.createdAt) || formatTimestamp(task.completedAt)) && (
+        {(created || completed) && (
           <div
             className="px-4 pb-2 flex-shrink-0"
             style={{ color: "#A19F9D", fontSize: 10 }}
           >
-            {formatTimestamp(task.createdAt) && <>Created {formatTimestamp(task.createdAt)}</>}
-            {formatTimestamp(task.createdAt) && formatTimestamp(task.completedAt) && " · "}
-            {formatTimestamp(task.completedAt) && <>Completed {formatTimestamp(task.completedAt)}</>}
+            {created && <>Created {created}</>}
+            {created && completed && " · "}
+            {completed && <>Completed {completed}</>}
           </div>
         )}
 
