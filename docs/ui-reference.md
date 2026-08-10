@@ -16,6 +16,8 @@ consistent with (or deliberately update).
    Hidden entirely when no assigned job carries one.
 5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
+6. **Completed jobs panel** — designer view only, fixed to the bottom of the
+   screen.
 
 ## Operator view and Designer view
 
@@ -30,8 +32,8 @@ view** hides everything that configures the shop or assigns work:
 | **Add task** on a printer | Jobcode filter |
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
-| Dragging a task onto a printer, and **Move to** in the context menu | Dragging within staging to reorder |
-| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it |
+| Dragging a task onto a printer, and **Move to** in the context menu | — (dragging *within* staging no longer reorders anything, in either view: staging order is computed) |
+| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it. **Completed jobs**, read-only, via the bottom completed-jobs panel |
 
 **The dividing line is assignment.** A job in staging belongs to the designer
 who raised it and stays fully editable. The moment it is on a printer it is the
@@ -103,19 +105,50 @@ staging carries `printerId === "staging"`.
 - **Search** — matches title, jobcode, sent by, give to, and filepath.
 - **Priority filter** — All / Urgent / High / Normal / Low.
 - **Priority ordering** — Urgent first, then High, Normal, Low, with a small
-  header the first time each tier appears. Manual `sortOrder` is the tiebreaker
-  *within* a tier, never an override of it: a card dragged above an Urgent job
-  does not become more urgent.
+  header the first time each tier appears. **Order within a tier is fully
+  computed, not manual**: soonest need-by first, then oldest-created first as
+  the final tiebreaker (jobs with neither sort after ones that have them). A
+  card dragged above an Urgent job does not become more urgent — that part
+  hasn't changed — and dragging *within* a tier no longer reorders it either,
+  since there's nothing left for a manual position to override. Dragging a
+  card onto a printer, or onto the staging panel to send it back, both still
+  work exactly as before.
 - **Batched loading** — 60 cards render initially (`STAGING_PAGE`), another 60
   each time the scroll nears the bottom. One flick of the wheel loads one batch,
   not one per scroll event. Chosen over virtualization so drag-and-drop and
   browser find-in-page keep working.
 - **Collapse** — a chevron folds the whole panel.
-- **Add task** — inline form.
+- **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
+  are all required; **Add task** stays disabled until every one is filled in.
 - Drop a card anywhere on the panel to send it back to staging.
 - **Operator view only**: the collapsed card also shows jobcode and quantity,
   grey, on the same line as need-by (see "One asymmetry runs the other way"
   above).
+
+## Completed jobs panel (designer view)
+
+Designer view hides every assigned job's card entirely, including finished
+ones — this panel is the one place that history stays visible there. Fixed to
+the bottom of the screen, but stops short of the bottom-right corner so it
+never sits under the save-status pill (with the **Retry** link) that floats
+there in every view. Collapsed by default so it doesn't compete with the
+groups grid for space; a chevron on its bar expands it.
+
+- **Every task with status Complete, across every printer** — not scoped to
+  one group or printer.
+- **Sort: most recently completed first.** A job with no completion stamp (or
+  an unparseable one) sorts last regardless — same "missing sorts last"
+  principle staging's need-by/created-at tiebreakers use, just applied to a
+  newest-first order instead of soonest-first.
+- **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
+  Notes (an icon, hover reads the operator's note — same convention as the
+  card). Blank where a task has no value for that column, not omitted.
+- **Read-only, like every assigned job in designer view** — no click, no
+  drag, no context menu; the table exists to show history, not to edit it.
+- **Batched loading**, same pattern and page size as staging (`COMPLETED_PAGE`,
+  60 rows).
+- Not shown in operator view — the printer's own Completed section (below)
+  already covers this for that view.
 
 ## Printer cards
 
@@ -205,6 +238,10 @@ modal open — the same applies to the shop layout and confirmation dialogs.
 
 Tasks in staging hide the fields that only mean something once assigned.
 
+A small grey line above the footer reads **Created** with a timestamp, and
+**Completed** alongside it once the job has one — read-only facts, not fields
+anyone edits. Completed disappears again if the job leaves `Complete`.
+
 ### Context menu
 
 **On a task:**
@@ -222,8 +259,12 @@ Tasks in staging hide the fields that only mean something once assigned.
 
 - Drop on a **column's open area** → the task moves to that printer, at the end
   of its queue.
-- Drop **on a card** → the task inserts before or after it, depending on which
-  half you release over; an accent-coloured edge shows where it will land.
+- Drop **on a printer card** → the task inserts before or after it, depending on
+  which half you release over; an accent-coloured edge shows where it will
+  land. **Staging cards don't accept this** — staging's order is computed, not
+  manual (see Staging area above), so there's nothing for a drop position to
+  do. Dropping anywhere on the staging panel still sends a task there, just not
+  onto a specific card within it.
 - Only **Ready** printers and staging accept drops. Drops elsewhere are ignored,
   not queued.
 - Moving a task **out of staging onto a printer opens its detail modal**, because

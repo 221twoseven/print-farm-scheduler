@@ -16,6 +16,7 @@ import {
   Flag,
   Search,
   StickyNote,
+  CheckCircle2,
 } from "lucide-react";
 
 /* =====================================================================
@@ -270,6 +271,11 @@ const PRINTER_GAP = 12;
 const GROUP_PAD = 32;
 const GROUP_GAP = 16;
 
+/* CompletedJobsPanel's collapsed bar height, fixed to the viewport bottom
+   in designer view — shared with PrintFarmScheduler's padding-bottom so
+   the bar never sits over the last row of printer groups. */
+const COMPLETED_PANEL_BAR_HEIGHT = 40;
+
 /* board-wide preferences — persisted in the Settings list.
    defaults match a 12-printer shop: groups of 4 shown 2-wide, 3 groups per row */
 const DEFAULT_APP_SETTINGS = {
@@ -370,6 +376,7 @@ const buildSeedTasks = () => {
       filepath: "\\\\farm\\queue\\bracket_set_x12.3mf",
       quantity: 12,
       priority: "High",
+      createdAt: "2026-06-12T15:05:00Z",
     },
     {
       id: "t2",
@@ -382,6 +389,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Needs Nesting",
       sentBy: "Marco",
       giveTo: "QA",
+      createdAt: "2026-06-14T09:30:00Z",
     },
     {
       id: "t3",
@@ -394,6 +402,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Sliced",
       sentBy: "Priya",
       giveTo: "Dana",
+      createdAt: "2026-06-11T11:20:00Z",
     },
     {
       id: "t5",
@@ -406,6 +415,7 @@ const buildSeedTasks = () => {
       sliceStatus: "Not Sliced",
       sentBy: "Front desk",
       giveTo: "",
+      createdAt: "2026-06-13T08:00:00Z",
     },
     {
       id: "t6",
@@ -419,6 +429,8 @@ const buildSeedTasks = () => {
       giveTo: "Assembly",
       quantity: 40,
       priority: "Normal",
+      createdAt: "2026-06-08T13:45:00Z",
+      completedAt: "2026-06-10T15:52:00Z",
     },
   ];
 
@@ -448,6 +460,9 @@ const buildSeedTasks = () => {
       giveTo: people[(i + 3) % people.length],
       quantity: (i % 5) + 1,
       priority: prios[i % prios.length],
+      /* staggered so same-tier, same-need-by jobs still have a real
+         created-at order to exercise the sort's 3rd tiebreaker */
+      createdAt: new Date(Date.now() - (48 - i) * 6 * 3600 * 1000).toISOString(),
     });
   }
   return base;
@@ -497,6 +512,19 @@ function isOverdue(task) {
     ? new Date(y, m - 1, d, ...task.etaTime.split(":").map(Number))
     : new Date(y, m - 1, d, 23, 59, 59);
   return due.getTime() < Date.now();
+}
+
+/* CreatedAt/CompletedAt stamp. A real instant, not a date-input string —
+   see the note by taskFromRow/taskToRow before touching either field. */
+const nowIso = () => new Date().toISOString();
+
+/* Display only, for the two stamps above — not used for sorting or storage. */
+function formatTimestamp(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 /* ------------------------------- app ---------------------------------- */
@@ -608,6 +636,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   }, [tasks]);
 
   const stagingTasks = tasksByPrinter[STAGING] || [];
+
+  /* Designer view's completed-jobs table needs every finished task
+     regardless of printer — the one category of assigned-job info that
+     view otherwise hides entirely (ui-reference.md). */
+  const completedTasks = useMemo(
+    () => tasks.filter((t) => t.status === "Complete"),
+    [tasks]
+  );
 
   /* printers with in-progress tasks, for the status bar */
   const inProgressPrinters = useMemo(() => {
@@ -728,8 +764,26 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     return !!p && PRINTER_STATUS[p.status]?.accepts;
   };
 
+  /* completedAt tracks the status patch, not a field anyone edits directly:
+     stamped the instant a task becomes Complete, cleared the instant it
+     doesn't — a completed-at value on a task that isn't Complete would be a
+     stale fact with no visible meaning.
+
+     Only on an actual *transition*. The context menu offers every status
+     including the one already set, so re-picking Complete on a finished job
+     would otherwise rewrite its completion time to now — and PATCH the row
+     to record that it finished at the moment someone looked at the menu. */
   const updateTask = (id, patch) =>
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const next = { ...t, ...patch };
+        if ("status" in patch && patch.status !== t.status) {
+          next.completedAt = patch.status === "Complete" ? nowIso() : "";
+        }
+        return next;
+      })
+    );
 
   const deleteTask = (id) => {
     setTasksOrdered((ts) => ts.filter((t) => t.id !== id));
@@ -741,6 +795,13 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     setDraggingTaskId(null);
     if (!acceptsTasks(destPrinterId)) return;
     const source = tasks.find((t) => t.id === taskId);
+    /* Dropping a staging job back on staging has nothing left to do: staging
+       order is computed (priority → need-by → created-at), so the move would
+       be invisible — while still shuffling array position and renumbering
+       every staging row after it, i.e. a PATCH per row for no visible effect.
+       A printer queue is different: it still orders by sortOrder, so dropping
+       a job on its own printer legitimately sends it to the back. */
+    if (destPrinterId === STAGING && source?.printerId === STAGING) return;
     setTasksOrdered((ts) => {
       const dragged = ts.find((t) => t.id === taskId);
       if (!dragged) return ts;
@@ -785,6 +846,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         id: uid(),
         title: `${ts[idx].title} (copy)`,
         status: "Not started",
+        /* a duplicate is a new job, not a continuation of the original's
+           history — fresh creation stamp, no inherited completion */
+        createdAt: nowIso(),
+        completedAt: "",
       };
       return [...ts.slice(0, idx + 1), copy, ...ts.slice(idx + 1)];
     });
@@ -793,7 +858,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
   const addTask = (printerId, fields) => {
     setTasksOrdered((ts) => [
       ...ts,
-      { id: uid(), printerId, status: "Not started", ...fields },
+      /* createdAt last, so nothing in `fields` can pass off a stale value
+         as the creation instant */
+      { id: uid(), printerId, status: "Not started", ...fields, createdAt: nowIso() },
     ]);
     setAddingTaskIn(null);
   };
@@ -977,6 +1044,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         background: "#F0F0F2",
         fontFamily:
           "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif",
+        /* room for CompletedJobsPanel's collapsed bar, fixed to the
+           viewport bottom in designer view, so it doesn't sit over the
+           last row of printer groups */
+        paddingBottom: operator ? 0 : COMPLETED_PANEL_BAR_HEIGHT,
       }}
     >
       {/* board scrolls horizontally below its minimum width; thin styled bar */}
@@ -1194,7 +1265,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         onCancelAdd={() => setAddingTaskIn(null)}
         onAdd={(fields) => addTask(STAGING, fields)}
         onDropTask={(taskId) => moveTask(taskId, STAGING)}
-        onDropOnTask={moveTaskRelative}
+        /* No onDropOnTask: staging order is fully computed (item 22), so
+           dropping onto a specific card to reposition it would be a dead
+           gesture. Dropping anywhere on the panel (onDropTask above) still
+           moves a task into or out of staging. */
         onExpandTask={(id) =>
           setExpandedTaskId((cur) => (cur === id ? null : id))
         }
@@ -1489,6 +1563,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           </div>
         )}
       </div>
+      )}
+
+      {/* ---------------- completed jobs (designer view only) ----------------
+          The one category of assigned-job info designer view otherwise hides
+          entirely — see ui-reference.md. Read-only, same as every assigned
+          job in this view: no click, no drag, no context menu. */}
+      {!operator && (
+        <CompletedJobsPanel tasks={completedTasks} printers={printers} />
       )}
 
       {/* ---------------- task detail modal (single instance, app level) ----
@@ -1838,6 +1920,21 @@ function ContextMenu({
 const PRIORITY_RANK = { Urgent: 0, High: 1, Normal: 2, Low: 3 };
 const STAGING_PAGE = 60; // cap initial render; more loads as you scroll
 
+/* Staging's 2nd/3rd sort keys, both ascending with undated/unstamped last —
+   a job with no deadline or no recorded creation time shouldn't jump ahead
+   of one that has either. Infinity sorts after any real timestamp, and an
+   unparseable value counts as absent rather than yielding NaN: NaN survives
+   every comparison below and would make the comparator itself inconsistent. */
+const timeKey = (v) => {
+  if (!v) return Infinity;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? Infinity : t;
+};
+/* A date-only "YYYY-MM-DD" parses as UTC midnight, which is fine: every
+   need-by is read the same way, so the comparison is offset-free. */
+const needByKey = (t) => timeKey(t.needByDate);
+const createdKey = (t) => timeKey(t.createdAt);
+
 function StagingArea({
   name,
   onRename,
@@ -1851,7 +1948,6 @@ function StagingArea({
   onCancelAdd,
   onAdd,
   onDropTask,
-  onDropOnTask,
   onExpandTask,
   onContextMenu,
   onDragStart,
@@ -1867,7 +1963,7 @@ function StagingArea({
   const loadingRef = useRef(false);
   const showDrop = dragOver && !!draggingTaskId;
 
-  /* filter → then sort by priority (Urgent first), stable within a tier */
+  /* filter → then sort: priority tier, then need-by, then created-at */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tasks.filter((t) => {
@@ -1884,13 +1980,24 @@ function StagingArea({
     });
   }, [tasks, query, priorityFilter]);
 
+  /* Within a priority tier, order is fully computed — need-by (soonest
+     first), then created-at (oldest first) — rather than manual drag order.
+     Array index is the final fallback, purely for a deterministic sort when
+     every other key ties. */
   const sorted = useMemo(() => {
     return filtered
       .map((t, i) => [t, i])
       .sort((a, b) => {
         const pa = PRIORITY_RANK[a[0].priority || "Normal"];
         const pb = PRIORITY_RANK[b[0].priority || "Normal"];
-        return pa !== pb ? pa - pb : a[1] - b[1]; // stable within tier
+        if (pa !== pb) return pa - pb;
+        const na = needByKey(a[0]);
+        const nb = needByKey(b[0]);
+        if (na !== nb) return na - nb;
+        const ca = createdKey(a[0]);
+        const cb = createdKey(b[0]);
+        if (ca !== cb) return ca - cb;
+        return a[1] - b[1]; // stable
       })
       .map(([t]) => t);
   }, [filtered]);
@@ -2117,7 +2224,6 @@ function StagingArea({
                       onContextMenu={onContextMenu}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
-                      onDropOnTask={onDropOnTask}
                       inStaging
                       dragging={draggingTaskId === task.id}
                       operator={operator}
@@ -2140,6 +2246,207 @@ function StagingArea({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ----------------------- completed jobs panel -------------------------- */
+
+const COMPLETED_PAGE = 60; // same batching pattern as staging
+
+/* Most-recent-first. Missing/unparseable completedAt sorts last regardless
+   of direction — same principle as staging's timeKey, kept separate here
+   since the ordering itself is reversed (newest first, not soonest first). */
+const completedAtKey = (t) => {
+  if (!t.completedAt) return null;
+  const v = Date.parse(t.completedAt);
+  return Number.isNaN(v) ? null : v;
+};
+
+function CompletedJobsPanel({ tasks, printers }) {
+  const [collapsed, setCollapsed] = useState(true);
+  const [limit, setLimit] = useState(COMPLETED_PAGE);
+  const scrollRef = useRef(null);
+  const loadingRef = useRef(false);
+
+  const printerName = useMemo(() => {
+    const map = {};
+    printers.forEach((p) => {
+      map[p.id] = p.name;
+    });
+    return map;
+  }, [printers]);
+
+  const sorted = useMemo(() => {
+    return tasks
+      .map((t, i) => [t, i])
+      .sort((a, b) => {
+        const ka = completedAtKey(a[0]);
+        const kb = completedAtKey(b[0]);
+        if (ka === null && kb === null) return a[1] - b[1]; // stable
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        return kb - ka;
+      })
+      .map(([t]) => t);
+  }, [tasks]);
+
+  const visible = sorted.slice(0, limit);
+  const hidden = sorted.length - visible.length;
+
+  useEffect(() => {
+    loadingRef.current = false;
+  }, [limit]);
+
+  const loadMore = () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLimit((l) => l + COMPLETED_PAGE);
+  };
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el || hidden <= 0) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        /* stop short of the bottom-right corner — StatusPill (the save
+           indicator, with the Retry link) floats fixed there in every view,
+           and a full-width bar would sit directly under it */
+        right: 190,
+        bottom: 0,
+        zIndex: 30,
+        background: "white",
+        borderTop: "1px solid #E1DFDD",
+        borderRight: "1px solid #E1DFDD",
+        boxShadow: "0 -2px 8px rgba(0,0,0,0.08)",
+      }}
+    >
+      {!collapsed && (
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="overflow-y-auto"
+          style={{ maxHeight: 260 }}
+        >
+          {sorted.length === 0 ? (
+            <div
+              className="text-xs italic py-6 text-center"
+              style={{ color: "#8A8886" }}
+            >
+              No completed jobs yet.
+            </div>
+          ) : (
+            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    background: "#FAFAF9",
+                    color: "#605E5C",
+                  }}
+                >
+                  {["Printer", "Jobcode", "Job", "Qty", "Priority", "Need by", "Completed", "Notes"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="text-left font-semibold uppercase tracking-wide px-3 py-1.5"
+                        style={{ fontSize: 10, borderBottom: "1px solid #E1DFDD" }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((task) => {
+                  const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+                  const completed = formatTimestamp(task.completedAt);
+                  const operatorNote = (task.operatorNotes || "").trim();
+                  return (
+                    <tr key={task.id} style={{ borderBottom: "1px solid #F3F2F1" }}>
+                      <td className="px-3 py-1.5" style={{ color: "#605E5C" }}>
+                        {printerName[task.printerId] || "—"}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {task.jobcode || ""}
+                      </td>
+                      <td
+                        className="px-3 py-1.5"
+                        style={{ color: "#242424", textDecoration: "line-through" }}
+                      >
+                        {task.title}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {task.quantity || 1}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span style={{ color: PRIORITY_STYLE[task.priority || "Normal"]?.text }}>
+                          {task.priority || "Normal"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {needBy ? needBy.date : ""}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+                        {completed || ""}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {operatorNote && (
+                          <span title={`Operator notes: ${operatorNote}`}>
+                            <StickyNote size={11} style={{ color: "#8A8886" }} />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {hidden > 0 && (
+            <button
+              onClick={loadMore}
+              className="w-full flex items-center justify-center gap-1.5 text-xs py-2 hover:bg-gray-50"
+              style={{ color: "#8A8886" }}
+              title="Loads automatically as you scroll — click to load now"
+            >
+              <ChevronDown size={12} />
+              Load {Math.min(hidden, COMPLETED_PAGE)} more ({hidden} remaining)
+            </button>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full px-4 flex items-center gap-2"
+        style={{ height: COMPLETED_PANEL_BAR_HEIGHT, background: "white" }}
+        aria-label={collapsed ? "Expand completed jobs" : "Collapse completed jobs"}
+      >
+        {collapsed ? (
+          <ChevronUp size={15} style={{ color: "#605E5C" }} />
+        ) : (
+          <ChevronDown size={15} style={{ color: "#605E5C" }} />
+        )}
+        <CheckCircle2 size={15} style={{ color: "#498205" }} />
+        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+          Completed jobs
+        </span>
+        <span
+          className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+          style={{ background: "#DFF6DD", color: "#498205", fontSize: 11 }}
+        >
+          {tasks.length}
+        </span>
+      </button>
     </div>
   );
 }
@@ -2993,6 +3300,9 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
     val("sliceStatus", "Not Sliced") === "Not Sliced" ||
     val("sliceStatus", "Not Sliced") === "Needs Nesting";
   const priority = val("priority", "Normal");
+  /* read straight off the task, not the draft — neither is editable here */
+  const created = formatTimestamp(task.createdAt);
+  const completed = formatTimestamp(task.completedAt);
 
   return (
     <div
@@ -3294,6 +3604,20 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
             </div>
           )}
         </div>
+
+        {/* Created / completed stamps — read-only facts, not fields anyone
+            edits, so they sit outside the form body rather than as a Field.
+            Completed only appears once the task has actually completed. */}
+        {(created || completed) && (
+          <div
+            className="px-4 pb-2 flex-shrink-0"
+            style={{ color: "#A19F9D", fontSize: 10 }}
+          >
+            {created && <>Created {created}</>}
+            {created && completed && " · "}
+            {completed && <>Completed {completed}</>}
+          </div>
+        )}
 
         {/* modal footer */}
         <div
@@ -3763,6 +4087,10 @@ const COLS = {
        is currently loaded with. Same name, different list, no clash. */
     printMaterial: "PrintMaterial",
     sortOrder: "SortOrder",
+    /* Machine-set instants, not user-picked dates — see the note by
+       dateToIso/isoToDate below before touching either of these. */
+    createdAt: "CreatedAt",
+    completedAt: "CompletedAt",
   },
 };
 
@@ -3994,6 +4322,11 @@ const dateToIso = (ymd) =>
 
 const isoToDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
+/* CreatedAt/CompletedAt (stamped in PrintFarmScheduler via nowIso()) are a
+   different kind of date from EtaDate/NeedByDate: real machine-set instants,
+   not a date-input string, so the noon-UTC fudge above doesn't apply and
+   would only throw away the time of day. Round-trip the ISO string as-is. */
+
 const groupFromRow = (f) => ({
   id: str(f[COLS.groups.uuid]) || uid(),
   name: str(f[COLS.groups.name]),
@@ -4060,6 +4393,8 @@ const taskFromRow = (f) => ({
   printStrength: str(f[COLS.tasks.printStrength]) || "Standard",
   printMaterial: str(f[COLS.tasks.printMaterial]) || "ABS",
   sortOrder: num(f[COLS.tasks.sortOrder]),
+  createdAt: str(f[COLS.tasks.createdAt]),
+  completedAt: str(f[COLS.tasks.completedAt]),
 });
 
 const taskToRow = (t) => ({
@@ -4083,6 +4418,8 @@ const taskToRow = (t) => ({
   [COLS.tasks.printStrength]: t.printStrength || "Standard",
   [COLS.tasks.printMaterial]: t.printMaterial || "ABS",
   [COLS.tasks.sortOrder]: num(t.sortOrder),
+  [COLS.tasks.createdAt]: t.createdAt || null,
+  [COLS.tasks.completedAt]: t.completedAt || null,
 });
 
 const LISTS = {

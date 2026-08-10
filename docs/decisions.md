@@ -41,9 +41,19 @@ which operators use.
 
 ### Priority sorting beats manual order in staging
 
-Within staging, tier order (Urgent → High → Normal → Low) always wins;
-`sortOrder` is the tiebreaker *inside* a tier. Dragging a card to the top of
-staging does not promote it — change its priority instead.
+Within staging, tier order (Urgent → High → Normal → Low) always wins.
+Dragging a card to the top of staging does not promote it — change its
+priority instead. That part hasn't moved.
+
+**What the tiebreaker *inside* a tier is has moved, 2026-08.** It was
+`sortOrder` — manual drag order — until the shop asked for something more
+predictable: need-by (soonest first), then created-at (oldest first,
+undated/unstamped last in both passes). Order within a tier is now fully
+computed rather than partly manual, so dragging a card within staging no
+longer repositions it — see [ui-reference.md](ui-reference.md#staging-area).
+`sortOrder` still exists on staging tasks and is still reindexed on
+structural change, for the save layer's sake, but nothing reads it for
+display order there anymore.
 
 ### ~~Group colour for identity, state colour for state~~ — superseded 2026-08
 

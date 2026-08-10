@@ -148,7 +148,9 @@ PATCH every printer on every keystroke.
 | `printQuality` | `PrintQuality` | Choice | |
 | `printStrength` | `PrintStrength` | Choice | |
 | `printMaterial` | `PrintMaterial` | Choice | What the **job** asks for. A different column on a different list from the Printers one of the same name |
-| `sortOrder` | `SortOrder` | Number | Position within its printer (or within staging) |
+| `sortOrder` | `SortOrder` | Number | Position within its printer. **Staging does not order by it** — see below; it survives there only as the array position that breaks a total tie |
+| `createdAt` | `CreatedAt` | Date and Time | Stamped once, at task creation (`nowIso()`). A real instant, not a user-picked date — see below |
+| `completedAt` | `CompletedAt` | Date and Time | Stamped when `status` becomes `Complete`, cleared the instant it doesn't. Same real-instant treatment as `createdAt` |
 
 ### The two notes, and why one freezes
 
@@ -192,6 +194,28 @@ the first 10 characters (`isoToDate`).
 Because `EtaTime` is text, SharePoint cannot sort or filter by time of day. The
 app sorts itself, so this only matters if someone later wants a native SharePoint
 view like "due in the next four hours."
+
+### `CreatedAt` and `CompletedAt` are not dates, they're instants
+
+Unlike `EtaDate`/`NeedByDate`, these two aren't user-picked calendar dates —
+nobody fills in a date-input for them. They're machine-set moments
+(`nowIso()`, i.e. `new Date().toISOString()`), so the noon-UTC fudge above
+does not apply: the real ISO timestamp round-trips as-is, with the actual time
+of day intact. Don't route either through `dateToIso`/`isoToDate` — that
+would silently throw away the time and misdate anything written near
+midnight UTC.
+
+`createdAt` is written once, in `addTask`, and never touched again;
+`copyTask` gives a duplicate its own fresh value rather than inheriting the
+original's, since a duplicate is a new job. `completedAt` is written and
+cleared by `updateTask` itself whenever a patch includes `status`: stamped
+the instant `status` becomes `Complete`, cleared the instant it doesn't — a
+`completedAt` value on a task that isn't `Complete` would be a stale fact
+nothing in the interface can make sense of.
+
+Staging's display order uses both as tiebreakers within a priority tier —
+see [ui-reference.md](ui-reference.md#staging-area) and
+[decisions.md](decisions.md#priority-sorting-beats-manual-order-in-staging).
 
 ## Settings
 

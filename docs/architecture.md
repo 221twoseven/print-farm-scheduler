@@ -1,6 +1,6 @@
 # Architecture
 
-Everything is one file: `print-farm-scheduler.jsx`, ~4,500 lines. `index.html`
+Everything is one file: `print-farm-scheduler.jsx`, ~4,900 lines. `index.html`
 loads React 18, Tailwind, lucide-react and MSAL from CDNs via an import map, then
 hands the JSX to Babel standalone, which transpiles it in the browser. There is
 no bundler, no `node_modules`, and no server.
@@ -14,22 +14,23 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | Section | Lines | Contents |
 | --- | --- | --- |
 | Imports + persistence-seam note | 1–43 | React, lucide icons, the design note on ordering and the Settings list |
-| Constants | 45–289 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
-| Order helpers | 291–307 | `bySortOrder`, `hydrate()`, `reindex()` |
-| Seed demo data | 309–455 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
-| Helpers | 457–499 | `formatEta()`, `useBackdropClose()`, `isOverdue()` |
-| `PrintFarmScheduler` | 501–1524 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid |
-| `ConfirmDialog` | 1526–1572 | Destructive-action confirmation |
-| `ContextMenu` | 1574–1815 | Right-click menu for tasks and printers |
-| `StagingArea` | 1817–2124 | Unassigned queue: search, priority filter, tier headers, batched loading |
-| `StatusPicker` | 2126–2234 | Task status control |
-| `PrinterColumn` | 2236–2681 | One printer card: specs, queue, completed section, drop targets |
-| `TaskCard` | 2683–2875 | Collapsed card |
-| `TaskDetailModal` | 2877–3281 | Full task editor, plus the shared `Field` wrapper and modal input styles |
-| `NumberStepper`, `AddTaskForm` | 3283–3597 | Quantity control and the inline new-task form |
-| Persistence | 3599–4229 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
-| `AppShell` | 4231–4475 | Auth phases, save orchestration, `StatusPill`, `Centered` |
-| Mount | 4477–4483 | `createRoot(...).render(<AppShell />)` if `#root` exists |
+| Constants | 45–291 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
+| Order helpers | 292–309 | `bySortOrder`, `hydrate()`, `reindex()` |
+| Seed demo data | 310–466 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
+| Helpers | 467–523 | `formatEta()`, `useBackdropClose()`, `isOverdue()`, `nowIso()`, `formatTimestamp()` |
+| `PrintFarmScheduler` | 530–1626 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid, `CompletedJobsPanel` mount |
+| `ConfirmDialog` | 1627–1674 | Destructive-action confirmation |
+| `ContextMenu` | 1675–1917 | Right-click menu for tasks and printers |
+| `StagingArea` | 1918–2252 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
+| `CompletedJobsPanel` | 2253–2449 | Designer view only: every completed job, newest first, fixed to the bottom of the screen, batched loading, read-only |
+| `StatusPicker` | 2450–2559 | Task status control |
+| `PrinterColumn` | 2560–3024 | One printer card: specs, queue, completed section, drop targets |
+| `TaskCard` | 3025–3244 | Collapsed card |
+| `TaskDetailModal` | 3245–3667 | Full task editor, plus the shared `Field` wrapper and modal input styles |
+| `NumberStepper`, `AddTaskForm` | 3668–3987 | Quantity control and the inline new-task form |
+| Persistence | 3988–4632 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
+| `AppShell` | 4633–4886 | Auth phases, save orchestration, `StatusPill`, `Centered` |
+| Mount | 4887–4893 | `createRoot(...).render(<AppShell />)` if `#root` exists |
 
 To refresh these numbers after the file has drifted, the section banners are
 greppable — `grep -n -A1 '^/\* [-=]\{10,\}' print-farm-scheduler.jsx` prints
@@ -67,7 +68,7 @@ All board state lives in `PrintFarmScheduler` as four `useState` arrays/objects:
 | --- | --- |
 | `groups` | `{ id, name, color, collapsed, sortOrder }[]` |
 | `printers` | `{ id, name, groupId, status, sortOrder, settings: { notes, fields } }[]` |
-| `tasks` | `{ id, printerId, title, status, priority, sliceStatus, quantity, etaDate, etaTime, sentBy, giveTo, filepath, printQuality, printStrength, sortOrder }[]` |
+| `tasks` | `{ id, printerId, title, jobcode, notes, operatorNotes, status, priority, sliceStatus, quantity, etaDate, etaTime, needByDate, sentBy, giveTo, filepath, printQuality, printStrength, printMaterial, sortOrder, createdAt, completedAt }[]` |
 | `appSettings` | `{ stagingName, printersPerRow, groupsPerRow }` |
 
 Plus `choices` (dropdown options read from SharePoint) and a dozen pieces of
@@ -105,9 +106,12 @@ Scopes:
 `reindex()` preserving object identity is not a nicety — the save layer diffs by
 reference, so a reindex that copied every row would PATCH every row.
 
-Staging is the one place `sortOrder` does not decide display order: it sorts by
-priority tier first (Urgent → High → Normal → Low), with `sortOrder` as the
-stable tiebreaker inside a tier. See [decisions.md](decisions.md).
+Staging is the one place `sortOrder` does not decide display order at all: it
+sorts by priority tier first (Urgent → High → Normal → Low), then need-by
+(soonest first), then created-at (oldest first), with anything undated or
+unstamped sorting last in either pass. `sortOrder` is still carried and still
+reindexed there for the save layer's sake, but nothing reads it for display.
+See [decisions.md](decisions.md#priority-sorting-beats-manual-order-in-staging).
 
 ## How saving works
 
