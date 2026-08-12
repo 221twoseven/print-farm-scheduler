@@ -86,7 +86,9 @@ config — it matches the board to the shop's physical arrangement, not to perso
 taste.
 
 The staging area's name is edited in place on the staging header, and is the
-third setting stored in the same list.
+third setting stored in the same list. Like the other two it is **operator
+view only** — the pencil is hidden in designer view, because renaming it
+renames it for everybody.
 
 ## Jobcode filter
 
@@ -182,10 +184,14 @@ printer belongs to is answered by the group it is sitting in.
   the task context menu and the detail modal, with the reason in its tooltip.
 - **Specs summary** — the collapsed line reads **Standard setup** when every
   spec matches the shop default, and otherwise lists **only the fields that
-  differ**, each as `Setting: value` — "Nozzle size: 0.2mm", "Bed type: Smooth".
-  A printer at defaults except its plate shows one chip. Where a material was
-  typed in by hand, the chip shows the typed name rather than "Other", which is
-  the reason for asking for it.
+  differ**, each as `Setting: value` on **its own line** — "Nozzle size: 0.2mm",
+  "Bed type: Smooth". A printer at defaults except its plate shows one line.
+  Exceptions are styled exactly like "Standard setup" — grey italics, no chip
+  or background — because both are the same kind of fact about the machine and
+  used to look like two different kinds of thing. Where a material was typed in
+  by hand, the line shows the typed name rather than "Other", which is the
+  reason for asking for it. Each line keeps a hover tooltip, so a value too
+  long for the card is still readable.
 - **Specs** — expanding the summary shows all five dropdowns (nozzle size,
   nozzle type, nozzle material, bed type, material) plus free-text notes,
   whether or not they are exceptions. Setting material to **Other** reveals a
@@ -316,6 +322,10 @@ deliberate clicks.
 ## Saving
 
 A pill in the bottom-right reads **Saving… / Saved / Not saved**. Hover it for
-the change count or the Graph error; on error it offers **Retry**. The signed-in
-account and a **Sign out** link live in the same pill. Closing the tab with a
-write in flight raises the browser's "leave site?" prompt.
+the change count or the Graph error; on error it offers **Retry**. Closing the
+tab with a write in flight raises the browser's "leave site?" prompt.
+
+**That is all it carries** — no account name, no **Sign out**. The board only
+runs inside a signed-in Teams session and machines aren't shared, so identity
+is settled before the tab loads and there was nothing for either to do. See
+[authentication.md](authentication.md#there-is-no-sign-out).
