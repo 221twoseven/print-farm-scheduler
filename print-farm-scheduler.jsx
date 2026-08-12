@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-12.3";
+const BUILD = "2026-08-12.4";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1570,13 +1570,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       </div>
       )}
 
-      {/* ---------------- completed jobs (designer view only) ----------------
-          The one category of assigned-job info designer view otherwise hides
-          entirely — see ui-reference.md. Read-only, same as every assigned
-          job in this view: no click, no drag, no context menu. */}
-      {!operator && (
-        <CompletedJobsPanel tasks={completedTasks} printers={printers} />
-      )}
+      {/* ---------------- completed jobs (both views) ----------------
+          The permanent, cross-printer record of finished work — sorted by
+          completion, filterable by jobcode. Shown in both views: an operator
+          and a designer have equal reason to look up what shipped, and it
+          carries no control that either shouldn't have (it has no purge
+          button in either view — see decisions.md). Read-only, same as every
+          assigned job in designer view: no click, no drag, no context menu. */}
+      <CompletedJobsPanel tasks={completedTasks} printers={printers} />
 
       {/* ---------------- task detail modal (single instance, app level) ----
           Kept out of TaskCard so it survives the card unmounting mid-edit —
@@ -2277,6 +2278,7 @@ const completedAtKey = (t) => {
 function CompletedJobsPanel({ tasks, printers }) {
   const [collapsed, setCollapsed] = useState(true);
   const [limit, setLimit] = useState(COMPLETED_PAGE);
+  const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
   const scrollRef = useRef(null);
   const loadingRef = useRef(false);
 
@@ -2287,6 +2289,18 @@ function CompletedJobsPanel({ tasks, printers }) {
     });
     return map;
   }, [printers]);
+
+  /* Every jobcode that has ever completed, distinct and sorted. Built from the
+     record itself, not the live board's liveJobcodes — this table outlives the
+     work, so a code whose last job finished months ago must still be selectable
+     here even though nothing on a printer carries it any more. */
+  const jobcodes = useMemo(() => {
+    const set = new Set();
+    tasks.forEach((t) => {
+      if (t.jobcode) set.add(t.jobcode);
+    });
+    return Array.from(set).sort();
+  }, [tasks]);
 
   const sorted = useMemo(() => {
     return tasks
@@ -2302,8 +2316,21 @@ function CompletedJobsPanel({ tasks, printers }) {
       .map(([t]) => t);
   }, [tasks]);
 
-  const visible = sorted.slice(0, limit);
-  const hidden = sorted.length - visible.length;
+  // Filter after sorting, before pagination, so "load more" pages the matches
+  // rather than paging the full list and hiding most of a page.
+  const filtered = useMemo(
+    () => (jobcodeFilter ? sorted.filter((t) => t.jobcode === jobcodeFilter) : sorted),
+    [sorted, jobcodeFilter]
+  );
+
+  const visible = filtered.slice(0, limit);
+  const hidden = filtered.length - visible.length;
+
+  // A filter change resets paging: otherwise a deep scroll into one code leaves
+  // a short match list scrolled past its own end.
+  useEffect(() => {
+    setLimit(COMPLETED_PAGE);
+  }, [jobcodeFilter]);
 
   useEffect(() => {
     loadingRef.current = false;
@@ -2354,6 +2381,53 @@ function CompletedJobsPanel({ tasks, printers }) {
         </span>
       </button>
 
+      {/* Jobcode filter — outside the scroll area so it stays put while the
+          table scrolls under it. Same visual pattern as the board's main
+          jobcode filter strip. Hidden when nothing completed has a jobcode:
+          an empty dropdown is clutter, not a feature. */}
+      {!collapsed && jobcodes.length > 0 && (
+        <div
+          className="px-4 py-2 flex items-center gap-2 flex-wrap"
+          style={{ background: "#FAFAF9", borderTop: "1px solid #EDEBE9" }}
+        >
+          <span
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
+            style={{ color: "#605E5C" }}
+          >
+            <Search size={14} style={{ color: "#605E5C" }} />
+            Jobcode
+          </span>
+          <select
+            value={jobcodeFilter}
+            onChange={(e) => setJobcodeFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded border bg-white outline-none"
+            style={{ borderColor: jobcodeFilter ? ACCENT : "#C8C6C4", minWidth: 150 }}
+            aria-label="Filter completed jobs by jobcode"
+          >
+            <option value="">All jobcodes</option>
+            {jobcodes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          {jobcodeFilter && (
+            <>
+              <span className="text-xs" style={{ color: "#605E5C" }}>
+                {filtered.length} job{filtered.length !== 1 && "s"}
+              </span>
+              <button
+                onClick={() => setJobcodeFilter("")}
+                className="text-xs font-medium underline"
+                style={{ color: ACCENT }}
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {!collapsed && (
         <div
           ref={scrollRef}
@@ -2361,12 +2435,14 @@ function CompletedJobsPanel({ tasks, printers }) {
           className="overflow-y-auto"
           style={{ maxHeight: 260, borderTop: "1px solid #EDEBE9" }}
         >
-          {sorted.length === 0 ? (
+          {filtered.length === 0 ? (
             <div
               className="text-xs italic py-6 text-center"
               style={{ color: "#8A8886" }}
             >
-              No completed jobs yet.
+              {jobcodeFilter
+                ? `No completed jobs for ${jobcodeFilter}.`
+                : "No completed jobs yet."}
             </div>
           ) : (
             <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
@@ -3002,14 +3078,21 @@ function PrinterColumn({
                     />
                   ))}
                 </div>
-                <button
-                  onClick={() => onPurgeDone(printer.id)}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded border border-dashed hover:bg-red-50"
-                  style={{ borderColor: "#F3D6D8", color: "#D13438" }}
-                  title="Permanently remove all completed jobs from this printer"
-                >
-                  <Trash2 size={12} /> Clear history ({doneTasks.length})
-                </button>
+                {/* Operator-only. Permanently deleting board state is a
+                    class of control designer view never gets — the same rule
+                    that hides the printer menu and status control there (item
+                    10). The completed section itself stays readable in both
+                    views; only the purge button is withheld. */}
+                {operator && (
+                  <button
+                    onClick={() => onPurgeDone(printer.id)}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded border border-dashed hover:bg-red-50"
+                    style={{ borderColor: "#F3D6D8", color: "#D13438" }}
+                    title="Permanently remove all completed jobs from this printer"
+                  >
+                    <Trash2 size={12} /> Clear history ({doneTasks.length})
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -42,6 +42,27 @@ line 1's `×N`, so one fact has one shape and appears on every card. Watch for
 the board reading busy again; the next thing that wants a place on the card
 should have to argue for it.
 
+### Designer view never gets a permanent-delete control
+
+Any control that permanently deletes board state is operator view only, full
+stop. Designer view may *read* everything — assigned cards, completed sections,
+the global history table — but it configures nothing and destroys nothing. This
+is the same rule that keeps the shop-layout gear, the printer settings button
+and the printer status control out of designer view (item 10); the per-printer
+**Clear history** button follows it, and any future permanent-delete control
+inherits it without needing to argue the point again.
+
+*Why this is a rule and not a per-button choice:* Clear history shipped with no
+gate at all — it rendered, enabled, in designer view, and its confirmation
+opened — because "hide the destructive thing in designer view" was applied
+control by control rather than as a principle. Stating it once here is cheaper
+than rediscovering it the next time someone adds a delete button.
+
+*Cost:* a genuinely read-only-plus-tidy action (say, a designer archiving their
+own completed view) would also be blocked and would have to argue for an
+exception. Accepted: the failure mode of a too-permissive delete is worse than
+the friction of a too-strict one.
+
 ### Batched auto-loading over list virtualization
 
 Staging renders 60 cards and adds 60 more as you scroll. Virtualization would
