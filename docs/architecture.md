@@ -22,7 +22,7 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | `ConfirmDialog` | 1627–1674 | Destructive-action confirmation |
 | `ContextMenu` | 1675–1917 | Right-click menu for tasks and printers |
 | `StagingArea` | 1918–2252 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
-| `CompletedJobsPanel` | 2253–2449 | Designer view only: every completed job, newest first, fixed to the bottom of the screen, batched loading, read-only |
+| `CompletedJobsPanel` | 2259–2452 | Designer view only: every completed job, newest first, an in-flow block at the foot of the board, batched loading, read-only |
 | `StatusPicker` | 2450–2559 | Task status control |
 | `PrinterColumn` | 2560–3024 | One printer card: specs, queue, completed section, drop targets |
 | `TaskCard` | 3025–3244 | Collapsed card |

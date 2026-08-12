@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-10.1";
+const BUILD = "2026-08-12.1";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -281,11 +281,6 @@ const PRINTER_MIN_W = 230;
 const PRINTER_GAP = 12;
 const GROUP_PAD = 32;
 const GROUP_GAP = 16;
-
-/* CompletedJobsPanel's collapsed bar height, fixed to the viewport bottom
-   in designer view — shared with PrintFarmScheduler's padding-bottom so
-   the bar never sits over the last row of printer groups. */
-const COMPLETED_PANEL_BAR_HEIGHT = 40;
 
 /* board-wide preferences — persisted in the Settings list.
    defaults match a 12-printer shop: groups of 4 shown 2-wide, 3 groups per row */
@@ -1055,10 +1050,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         background: "#F0F0F2",
         fontFamily:
           "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif",
-        /* room for CompletedJobsPanel's collapsed bar, fixed to the
-           viewport bottom in designer view, so it doesn't sit over the
-           last row of printer groups */
-        paddingBottom: operator ? 0 : COMPLETED_PANEL_BAR_HEIGHT,
       }}
     >
       {/* board scrolls horizontally below its minimum width; thin styled bar */}
@@ -2326,27 +2317,43 @@ function CompletedJobsPanel({ tasks, printers }) {
 
   return (
     <div
-      style={{
-        position: "fixed",
-        left: 0,
-        /* stop short of the bottom-right corner — StatusPill (the save
-           indicator, with the Retry link) floats fixed there in every view,
-           and a full-width bar would sit directly under it */
-        right: 190,
-        bottom: 0,
-        zIndex: 30,
-        background: "white",
-        borderTop: "1px solid #E1DFDD",
-        borderRight: "1px solid #E1DFDD",
-        boxShadow: "0 -2px 8px rgba(0,0,0,0.08)",
-      }}
+      className="mx-5 mt-3 mb-3 rounded-lg overflow-hidden"
+      style={{ background: "white", border: "1px solid #E1DFDD" }}
     >
+      {/* Header first, and the whole thing an ordinary block in the page
+          flow — it reads as one of the board's sections (staging, jobcode
+          filter, groups) rather than the viewport-anchored bar it started
+          as. overflow-hidden keeps the sticky table head inside the
+          rounded corners. */}
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-gray-50"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "Expand completed jobs" : "Collapse completed jobs"}
+      >
+        {collapsed ? (
+          <ChevronRight size={15} style={{ color: "#605E5C" }} />
+        ) : (
+          <ChevronDown size={15} style={{ color: "#605E5C" }} />
+        )}
+        <CheckCircle2 size={15} style={{ color: "#498205" }} />
+        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+          Completed jobs
+        </span>
+        <span
+          className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+          style={{ background: "#DFF6DD", color: "#498205", fontSize: 11 }}
+        >
+          {tasks.length}
+        </span>
+      </button>
+
       {!collapsed && (
         <div
           ref={scrollRef}
           onScroll={onScroll}
           className="overflow-y-auto"
-          style={{ maxHeight: 260 }}
+          style={{ maxHeight: 260, borderTop: "1px solid #EDEBE9" }}
         >
           {sorted.length === 0 ? (
             <div
@@ -2438,29 +2445,6 @@ function CompletedJobsPanel({ tasks, printers }) {
           )}
         </div>
       )}
-
-      <button
-        onClick={() => setCollapsed((v) => !v)}
-        className="w-full px-4 flex items-center gap-2"
-        style={{ height: COMPLETED_PANEL_BAR_HEIGHT, background: "white" }}
-        aria-label={collapsed ? "Expand completed jobs" : "Collapse completed jobs"}
-      >
-        {collapsed ? (
-          <ChevronUp size={15} style={{ color: "#605E5C" }} />
-        ) : (
-          <ChevronDown size={15} style={{ color: "#605E5C" }} />
-        )}
-        <CheckCircle2 size={15} style={{ color: "#498205" }} />
-        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
-          Completed jobs
-        </span>
-        <span
-          className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
-          style={{ background: "#DFF6DD", color: "#498205", fontSize: 11 }}
-        >
-          {tasks.length}
-        </span>
-      </button>
     </div>
   );
 }
