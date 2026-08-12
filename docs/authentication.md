@@ -61,12 +61,34 @@ session.
 The MSAL cache is `localStorage`, not `sessionStorage`, because `auth.html` and
 the tab are **different windows** and must see the same token.
 
-Consequence: on a shared machine, people stay signed in until someone uses the
-**Sign out** link in the status pill. That is a real trade-off, accepted
-deliberately — without it path 2 cannot work at all.
+Consequence: the token survives the tab closing, and people stay signed in.
+Without that, path 2 cannot work at all — `auth.html` writes the token and the
+tab reads it.
 
-Sign-out inside Teams clears the MSAL cache rather than calling `logoutPopup`,
-which is itself a popup Teams would refuse; then the page reloads.
+This used to be recorded here as a shared-machine trade-off. **It isn't one in
+this shop:** machines are not shared between people, and the Teams login on
+each one is persistent. Staying signed in is the intended state, not a risk
+being tolerated.
+
+## There is no sign-out
+
+The status pill used to carry a **Sign out** link and the signed-in account
+name. Both were removed in item 29, along with the `signOut()` function behind
+them.
+
+**The session is not this app's to end.** The board cannot function outside a
+signed-in Teams session, so signing out of the tab could only ever break your
+own session with no way back except a reload — in an app whose entire auth
+design exists to avoid showing a sign-in button in the first place.
+
+**The account name went with it** for the same reason the shared-machine
+caveat above did: identity is settled by the Teams session before the tab
+loads, and one login per machine means the name told nobody anything they did
+not already know. The pill is save status now, and nothing else.
+
+**If a sign-out is ever wanted back**, it needs the Teams special case that
+went with it: `logoutPopup` is a popup, which Teams refuses, so inside Teams it
+has to clear the MSAL cache and reload instead.
 
 ## Why not full Teams SSO
 

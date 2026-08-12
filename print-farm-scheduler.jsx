@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-12.1";
+const BUILD = "2026-08-12.2";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -2098,14 +2098,20 @@ function StagingArea({
             <span className="text-sm font-semibold" style={{ color: "#242424" }}>
               {name}
             </span>
-            <button
-              onClick={() => setEditingName(true)}
-              className="p-1 rounded hover:bg-gray-200"
-              title="Rename staging area"
-              aria-label="Rename staging area"
-            >
-              <Pencil size={12} style={{ color: "#8A8886" }} />
-            </button>
+            {/* Operator only. The staging name is shared shop configuration —
+                it lives in the Settings list, so renaming it renames it for
+                everyone — which is the same reason designer view hides the
+                shop-layout gear and the group rename pencil. */}
+            {operator && (
+              <button
+                onClick={() => setEditingName(true)}
+                className="p-1 rounded hover:bg-gray-200"
+                title="Rename staging area"
+                aria-label="Rename staging area"
+              >
+                <Pencil size={12} style={{ color: "#8A8886" }} />
+              </button>
+            )}
           </>
         )}
         <span
@@ -2749,29 +2755,38 @@ function PrinterColumn({
         <div className="px-3 pb-2">
           <button
             onClick={() => setSpecsOpen((v) => !v)}
-            className="w-full flex items-center gap-1 text-left"
+            className="w-full flex items-start gap-1 text-left"
             aria-expanded={specsOpen}
             title={specsOpen ? "Collapse settings" : "Expand settings"}
           >
+            {/* items-start, not items-center: exceptions stack, and a chevron
+                centred against a three-line block reads as unaligned. The 2px
+                nudge puts it on the first line's baseline. */}
             {specsOpen ? (
-              <ChevronDown size={11} style={{ color: "#8A8886" }} className="flex-shrink-0" />
+              <ChevronDown size={11} style={{ color: "#8A8886", marginTop: 2 }} className="flex-shrink-0" />
             ) : (
-              <ChevronRight size={11} style={{ color: "#8A8886" }} className="flex-shrink-0" />
+              <ChevronRight size={11} style={{ color: "#8A8886", marginTop: 2 }} className="flex-shrink-0" />
             )}
             {exceptions.length === 0 ? (
               <span className="text-xs italic truncate" style={{ color: "#8A8886" }}>
                 Standard setup
               </span>
             ) : (
-              /* Only what differs. Chips rather than a joined string: at this
-                 width a five-value list truncated to "0.4mm · Standard · …"
-                 hid the one value worth reading. */
-              <span className="flex items-center gap-1 flex-wrap min-w-0">
+              /* Only what differs, one per line, in the same grey italic as
+                 "Standard setup" above — the two states of this line are the
+                 same kind of fact and used to look like two different kinds of
+                 thing (black-on-grey chips versus grey italics).
+
+                 Stacked rather than wrapped side by side, which is also what
+                 the chips were really buying: at this card width a row of
+                 values ran together and the one worth reading got lost. The
+                 per-line title survives so a truncated value is recoverable. */
+              <span className="flex flex-col gap-0.5 min-w-0">
                 {exceptions.map((e) => (
                   <span
                     key={e.key}
-                    className="px-1.5 py-0.5 rounded font-medium text-xs truncate"
-                    style={{ background: "#F3F2F1", color: "#605E5C", maxWidth: "100%" }}
+                    className="text-xs italic truncate"
+                    style={{ color: "#8A8886", maxWidth: "100%" }}
                     title={`${e.label}: ${e.text}`}
                   >
                     {e.label}: {e.text}
@@ -4215,18 +4230,11 @@ async function currentAccount() {
   return app.getActiveAccount() || app.getAllAccounts()[0] || null;
 }
 
-async function signOut() {
-  const app = await msal();
-  const account = await currentAccount();
-  if (await inTeams()) {
-    /* logoutPopup is a popup too. Clearing the cache signs this browser out
-       of the app without trying to open a window Teams will refuse. */
-    if (account) app.setActiveAccount(null);
-    await app.clearCache();
-    return;
-  }
-  await app.logoutPopup({ account });
-}
+/* There is deliberately no signOut(). The board never signs anybody out: the
+   session belongs to Teams and to the Microsoft sign-in behind it, and the one
+   control that used to end it here has been removed. Re-adding one means
+   re-adding the Teams special case too — logoutPopup is a popup, which Teams
+   refuses, so it would have to clear the MSAL cache instead. */
 
 async function token() {
   const app = await msal();
@@ -4647,7 +4655,15 @@ async function saveSettings(prev, next, itemIds) {
 
 const SAVE_DEBOUNCE_MS = 700;
 
-function StatusPill({ state, detail, account, onRetry, onSignOut }) {
+/* Save status only — no identity, and nothing to action.
+
+   The board cannot run outside a signed-in Teams session, and Teams logins
+   here are persistent per machine with no machine shared between people. So
+   who you are is already settled before the tab loads: there was nothing for
+   a Sign out button to usefully do except break your own session with no way
+   back, and nothing for an account name to tell you that you did not already
+   know. Both are gone. See docs/authentication.md#there-is-no-sign-out. */
+function StatusPill({ state, detail, onRetry }) {
   const look = {
     saving: { bg: "#FFF4CE", fg: "#7A5B00", text: "Saving…" },
     saved: { bg: "#DFF6DD", fg: "#0E5814", text: "Saved" },
@@ -4658,20 +4674,12 @@ function StatusPill({ state, detail, account, onRetry, onSignOut }) {
     <div
       className="fixed bottom-3 right-3 z-40 flex items-center gap-2 rounded-full px-3 py-1.5 shadow-sm"
       style={{ background: look.bg, color: look.fg, fontSize: 11 }}
-      title={detail || account || ""}
+      title={detail || ""}
     >
       <span className="font-semibold">{look.text}</span>
       {state === "error" && (
         <button onClick={onRetry} className="underline font-semibold">
           Retry
-        </button>
-      )}
-      {account && (
-        <button
-          onClick={onSignOut}
-          className="underline opacity-70 hover:opacity-100"
-        >
-          Sign out
         </button>
       )}
     </div>
@@ -4890,12 +4898,7 @@ function AppShell() {
         <StatusPill
           state={saveState}
           detail={saveDetail}
-          account={account?.username}
           onRetry={flush}
-          onSignOut={async () => {
-            await signOut();
-            window.location.reload();
-          }}
         />
       )}
     </>

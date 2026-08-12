@@ -259,6 +259,14 @@ immediately and fixed by editing one function.
 Exceptions render as neutral chips, not group-coloured ones — group colour is
 retired, and an exception is information rather than a state.
 
+**The chips are gone as of item 26 (2026-08-12).** Exceptions now read as grey
+italics, one per line, matching "Standard setup" — the two states of this line
+are the same kind of fact and looked like two different kinds of thing. The
+argument that produced chips still holds and is now served by stacking instead:
+a wrapped row of values ran together at this card width and hid the one worth
+reading. Everything else in this entry — defaults in code, the trap below —
+is unchanged.
+
 **Risk: Medium.** Display-only, but the logic has a trap in it.
 
 Today the summary joins all five fields and truncates with "…" on narrow cards.
@@ -542,7 +550,10 @@ then deploy and confirm in Teams.
 
 Three small ones. None needs a column, and they can go out as a single PR.
 
-### 25. Hide the staging rename pencil in designer view (1)
+### 25. Hide the staging rename pencil in designer view (1) — DONE
+
+*Shipped 2026-08-12.* `StagingArea` already had `operator`; the rename is the
+only way into `editingName`, so hiding the pencil closes the path entirely.
 
 **Risk: Low.** One conditional in `StagingArea`.
 
@@ -558,7 +569,10 @@ pencil in `operator && …`. Check the rename cannot be reached another way once
 the button is gone — the `editingName` state is entered only from that click
 today, but confirm rather than assume.
 
-### 29. Remove the Sign out button (5)
+### 29. Remove the Sign out button (5) — DONE
+
+*Shipped 2026-08-12.* The account name went too, not just the link — see the
+decision at the end of this entry.
 
 **Risk: Low**, with one consequence worth stating rather than discovering.
 
@@ -572,18 +586,31 @@ Delete the button from `StatusPill`. Then:
 - **`signOut()` becomes dead code.** Delete it too rather than leaving an
   unreferenced function — it also carries the only `logoutPopup` call in the
   file, which is a thing Teams refuses anyway.
-- **[authentication.md](authentication.md) documents the trade-off this
-  changes.** It currently says the localStorage token cache means "on a shared
-  machine people stay signed in until someone uses Sign out." After this it is
-  simply "people stay signed in." Update it in the same commit; the shared-
-  machine caveat still exists, it just has no escape hatch in the app.
+- **[authentication.md](authentication.md) documented a trade-off that turned
+  out not to exist.** It said the localStorage token cache meant "on a shared
+  machine people stay signed in until someone uses Sign out."
 
-**Decide before starting:** whether the signed-in account name stays in the
-pill. It is the only place the board says *who you are*, which is worth
-keeping on a shared machine even without a way to act on it. Recommend
-keeping the name, dropping only the link.
+**Decided — the account name went too, not just the link.** The question was
+whether to keep it as the one place the board says *who you are*. The answer
+settled it: **there are no shared machines.** Teams logins here are persistent
+per machine, one person per machine, and the board cannot run outside a
+signed-in Teams session at all. Identity is therefore settled before the tab
+loads, and the name told nobody anything they did not already know.
 
-### 26. Spec exceptions should read like "Standard setup" (2)
+That also corrected the doc rather than just updating it: staying signed in is
+the **intended state**, not a risk being tolerated, so the shared-machine
+caveat was removed rather than reworded. The pill is save status and nothing
+else now.
+
+### 26. Spec exceptions should read like "Standard setup" (2) — DONE
+
+*Shipped 2026-08-12.* **Decided: one exception per line, nothing side by side**,
+keeping the per-exception element and its tooltip and dropping only the chip
+background and weight. Stacking turned out to be what the chips were really
+buying — at this card width a wrapped row ran values together, which was the
+original argument for chips in item 7, so the reason survives the restyle.
+The summary button moved to `items-start` so the chevron aligns with the first
+line rather than centring against a three-line block.
 
 **Risk: Low.** One style block in `PrinterColumn`.
 
@@ -786,11 +813,12 @@ left is item 6's optional wording tidy-up, which breaks nothing either way.
 
 **What is left, in the order I would do it:**
 
-1. **Tier 8** (25, 29, 26) — the three trivial ones. Single PR. Each has a
-   small decision attached (does the account name stay in the pill, how do
-   exceptions separate without chips) but none blocks starting.
-2. **Tier 9** (27) — assigned-card fields. Mostly ungating a line that already
-   exists; the real work is deciding what leaves the card, not what joins it.
+1. ~~**Tier 8** (25, 29, 26)~~ — done, shipped 2026-08-12 in one PR. Both open
+   decisions were answered rather than defaulted: exceptions stack one per
+   line, and the account name left the pill along with Sign out.
+2. **Tier 9** (27) — assigned-card fields. **Next up.** Mostly ungating a line
+   that already exists; the real work is deciding what leaves the card, not
+   what joins it.
 3. **Tier 10** (28) — the Mac blank screen. **Sorted third by effort, but it
    is the only item on this list that is actively broken for someone.** If a
    Mac user needs the board this week it goes first, and the effort estimate
@@ -803,7 +831,8 @@ left is item 6's optional wording tidy-up, which breaks nothing either way.
    materially easier once the interface stops moving, which items 25–27 are
    evidence it has not yet.
 
-**Current state (2026-08-12):** five new items (25–29) from the 2026-08-12
-request, none needing SharePoint. Item 28 is a live bug and cannot be worked
-from a remote session — it needs console output from an affected Mac before
-anyone can estimate it, let alone fix it.
+**Current state (2026-08-12):** five new items (25–29) came in, none needing
+SharePoint; 25, 26 and 29 shipped the same day. Left: **27** (assigned-card
+fields), **28**, and the decision-gated three. Item 28 is a live bug and cannot
+be worked from a remote session — it needs console output from an affected Mac
+before anyone can estimate it, let alone fix it.
