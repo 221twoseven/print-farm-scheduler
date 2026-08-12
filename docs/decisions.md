@@ -33,6 +33,15 @@ Earlier cards carried far more on their face and read as visually busy. The
 collapsed card now shows only name, status and ETA; everything else is one click
 away.
 
+**Loosened 2026-08-12**, at the shop's request: the card also carries a grey
+detail line with jobcode, quantity and need-by. The principle holds — the modal
+is still where a job is read in full — but designer view cannot open an assigned
+job at all, so for a designer the card face is the only surface those three
+facts can reach. Quantity moved onto that line as `Qty N` rather than staying as
+line 1's `×N`, so one fact has one shape and appears on every card. Watch for
+the board reading busy again; the next thing that wants a place on the card
+should have to argue for it.
+
 ### Batched auto-loading over list virtualization
 
 Staging renders 60 cards and adds 60 more as you scroll. Virtualization would

@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-12.2";
+const BUILD = "2026-08-12.3";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -3145,8 +3145,11 @@ function TaskCard({
             : "Click for details · drag to move · right-click for menu"
         }
       >
-        {/* line 1: title + qty + priority flag + status pill. No status dot —
-            the pill two elements along says the same thing in words. */}
+        {/* line 1: title + note icon + priority flag + status pill. No status
+            dot — the pill two elements along says the same thing in words.
+            Quantity is not here: it reads as "Qty N" on the detail line below,
+            the same way on every card, instead of appearing as ×N only when
+            greater than one. */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span
             className="flex-1 min-w-0 text-sm leading-snug truncate"
@@ -3158,15 +3161,6 @@ function TaskCard({
           >
             {task.title}
           </span>
-          {(task.quantity || 1) > 1 && (
-            <span
-              className="font-semibold flex-shrink-0"
-              style={{ color: "#8A8886", fontSize: 11 }}
-              title={`Quantity: ${task.quantity}`}
-            >
-              ×{task.quantity}
-            </span>
-          )}
           {operatorNote && (
             <span
               className="flex-shrink-0"
@@ -3199,39 +3193,40 @@ function TaskCard({
           )}
         </div>
 
-        {/* Need by, when one is set. Shown in staging too: a deadline exists
-            from the moment the job does, unlike the ETA. Rendered only when
-            present, so cards without one stay as minimal as they were.
+        {/* detail line: jobcode · Qty N · Need by. On every card, in both
+            views. It started as an operator-view staging summary, but a
+            designer cannot open an assigned job at all, so the card face is
+            the only place these facts can reach them — the same reason the
+            operator-note icon sits on line 1.
 
-            Deliberately not red when the date has passed — "overdue" on this
-            board still means the ETA has passed (isOverdue), and quietly
-            introducing a second, competing lateness signal is a behaviour
-            change the shop has not asked for yet. */}
-        {(needBy || stagingLocked) && (
-          <div
-            className="mt-1 flex items-center gap-1.5 flex-wrap"
-            style={{ color: "#8A8886", fontSize: 10 }}
-          >
-            {stagingLocked && task.jobcode && (
-              <span className="tabular-nums" style={{ color: "#605E5C" }}>
-                {task.jobcode}
+            Jobcode renders only when the task has one: it is required on new
+            tasks, but rows created before that rule still exist.
+
+            Need by is deliberately not red when the date has passed —
+            "overdue" on this board still means the ETA has passed (isOverdue),
+            and quietly introducing a second, competing lateness signal is a
+            behaviour change the shop has not asked for yet. */}
+        <div
+          className="mt-1 flex items-center gap-1.5 flex-wrap"
+          style={{ color: "#8A8886", fontSize: 10 }}
+        >
+          {task.jobcode && (
+            <span className="tabular-nums" style={{ color: "#605E5C" }}>
+              {task.jobcode}
+            </span>
+          )}
+          <span style={{ color: "#605E5C" }}>Qty {task.quantity || 1}</span>
+          {needBy && (
+            <>
+              <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
+                Need by
               </span>
-            )}
-            {stagingLocked && (
-              <span style={{ color: "#605E5C" }}>Qty {task.quantity || 1}</span>
-            )}
-            {needBy && (
-              <>
-                <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
-                  Need by
-                </span>
-                <span className="tabular-nums" style={{ color: "#605E5C" }}>
-                  {needBy.date}
-                </span>
-              </>
-            )}
-          </div>
-        )}
+              <span className="tabular-nums" style={{ color: "#605E5C" }}>
+                {needBy.date}
+              </span>
+            </>
+          )}
+        </div>
 
         {/* line 2: ETA, compact inline — printers only. Red when past due. */}
         {!inStaging && (
