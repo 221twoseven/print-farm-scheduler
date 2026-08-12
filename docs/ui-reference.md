@@ -26,7 +26,7 @@ consistent with (or deliberately update).
    Hidden entirely when no assigned job carries one.
 5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
-6. **Completed jobs panel** — designer view only, the last block on the board.
+6. **Completed jobs panel** — the last block on the board, in both views.
 
 ## Operator view and Designer view
 
@@ -136,10 +136,13 @@ staging carries `printerId === "staging"`.
   quantity and need-by, grey, under the title. It began as an operator-view-only
   summary and now shows in both views; see "Task cards" below.
 
-## Completed jobs panel (designer view)
+## Completed jobs panel (both views)
 
-Designer view hides every assigned job's card entirely, including finished
-ones — this panel is the one place that history stays visible there.
+The permanent, cross-printer record of finished work — one table sorted by
+completion, instead of opening each printer's own Completed section in turn.
+Shown in **both views**: an operator and a designer have equal reason to look
+up what shipped, and the panel carries no control either shouldn't have (it has
+no purge button in either view — see decisions.md).
 
 It is an **ordinary block in the page flow**, the last one on the board, and
 carries the same chrome as the staging panel, the jobcode filter and the group
@@ -158,12 +161,18 @@ space; the header expands it.
 - **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
   Notes (an icon, hover reads the operator's note — same convention as the
   card). Blank where a task has no value for that column, not omitted.
+- **Jobcode filter** — a dropdown above the table, same pattern as the board's
+  main jobcode filter. Built from **every jobcode that has ever completed**, not
+  the live board's — this is the permanent record, so a code whose last job
+  finished long ago must still be selectable even though nothing on a printer
+  carries it any more. Hidden when nothing completed has a jobcode.
 - **Read-only, like every assigned job in designer view** — no click, no
   drag, no context menu; the table exists to show history, not to edit it.
+- **No purge control, in either view.** The permanent record is never cleared
+  from here; per-printer Clear history (operator only) is the only way completed
+  jobs leave the board. See decisions.md.
 - **Batched loading**, same pattern and page size as staging (`COMPLETED_PAGE`,
-  60 rows).
-- Not shown in operator view — the printer's own Completed section (below)
-  already covers this for that view.
+  60 rows). Paging is over the filtered rows, and a filter change resets it.
 
 ## Printer cards
 
@@ -201,8 +210,11 @@ printer belongs to is answered by the group it is sitting in.
   "+N more" expander; the queue force-opens if the task being edited sits below
   slot 2.
 - **Completed** — finished jobs collapse into a separate section at the bottom
-  and stop consuming an active slot. **Clear completed** purges them (with a
-  confirmation).
+  and stop consuming an active slot. The section is readable in **both views**.
+  **Clear history** permanently purges that printer's completed jobs (with a
+  confirmation) and is **operator view only** — designer view sees the section
+  but not the button. Permanently deleting board state is a class of control
+  designer view never gets; see decisions.md.
 - **Empty state** — reads "No active jobs", "Reserved — no new jobs", "Out for
   maintenance", or "Drop task here" while dragging.
 - Deleting a printer sends its tasks to staging rather than deleting them.
