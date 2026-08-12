@@ -132,9 +132,8 @@ staging carries `printerId === "staging"`.
 - **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
   are all required; **Add task** stays disabled until every one is filled in.
 - Drop a card anywhere on the panel to send it back to staging.
-- Staging cards carry the same detail line as every other card — jobcode,
-  quantity and need-by, grey, under the title. It began as an operator-view-only
-  summary and now shows in both views; see "Task cards" below.
+- Staging cards use the same three-row layout as assigned cards (title + status,
+  jobcode, then quantity), minus the ETA — see "Task cards" below.
 
 ## Completed jobs panel (both views)
 
@@ -221,26 +220,28 @@ printer belongs to is answered by the group it is sitting in.
 
 ## Task cards
 
-Collapsed cards stay close to minimal. Two lines, plus the ETA on assigned
-cards:
+Collapsed cards stay close to minimal — three rows, identical in staging and on
+a printer except where noted:
 
-- **Line 1** — title, note icon, priority flag, status pill (printers only).
-  There is no status dot: the pill beside it already says the same thing in
-  words.
-- **Detail line** — jobcode (when the task has one), `Qty N`, and `Need by`
-  with its date when one is set. Grey, one size down.
-- **ETA** — assigned cards only, since an ETA only means something once a job
-  has a printer.
+- **Row 1** — title on the left, **status pill on the right**. Between them sit
+  the note icon and the priority flag when present; they are small at-a-glance
+  markers with nowhere else to go, not part of the name/status pairing. There is
+  no status dot: the pill already says the same thing in words. The status pill
+  shows on **every** card, staging included.
+- **Row 2** — **jobcode, indented under the title** so the two read as related:
+  the code belongs to the job named above it. Shown only when the task has a
+  jobcode (required on new tasks, but older rows may lack one).
+- **Row 3** — **ETA on the left, `Qty N` on the right.** ETA is assigned-cards
+  only, since a prediction means nothing before a job has a printer; a staging
+  card's row 3 is therefore just the quantity. Quantity always reads as `Qty N`,
+  the same on every card.
+
+**Need by is not on the card.** It lives in the detail modal. It used to sit on
+a shared detail line; the three-row layout the shop asked for does not include
+it, so it was dropped from the card face rather than squeezed in.
 
 Everything else lives in the detail modal — earlier cards showed far more and
 the feedback was that the board read as visually busy.
-
-The detail line is a deliberate loosening of that, asked for by the shop: it
-started as an operator-view staging summary and now shows on every card in both
-views, because designer view cannot open an assigned job at all and the card
-face is the only place those facts reach a designer. **Quantity always reads as
-`Qty N`** — it used to appear as `×N` on line 1 and only when greater than one,
-which meant the same fact had two shapes and a quantity of 1 had none.
 
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
@@ -251,10 +252,6 @@ which meant the same fact had two shapes and a quantity of 1 had none.
   actions, so a red date alone does not say *why*. A **Complete** job is never
   overdue however old its ETA, and a passed **need-by** date is not called
   overdue — on this board that word means the ETA has passed.
-- **Need by** shows on staging cards too, unlike the ETA: a deadline exists from
-  the moment the job does, while an ETA only means something once the job has a
-  printer. It renders only when a date is set, so cards without one look exactly
-  as they did.
 - A completed card is tinted and stops looking like live work.
 - **Note icon** — a small icon appears when the task carries an **operator
   note**; hovering reads it. The icon rather than hover alone, because hover

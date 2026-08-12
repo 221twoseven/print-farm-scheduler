@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-12.4";
+const BUILD = "2026-08-12.5";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -3150,7 +3150,6 @@ function TaskCard({
   operator,
 }) {
   const eta = formatEta(task.etaDate, task.etaTime);
-  const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
   /* Operator view, staging only: reading the summary is enough — opening the
      job or its context menu is the designer's job. Dragging stays live, since
      that's how an operator assigns the job to a printer; only the click-to-
@@ -3215,7 +3214,8 @@ function TaskCard({
         boxShadow: indicatorShadow,
       }}
     >
-      {/* collapsed row — minimal: name + status + ETA. Detail in modal. */}
+      {/* collapsed card, three rows: name + status / jobcode / ETA + Qty.
+          Need by is not here — it lives in the detail modal. Detail in modal. */}
       <button
         onClick={onExpand}
         disabled={disabled || stagingLocked}
@@ -3228,11 +3228,12 @@ function TaskCard({
             : "Click for details · drag to move · right-click for menu"
         }
       >
-        {/* line 1: title + note icon + priority flag + status pill. No status
-            dot — the pill two elements along says the same thing in words.
-            Quantity is not here: it reads as "Qty N" on the detail line below,
-            the same way on every card, instead of appearing as ×N only when
-            greater than one. */}
+        {/* Row 1: task name (left) · indicators · status (right). No status
+            dot — the pill says the same thing in words. The note icon and the
+            priority flag sit just left of the pill: not part of the requested
+            name/status layout, but small at-a-glance markers that would have
+            nowhere else to go. Status now shows in staging too — the layout
+            asks for it on every card, where before it was assigned-only. */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span
             className="flex-1 min-w-0 text-sm leading-snug truncate"
@@ -3261,80 +3262,72 @@ function TaskCard({
               title={`Priority: ${task.priority}`}
             />
           )}
-          {!inStaging && (
-            <span
-              className="px-1.5 rounded font-medium flex-shrink-0"
-              style={{
-                background: st.bg,
-                color: st.text,
-                fontSize: 10,
-                lineHeight: "15px",
-              }}
-            >
-              {task.status}
-            </span>
-          )}
-        </div>
-
-        {/* detail line: jobcode · Qty N · Need by. On every card, in both
-            views. It started as an operator-view staging summary, but a
-            designer cannot open an assigned job at all, so the card face is
-            the only place these facts can reach them — the same reason the
-            operator-note icon sits on line 1.
-
-            Jobcode renders only when the task has one: it is required on new
-            tasks, but rows created before that rule still exist.
-
-            Need by is deliberately not red when the date has passed —
-            "overdue" on this board still means the ETA has passed (isOverdue),
-            and quietly introducing a second, competing lateness signal is a
-            behaviour change the shop has not asked for yet. */}
-        <div
-          className="mt-1 flex items-center gap-1.5 flex-wrap"
-          style={{ color: "#8A8886", fontSize: 10 }}
-        >
-          {task.jobcode && (
-            <span className="tabular-nums" style={{ color: "#605E5C" }}>
-              {task.jobcode}
-            </span>
-          )}
-          <span style={{ color: "#605E5C" }}>Qty {task.quantity || 1}</span>
-          {needBy && (
-            <>
-              <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
-                Need by
-              </span>
-              <span className="tabular-nums" style={{ color: "#605E5C" }}>
-                {needBy.date}
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* line 2: ETA, compact inline — printers only. Red when past due. */}
-        {!inStaging && (
-          <div
-            className="mt-1 flex items-center gap-1.5"
-            style={{ color: overdue ? "#D13438" : "#8A8886", fontSize: 10 }}
+          <span
+            className="px-1.5 rounded font-medium flex-shrink-0"
+            style={{
+              background: st.bg,
+              color: st.text,
+              fontSize: 10,
+              lineHeight: "15px",
+            }}
           >
-            <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
-              ETA
-            </span>
-            <span
-              className={`tabular-nums${overdue ? " font-semibold" : ""}`}
-              style={{ color: overdue ? "#D13438" : "#605E5C" }}
-            >
-              {eta ? `${eta.date || "—"}  ${eta.time || ""}`.trim() : "Not set"}
-            </span>
+            {task.status}
+          </span>
+        </div>
+
+        {/* Row 2: jobcode, indented under the name so the two read as related
+            — the code belongs to the job named above it. Only when the task
+            carries one: required on new tasks, but rows created before that
+            rule still exist and would otherwise leave a blank indented line. */}
+        {task.jobcode && (
+          <div
+            className="mt-0.5 tabular-nums truncate"
+            style={{ paddingLeft: 12, color: "#605E5C", fontSize: 10 }}
+            title={`Jobcode: ${task.jobcode}`}
+          >
+            {task.jobcode}
           </div>
         )}
+
+        {/* Row 3: ETA on the left, Qty on the right. ETA is printers-only and
+            unchanged — a prediction that only means something once a job is on
+            a printer, so a staging card's left side stays empty and Qty sits
+            alone on the right. Red when past due. */}
+        <div
+          className="mt-1 flex items-center justify-between gap-1.5"
+          style={{ fontSize: 10 }}
+        >
+          <span
+            className="flex items-center gap-1.5 min-w-0"
+            style={{ color: overdue ? "#D13438" : "#8A8886" }}
+          >
+            {!inStaging && (
+              <>
+                <span className="font-semibold uppercase tracking-wide" style={{ fontSize: 9 }}>
+                  ETA
+                </span>
+                <span
+                  className={`tabular-nums${overdue ? " font-semibold" : ""}`}
+                  style={{ color: overdue ? "#D13438" : "#605E5C" }}
+                >
+                  {eta ? `${eta.date || "—"}  ${eta.time || ""}`.trim() : "Not set"}
+                </span>
+              </>
+            )}
+          </span>
+          <span
+            className="tabular-nums flex-shrink-0"
+            style={{ color: "#605E5C" }}
+          >
+            Qty {task.quantity || 1}
+          </span>
+        </div>
 
         {/* Name the state rather than leaving red to carry it alone. Red is
             also doing work elsewhere on this board — urgent priority, delete
             actions — so a date being red is not self-explanatory. Says
             "overdue" only where it is true: the ETA has passed and the job is
-            not finished (isOverdue). A passed Need by is not called overdue,
-            because the board has never defined it that way. */}
+            not finished (isOverdue). */}
         {!inStaging && overdue && (
           <div
             className="font-semibold uppercase tracking-wide"
