@@ -26,8 +26,7 @@ consistent with (or deliberately update).
    Hidden entirely when no assigned job carries one.
 5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
-6. **Completed jobs panel** — designer view only, fixed to the bottom of the
-   screen.
+6. **Completed jobs panel** — designer view only, the last block on the board.
 
 ## Operator view and Designer view
 
@@ -43,7 +42,7 @@ view** hides everything that configures the shop or assigns work:
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
 | Dragging a task onto a printer, and **Move to** in the context menu | — (dragging *within* staging no longer reorders anything, in either view: staging order is computed) |
-| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it. **Completed jobs**, read-only, via the bottom completed-jobs panel |
+| **Assigned jobs entirely**: no detail modal, no context menu, no drag | **Operator notes**, via the note icon on the card — hover reads it. **Completed jobs**, read-only, via the completed-jobs panel at the foot of the board |
 
 **The dividing line is assignment.** A job in staging belongs to the designer
 who raised it and stays fully editable. The moment it is on a printer it is the
@@ -138,11 +137,15 @@ staging carries `printerId === "staging"`.
 ## Completed jobs panel (designer view)
 
 Designer view hides every assigned job's card entirely, including finished
-ones — this panel is the one place that history stays visible there. Fixed to
-the bottom of the screen, but stops short of the bottom-right corner so it
-never sits under the save-status pill (with the **Retry** link) that floats
-there in every view. Collapsed by default so it doesn't compete with the
-groups grid for space; a chevron on its bar expands it.
+ones — this panel is the one place that history stays visible there.
+
+It is an **ordinary block in the page flow**, the last one on the board, and
+carries the same chrome as the staging panel, the jobcode filter and the group
+cards: same side margins, rounded corners, white background, one-pixel border,
+header row at the top with a chevron. It was originally anchored to the bottom
+of the viewport, which made it read as browser furniture rather than as part of
+the board. Collapsed by default so it doesn't compete with the groups grid for
+space; the header expands it.
 
 - **Every task with status Complete, across every printer** — not scoped to
   one group or printer.
