@@ -636,7 +636,29 @@ are what make a truncated value recoverable.
 
 ## Tier 9 — moderate, no SharePoint (2026-08-12 request)
 
-### 27. Assigned job cards show jobcode, quantity and need-by (3)
+### 27. Assigned job cards show jobcode, quantity and need-by (3) — DONE
+
+*Shipped 2026-08-12.* All three open decisions went the way this entry
+recommended:
+
+- **`×N` is gone from line 1.** Quantity reads as `Qty N` on the detail line,
+  on every card, including quantity 1 — one fact, one shape, always present.
+- **Both views, and every card**, not just assigned ones in operator view. The
+  line stopped being conditional on `stagingLocked` entirely; a designer who
+  cannot open an assigned job now reads its jobcode, quantity and need-by from
+  the card face, which was the whole point.
+- **Jobcode still renders only when the task has one** — item 16 made it
+  required on new tasks, but rows that predate that rule still exist and would
+  otherwise leave a gap in the line.
+
+Need-by needed no change: it already rendered on assigned cards whenever a date
+was set, and still does not turn red when passed (overdue means the ETA has
+passed — unchanged).
+
+The loosening of "minimal collapsed cards" is recorded in
+[decisions.md](decisions.md#minimal-collapsed-cards-plus-a-detail-modal) as a
+requested change rather than drift, with the note that the next thing wanting a
+place on the card has to argue for it.
 
 **Risk: Low–Medium.** Display only, but it touches the card whose minimalism is
 a settled decision, and it interacts with the operator/designer split.
@@ -670,7 +692,12 @@ always-shown quantity are actually missing.
 
 ## Tier 10 — a live bug, effort unknown until diagnosed (2026-08-12 request)
 
-### 28. Mac Teams: sign-in prompt, then a blank screen (4)
+### 28. Mac Teams: sign-in prompt, then a blank screen (4) — TABLED
+
+*Tabled 2026-08-12, waiting on a Mac.* The requester has a MacBook available
+from 2026-08-13 and will capture the console then. Nothing to do until that
+output exists — the three suspects below are guesses, and picking one without
+evidence is how auth gets rewritten for no reason.
 
 **Risk: High**, and unlike everything else on this list it is **currently
 broken for real users** rather than merely absent. Sorted here because its
@@ -806,8 +833,8 @@ Treat this item as "propose an approach and get it signed off", not
 
 ## Suggested sequencing
 
-Everything through Tier 7 is closed: items 1, 2, 4–10, 13–23 shipped; item 3
-declined. Both SharePoint column batches exist and `checkSchema()` accepts
+Everything through Tier 9 is closed: items 1, 2, 4–10, 13–23, 25–27 and 29
+shipped; item 3 declined. Both SharePoint column batches exist and `checkSchema()` accepts
 them. **Nothing outstanding needs a new column** — the only SharePoint work
 left is item 6's optional wording tidy-up, which breaks nothing either way.
 
@@ -816,13 +843,13 @@ left is item 6's optional wording tidy-up, which breaks nothing either way.
 1. ~~**Tier 8** (25, 29, 26)~~ — done, shipped 2026-08-12 in one PR. Both open
    decisions were answered rather than defaulted: exceptions stack one per
    line, and the account name left the pill along with Sign out.
-2. **Tier 9** (27) — assigned-card fields. **Next up.** Mostly ungating a line
-   that already exists; the real work is deciding what leaves the card, not
-   what joins it.
-3. **Tier 10** (28) — the Mac blank screen. **Sorted third by effort, but it
-   is the only item on this list that is actively broken for someone.** If a
-   Mac user needs the board this week it goes first, and the effort estimate
-   only exists after the console output does.
+2. ~~**Tier 9** (27)~~ — done, shipped 2026-08-12. It was exactly what the
+   entry predicted: ungating a line that already existed, with the real work
+   being what left the card (`×N`) rather than what joined it.
+3. **Tier 10** (28) — the Mac blank screen. **Tabled until a Mac is
+   available (2026-08-13).** It is the only item on this list actively broken
+   for someone, so it goes first the moment the console output lands; the
+   effort estimate does not exist before then.
 4. **Tier 11** (12, then 11, then 24) — the decision-gated three. Take **12**
    first: the research is cheap and its answer may well be "the notifications
    half is off the table", which is worth knowing before anyone plans around
@@ -832,7 +859,7 @@ left is item 6's optional wording tidy-up, which breaks nothing either way.
    evidence it has not yet.
 
 **Current state (2026-08-12):** five new items (25–29) came in, none needing
-SharePoint; 25, 26 and 29 shipped the same day. Left: **27** (assigned-card
-fields), **28**, and the decision-gated three. Item 28 is a live bug and cannot
-be worked from a remote session — it needs console output from an affected Mac
-before anyone can estimate it, let alone fix it.
+SharePoint, and all four buildable ones — 25, 26, 27, 29 — shipped the same
+day. Left: **28**, tabled until a Mac is on hand tomorrow, and the
+decision-gated three. Everything through Tier 9 is now closed, and no
+outstanding item needs a SharePoint column.

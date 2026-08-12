@@ -132,9 +132,9 @@ staging carries `printerId === "staging"`.
 - **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
   are all required; **Add task** stays disabled until every one is filled in.
 - Drop a card anywhere on the panel to send it back to staging.
-- **Operator view only**: the collapsed card also shows jobcode and quantity,
-  grey, on the same line as need-by (see "One asymmetry runs the other way"
-  above).
+- Staging cards carry the same detail line as every other card — jobcode,
+  quantity and need-by, grey, under the title. It began as an operator-view-only
+  summary and now shows in both views; see "Task cards" below.
 
 ## Completed jobs panel (designer view)
 
@@ -209,11 +209,26 @@ printer belongs to is answered by the group it is sitting in.
 
 ## Task cards
 
-Collapsed cards are deliberately minimal: title, quantity, priority flag,
-status pill, the need-by date when one is set, and the ETA. Everything else
-lives in the detail modal — earlier cards showed more and the feedback was that
-the board read as visually busy. There is no status dot: the pill beside it
-already says the same thing in words.
+Collapsed cards stay close to minimal. Two lines, plus the ETA on assigned
+cards:
+
+- **Line 1** — title, note icon, priority flag, status pill (printers only).
+  There is no status dot: the pill beside it already says the same thing in
+  words.
+- **Detail line** — jobcode (when the task has one), `Qty N`, and `Need by`
+  with its date when one is set. Grey, one size down.
+- **ETA** — assigned cards only, since an ETA only means something once a job
+  has a printer.
+
+Everything else lives in the detail modal — earlier cards showed far more and
+the feedback was that the board read as visually busy.
+
+The detail line is a deliberate loosening of that, asked for by the shop: it
+started as an operator-view staging summary and now shows on every card in both
+views, because designer view cannot open an assigned job at all and the card
+face is the only place those facts reach a designer. **Quantity always reads as
+`Qty N`** — it used to appear as `×N` on line 1 and only when greater than one,
+which meant the same fact had two shapes and a quantity of 1 had none.
 
 - **Click** — open the detail modal.
 - **Drag** — move between printers and staging.
