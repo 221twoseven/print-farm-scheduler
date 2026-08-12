@@ -14,6 +14,10 @@ an early tier without renumbering everything around it. Read the tier and the
 order within it for what to do next; read the number when you need to refer to
 an item.
 
+**Tier numbers are the opposite**: they are positions, not identities, and they
+renumber as work is re-sorted by effort. The decision-gated group has been Tier
+4, then 8, and is Tier 11 today. Refer to items by number and tiers by name.
+
 **Risk** is blast radius if the change is wrong, not effort:
 
 - **Low** — a visual change; worst case it looks wrong and is obvious immediately.
@@ -534,7 +538,155 @@ then deploy and confirm in Teams.
 
 ---
 
-## Tier 8 — needs a decision before any code
+## Tier 8 — trivial, no SharePoint (2026-08-12 request)
+
+Three small ones. None needs a column, and they can go out as a single PR.
+
+### 25. Hide the staging rename pencil in designer view (1)
+
+**Risk: Low.** One conditional in `StagingArea`.
+
+The pencil beside the staging area's name opens an in-place rename. It is
+visible in both views, but the staging name is **shared shop configuration** —
+it lives in the SharePoint Settings list under `stagingName`, so a designer
+renaming it renames it for everyone. That is exactly the class of control
+designer view exists to hide (see item 10 and
+[ui-reference.md](ui-reference.md)).
+
+`StagingArea` already receives the `operator` prop, so this is wrapping the
+pencil in `operator && …`. Check the rename cannot be reached another way once
+the button is gone — the `editingName` state is entered only from that click
+today, but confirm rather than assume.
+
+### 29. Remove the Sign out button (5)
+
+**Risk: Low**, with one consequence worth stating rather than discovering.
+
+Sign-in is Teams' and Microsoft's, not this app's. Somebody signed into Teams
+should never be signing out of a tab inside it — the button offers a way to
+break your own session with no way back except reloading, and the app's own
+sign-in paths exist to avoid ever showing a button in the first place.
+
+Delete the button from `StatusPill`. Then:
+
+- **`signOut()` becomes dead code.** Delete it too rather than leaving an
+  unreferenced function — it also carries the only `logoutPopup` call in the
+  file, which is a thing Teams refuses anyway.
+- **[authentication.md](authentication.md) documents the trade-off this
+  changes.** It currently says the localStorage token cache means "on a shared
+  machine people stay signed in until someone uses Sign out." After this it is
+  simply "people stay signed in." Update it in the same commit; the shared-
+  machine caveat still exists, it just has no escape hatch in the app.
+
+**Decide before starting:** whether the signed-in account name stays in the
+pill. It is the only place the board says *who you are*, which is worth
+keeping on a shared machine even without a way to act on it. Recommend
+keeping the name, dropping only the link.
+
+### 26. Spec exceptions should read like "Standard setup" (2)
+
+**Risk: Low.** One style block in `PrinterColumn`.
+
+The collapsed specs line reads `Standard setup` in **grey italics** when a
+printer is at defaults, but lists exceptions as **chips** — black-ish text
+(`#605E5C`) on a grey background (`#F3F2F1`), medium weight. The two states of
+the same line look like two different kinds of thing. Match the exception text
+to the standard text: grey italic, no chip background.
+
+This **partly reverses item 7**, which chose chips deliberately (they inherited
+the group chip's styling from item 2). Record the reversal there rather than
+quietly restyling — the reason chips were chosen was that a joined,
+truncated five-value string hid the one value worth reading, and that reason
+has not gone away.
+
+**Decide before starting:** how multiple exceptions separate now that they have
+no chip edges — comma, middot, or one per line. Recommend a middot on one
+wrapping line, which keeps the "only what differs" scan while matching the
+standard-setup voice. Keep the per-exception `title` tooltips either way; they
+are what make a truncated value recoverable.
+
+---
+
+## Tier 9 — moderate, no SharePoint (2026-08-12 request)
+
+### 27. Assigned job cards show jobcode, quantity and need-by (3)
+
+**Risk: Low–Medium.** Display only, but it touches the card whose minimalism is
+a settled decision, and it interacts with the operator/designer split.
+
+An assigned card today shows: title, `×N` (only when quantity > 1), an operator-
+note icon, a priority flag, the status pill, need-by when set, and the ETA. The
+ask is jobcode, quantity and due date alongside the existing ETA, status and
+name.
+
+Most of this already exists and is simply gated off. The jobcode-and-quantity
+line was built for item 18 and renders only when `stagingLocked` is true
+(operator view, staging only). **Need-by already renders on assigned cards
+whenever a date is set** — so of the three asked for, only jobcode and an
+always-shown quantity are actually missing.
+
+**Decide before starting:**
+
+- **The `×N` on line 1 duplicates a spelled-out quantity on line 2.** One of
+  them should go. Recommend dropping `×N` and keeping `Qty N` on the detail
+  line, so quantity always reads the same way and always appears, rather than
+  appearing only when it is greater than 1.
+- **Both views, or operator only?** Recommend both. Designer view cannot open
+  an assigned job at all, so the card face is the only place a designer can
+  learn anything about it — the same argument that put the operator-note icon
+  there in item 14.
+- This pushes against [decisions.md](decisions.md)'s "minimal collapsed cards
+  plus a detail modal". It is a deliberate, requested loosening rather than
+  drift, so note it there if the card starts feeling busy again.
+
+---
+
+## Tier 10 — a live bug, effort unknown until diagnosed (2026-08-12 request)
+
+### 28. Mac Teams: sign-in prompt, then a blank screen (4)
+
+**Risk: High**, and unlike everything else on this list it is **currently
+broken for real users** rather than merely absent. Sorted here because its
+effort is unknown, not because it is low priority — see the sequencing note.
+
+Opening the tab in the Teams desktop client on macOS prompts for login, the
+login appears to succeed, and the board renders blank.
+
+**This cannot be fixed from here.** No Mac, and this sandbox cannot run the app
+in Teams at all. The first thing needed is the console from an affected Mac —
+right-click the tab → *Inspect*, or the Teams dev tools — captured across the
+whole load, not just after the blank appears.
+
+A blank screen is itself informative: `AppShell` renders a `Centered` panel for
+every phase it knows about, including `error` ("Could not load the board"). A
+truly blank page therefore suggests a failure *before or during* render, not a
+handled error path. Suspects, in the order worth checking:
+
+- **`inTeams()` loses its race.** It races `microsoftTeams.app.initialize()`
+  against a hard 2-second timer and caches the answer. A slower or
+  cold-starting Mac client that resolves late is misread as "not in Teams",
+  which sends the app down the browser-popup path — and Teams refuses popups
+  opened by page script (`popup_window_error`). The 2s constant is the single
+  most suspicious number in the auth code.
+- **Storage partitioning between `auth.html` and the tab.** The whole reason
+  the MSAL cache is `localStorage` rather than `sessionStorage` is that those
+  are two different windows that must see the same token. If the macOS
+  WebKit-based client partitions storage between them, `getAllAccounts()`
+  returns empty after a *successful* sign-in — which matches the symptom
+  exactly ("login yields blank"). Note `teamsSignIn()` throws a specific error
+  here ("Sign-in finished but no account was cached"), so check whether that
+  string appears anywhere before assuming.
+- **ITP / third-party cookie blocking breaking `ssoSilent`'s hidden iframe** —
+  more aggressive on WebKit than on the Windows client's Chromium.
+
+Do **not** start rewriting auth on the strength of these guesses. Get the
+console output, match it against the three, then fix the one that is real.
+[authentication.md](authentication.md) has the full three-path flow and the
+existing known gaps.
+
+---
+
+## Tier 11 — needs a decision before any code
 
 All three of these are larger than everything above combined, and each pushes
 against the architecture rather than sitting inside it. None should be started
@@ -627,23 +779,31 @@ Treat this item as "propose an approach and get it signed off", not
 
 ## Suggested sequencing
 
-Tiers 1–3 are closed: items 1, 2, 4–10, 13, 14 shipped; item 3 declined.
-**Tiers 4–7 are now closed too**: items 15–23 all shipped.
+Everything through Tier 7 is closed: items 1, 2, 4–10, 13–23 shipped; item 3
+declined. Both SharePoint column batches exist and `checkSchema()` accepts
+them. **Nothing outstanding needs a new column** — the only SharePoint work
+left is item 6's optional wording tidy-up, which breaks nothing either way.
 
-**2026-08-07 request, in order:**
+**What is left, in the order I would do it:**
 
-1. ~~**Tier 4** (15, 16, 17)~~ — done. 15 and 16 shipped in
-   [PR #25](https://github.com/221twoseven/print-farm-scheduler/pull/25)
-   (merged). 17 verified manually in the Teams desktop client 2026-08-08.
-2. ~~**Tier 5** (18, 19)~~ — done, shipped in PR #25 alongside 15/16.
-3. ~~**SharePoint**: `CompletedAt` and `CreatedAt`~~ — created, internal names
-   confirmed matching. ~~**Tier 6** (20, 21, 22)~~ — done, shipped 2026-08-08.
-4. ~~**Tier 7** (23)~~ — done, shipped 2026-08-10.
-5. **Tier 8** — 11 and 12 as before (design discussion / research
-   respectively), plus **24** (dark mode) as a third item needing a proposal
-   before any code. None of the three share a branch with each other or with
-   anything above.
+1. **Tier 8** (25, 29, 26) — the three trivial ones. Single PR. Each has a
+   small decision attached (does the account name stay in the pill, how do
+   exceptions separate without chips) but none blocks starting.
+2. **Tier 9** (27) — assigned-card fields. Mostly ungating a line that already
+   exists; the real work is deciding what leaves the card, not what joins it.
+3. **Tier 10** (28) — the Mac blank screen. **Sorted third by effort, but it
+   is the only item on this list that is actively broken for someone.** If a
+   Mac user needs the board this week it goes first, and the effort estimate
+   only exists after the console output does.
+4. **Tier 11** (12, then 11, then 24) — the decision-gated three. Take **12**
+   first: the research is cheap and its answer may well be "the notifications
+   half is off the table", which is worth knowing before anyone plans around
+   it. Then **11**, which carries the real operational payoff. Then **24**,
+   the largest diff for the least functional gain — and the one that gets
+   materially easier once the interface stops moving, which items 25–27 are
+   evidence it has not yet.
 
-**Current state (2026-08-10):** everything through Tier 7 is shipped. Only
-Tier 8 remains, and all three of its items need a decision or research before
-any code.
+**Current state (2026-08-12):** five new items (25–29) from the 2026-08-12
+request, none needing SharePoint. Item 28 is a live bug and cannot be worked
+from a remote session — it needs console output from an affected Mac before
+anyone can estimate it, let alone fix it.
