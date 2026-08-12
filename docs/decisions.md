@@ -33,14 +33,23 @@ Earlier cards carried far more on their face and read as visually busy. The
 collapsed card now shows only name, status and ETA; everything else is one click
 away.
 
-**Loosened 2026-08-12**, at the shop's request: the card also carries a grey
-detail line with jobcode, quantity and need-by. The principle holds — the modal
-is still where a job is read in full — but designer view cannot open an assigned
-job at all, so for a designer the card face is the only surface those three
-facts can reach. Quantity moved onto that line as `Qty N` rather than staying as
-line 1's `×N`, so one fact has one shape and appears on every card. Watch for
-the board reading busy again; the next thing that wants a place on the card
-should have to argue for it.
+**Loosened 2026-08-12**, at the shop's request, then given an explicit layout
+the same day. The card is now three rows: title + status pill (row 1), jobcode
+indented under the title (row 2), and ETA + `Qty N` (row 3). The principle holds
+— the modal is still where a job is read in full — but designer view cannot open
+an assigned job at all, so for a designer the card face is the only surface
+jobcode and quantity can reach.
+
+Two things went the other way in the same change, both by the shop's layout:
+**need-by came off the card** (it was on the first-pass detail line; the
+three-row spec has no slot for it, and it stays in the modal), and **the status
+pill now shows in staging too**, where it had been assigned-only. Quantity reads
+as `Qty N` on every card — it was line 1's `×N`, shown only when greater than
+one, so one fact had two shapes.
+
+Watch for the board reading busy again; the next thing that wants a place on the
+card should have to argue for it — and note that need-by just lost its place, so
+"put it back" is not free either.
 
 ### Designer view never gets a permanent-delete control
 
