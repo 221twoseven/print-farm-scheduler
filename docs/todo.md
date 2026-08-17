@@ -882,11 +882,12 @@ mislabel today's rows, which play both roles at once.
 **Do not rename the SharePoint list, columns, or `COLS` internal names**
 (CLAUDE.md rule 3) — UI copy and docs only.
 
-**Open question, flagged not decided:** item 16 made jobcode required; item 4
-noted the `XX000` shape with nothing enforcing it. Should the format now be
-enforced on the new-task form? Cheap either way; needs the shop's answer, since
-a hard format block on a field the shop free-types is the kind of thing that
-surprises someone mid-request.
+**The format question is answered: no enforcement** (decided 2026-08-17).
+Item 16 made jobcode required; item 4 noted the `XX000` shape with nothing
+enforcing it; the field stays free text and the glossary documents the
+convention. A hard format block on a field the shop free-types is the kind of
+thing that surprises someone mid-request, and nothing broke for the lack of
+one.
 
 **Risk: Low.** Words.
 
@@ -894,27 +895,29 @@ surprises someone mid-request.
 
 ## Tier 13 — moderate, decision-gated (2026-08-17 request)
 
-### 31. One job history: drop the per-printer tier, add a Printer filter (1)
+### 31. One job history: drop the per-printer tier, add a Printer filter (1) — DONE
+
+*Shipped 2026-08-17.* Both decisions were answered before building:
+
+- **No UI purge.** Clear history went with the per-printer sections and got no
+  replacement — completed jobs are never removed from the board; trimming the
+  record means editing the SharePoint list directly. Recorded in
+  [decisions.md](decisions.md#completed-jobs-are-never-purged-from-the-ui),
+  including the path back (operator-only control on the table) if the shop
+  ever wants purging again. `purgeDone`/`askPurgeDone` deleted as dead code.
+- **Straight to the table.** A job marked Complete leaves its printer card
+  immediately; printer cards show live work only.
+
+The Printer filter composes with the jobcode filter (both set means both must
+match), is built from the record itself like the jobcode list, and drops a
+selected printer if it is deleted (its completed jobs go back to staging and
+show "—" in the Printer column — pre-existing behaviour, unchanged).
 
 **Risk: Medium — and it partially reverses item 30, shipped five days before
 it was requested.** Item 30 built the two-tier history deliberately; this
-removes the per-printer Completed sections and makes the global completed-jobs
-table the only history, adding a **Printer filter** beside the existing
-jobcode filter (the table already has a Printer *column* from item 23, and the
-jobcode *filter* from item 30 is the model to copy).
-
-Mostly independent of item 32 and can land before it, but **two decisions are
-needed first**:
-
-- **Where does purging move?** Clear history lives in the per-printer section
-  being removed — it is the only purge path. Either completed jobs become
-  unpurgeable from the UI, or the global table gains a purge control. A purge
-  on the global table is fine **only as operator-view-only** — "designer view
-  never gets a permanent-delete control" is a fresh, deliberate decision
-  ([decisions.md](decisions.md)).
-- **Where does a just-completed job visually go?** Today it collapses into the
-  printer's own Completed section. With that gone, does it drop straight off
-  the printer card into the table?
+removed the per-printer Completed sections and made the global completed-jobs
+table the only history. Data layer untouched: completed tasks keep their
+`printerId`, only display and the purge path changed.
 
 ### 33. "Mark Complete and Duplicate" status option (3)
 
@@ -982,8 +985,9 @@ not ship separately.
 
 Below staging, same formatting as the staging block. Staging keeps jobs not
 yet assigned anywhere; In Progress holds jobs with at least one live subtask;
-completed jobs continue to the history table — which item 31 is reshaping,
-so sequence 31 and 34 consciously if both are in flight.
+completed jobs continue to the history table — since item 31 (shipped first),
+the only history: a completed subtask leaves its printer card straight for the
+table.
 
 ---
 
@@ -999,11 +1003,11 @@ names TBD until its design is signed off.
 1. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
    `Other` in SharePoint. Two minutes in list settings, no code, optional;
    nothing breaks either way.
-2. **Item 35's UI-copy half** — rides with item 32, plus one open question
-   (enforce `XX000` on the jobcode field?) that only needs an answer.
-3. **Item 31** — one job history with a Printer filter. Mostly independent of
-   the model work; buildable as soon as its two decisions (purge location,
-   completed-job flow off the printer card) are answered.
+2. **Item 35's UI-copy half** — rides with item 32. Its open question is
+   answered: **no `XX000` enforcement** (decided 2026-08-17); the glossary
+   documents the convention and the field stays free text.
+3. ~~**Item 31**~~ — done, shipped 2026-08-17. No UI purge, complete goes
+   straight to the table.
 4. **Items 32 + 34** — the job/subtask model and the In Progress block, as one
    designed change on its own branch. Design proposal → sign-off → columns
    created and internal names confirmed → code. Nothing else on that branch.
@@ -1016,11 +1020,13 @@ names TBD until its design is signed off.
 7. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
    and then only with Mac console output in hand.
 
-**Current state (2026-08-17):** nothing has landed since 2026-08-12 (`main` @
-PR #35, build `2026-08-12.5`). The 2026-08-17 request added items 31–35:
-item 35's docs half shipped with this update, 31 waits on two decisions, and
-32/34 — the big one — waits on a design proposal and sign-off. Standing
-caveat: items 23, 25–27, 29, 30 and the #35 card layout were verified by
-transpile and extracted-function tests only, never in a live browser — one
-deliberate check in Teams (header should read `2026-08-12.5`) is worth doing
-before stacking the new work on top.
+**Current state (2026-08-17):** the 2026-08-17 request added items 31–35.
+Shipped same day: item 35's docs half (glossary, plus the no-enforcement
+answer on `XX000`) and item 31 (one history, no UI purge, Printer filter,
+build `2026-08-17.1`). Left: 32/34 — the big one — waiting on a design
+proposal and sign-off, then 33 behind it, and the decision-gated Tier 11
+three. Standing caveat: items 23, 25–27, 29, 30, the #35 card layout and now
+item 31 were verified by transpile and extracted-function tests only, never in
+a live browser — one deliberate check in Teams (header should read
+`2026-08-17.1` once item 31 deploys) is worth doing before stacking the model
+work on top.

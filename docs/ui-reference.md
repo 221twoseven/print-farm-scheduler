@@ -155,10 +155,12 @@ staging carries `printerId === "staging"`.
 ## Completed jobs panel (both views)
 
 The permanent, cross-printer record of finished work — one table sorted by
-completion, instead of opening each printer's own Completed section in turn.
-Shown in **both views**: an operator and a designer have equal reason to look
-up what shipped, and the panel carries no control either shouldn't have (it has
-no purge button in either view — see decisions.md).
+completion, and since item 31 the **only** job history: the per-printer
+Completed sections are gone, and a job marked Complete leaves its printer card
+immediately and appears here. Shown in **both views**: an operator and a
+designer have equal reason to look up what shipped, and the panel carries no
+control either shouldn't have (it has no purge button in either view — see
+decisions.md).
 
 It is an **ordinary block in the page flow**, the last one on the board, and
 carries the same chrome as the staging panel, the jobcode filter and the group
@@ -177,16 +179,20 @@ space; the header expands it.
 - **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
   Notes (an icon, hover reads the operator's note — same convention as the
   card). Blank where a task has no value for that column, not omitted.
-- **Jobcode filter** — a dropdown above the table, same pattern as the board's
-  main jobcode filter. Built from **every jobcode that has ever completed**, not
-  the live board's — this is the permanent record, so a code whose last job
-  finished long ago must still be selectable even though nothing on a printer
-  carries it any more. Hidden when nothing completed has a jobcode.
+- **Jobcode and Printer filters** — dropdowns above the table, same pattern as
+  the board's main jobcode filter, and they compose (both set means both must
+  match). Built from **the record itself**, not the live board — this is the
+  permanent record, so a code whose last job finished long ago must still be
+  selectable even though nothing on a printer carries it any more. Each
+  dropdown hides when it has nothing to offer. A printer that has been deleted
+  drops out of the filter (its completed jobs went back to staging and show
+  "—" in the Printer column).
 - **Read-only, like every assigned job in designer view** — no click, no
   drag, no context menu; the table exists to show history, not to edit it.
-- **No purge control, in either view.** The permanent record is never cleared
-  from here; per-printer Clear history (operator only) is the only way completed
-  jobs leave the board. See decisions.md.
+- **No purge control anywhere.** Clear history went with the per-printer
+  sections (item 31, decided 2026-08-17): completed jobs are never removed
+  from the UI. If the record ever genuinely needs trimming, that happens in
+  the SharePoint list directly. See decisions.md.
 - **Batched loading**, same pattern and page size as staging (`COMPLETED_PAGE`,
   60 rows). Paging is over the filtered rows, and a filter change resets it.
 
@@ -225,12 +231,11 @@ printer belongs to is answered by the group it is sitting in.
 - **Queue** — active (non-complete) jobs. Two slots are visible by default with a
   "+N more" expander; the queue force-opens if the task being edited sits below
   slot 2.
-- **Completed** — finished jobs collapse into a separate section at the bottom
-  and stop consuming an active slot. The section is readable in **both views**.
-  **Clear history** permanently purges that printer's completed jobs (with a
-  confirmation) and is **operator view only** — designer view sees the section
-  but not the button. Permanently deleting board state is a class of control
-  designer view never gets; see decisions.md.
+- **Completed** — a job marked Complete leaves the card immediately and
+  appears in the completed-jobs table at the foot of the board. Printer cards
+  show live work only; there is no per-printer Completed section and no Clear
+  history button (both removed by item 31 — the table is the only history,
+  and nothing purges it from the UI).
 - **Empty state** — reads "No active jobs", "Reserved — no new jobs", "Out for
   maintenance", or "Drop task here" while dragging.
 - Deleting a printer sends its tasks to staging rather than deleting them.
@@ -355,8 +360,8 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
 
 ## Confirmations
 
-Destructive actions — deleting a group, deleting a printer, clearing completed
-jobs — go through `ConfirmDialog` and name what will happen to the contents.
+Destructive actions — deleting a group, deleting a printer — go through
+`ConfirmDialog` and name what will happen to the contents.
 Deleting a single task does not, because the context menu already requires two
 deliberate clicks.
 
