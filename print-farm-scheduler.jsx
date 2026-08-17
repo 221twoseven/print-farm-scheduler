@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.4";
+const BUILD = "2026-08-17.5";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -4326,8 +4326,11 @@ function loadPeople() {
     peopleCache = graph("/users?$select=id,displayName,mail&$top=999")
       .then((res) =>
         (res.value || [])
-          /* mail filters out service accounts and unlicensed objects */
-          .filter((u) => u.mail && u.displayName)
+          /* mail filters out service accounts and unlicensed objects;
+             "[Archive]" is this tenant's convention for departed users */
+          .filter(
+            (u) => u.mail && u.displayName && !u.displayName.includes("[Archive]")
+          )
           .map((u) => ({ id: u.id, name: u.displayName }))
           .sort((a, b) => a.name.localeCompare(b.name))
       )
