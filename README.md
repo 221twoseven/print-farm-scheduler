@@ -65,9 +65,11 @@ work on interface changes. See [docs/operations.md](docs/operations.md#working-l
 | [docs/ui-reference.md](docs/ui-reference.md) | What the board does, feature by feature — the behaviour spec |
 | [docs/decisions.md](docs/decisions.md) | Settled decisions that should not be relitigated, plus open items |
 | [docs/todo.md](docs/todo.md) | Open bugs and feature requests, ordered simplest first, with the SharePoint work each needs |
-| [docs/handoff-2026-08.md](docs/handoff-2026-08.md) | The original August 2026 handoff document, preserved verbatim |
-| [docs/handoff-2026-08-08.md](docs/handoff-2026-08-08.md) | Session handoff: the 2026-08-08 build and the audit of it — findings, defaults taken, what is still unverified |
-| [docs/handoff-2026-08-12.md](docs/handoff-2026-08-12.md) | Session handoff: 2026-08-12 state, the concurrent-session hazard, open card-layout decisions, and what remains |
+| [docs/handoff-2026-08-17-model.md](docs/handoff-2026-08-17-model.md) | Session handoff: the job/subtask model session (items 31–34), the concurrent-session hazard, verification ceiling, traps |
+| [docs/handoff-2026-08-17-notify.md](docs/handoff-2026-08-17-notify.md) | Session handoff: the notify-people picker session (item 12 groundwork), and the notification design still to build |
+
+Only the most recent session handoffs are kept; superseded ones (the original
+August 2026 seed document, 2026-08-08, 2026-08-12) live in git history.
 
 `CLAUDE.md` at the repo root is the working agreement for Claude Code sessions.
 

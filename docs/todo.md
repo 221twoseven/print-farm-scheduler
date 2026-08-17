@@ -539,7 +539,8 @@ any mutation handler.
 
 **Not verified in a browser** — this sandbox's egress still blocks the CDN
 hosts the app loads (unpkg, esm.sh, cdn.tailwindcss.com), same limitation
-recorded in [handoff-2026-08-08.md](handoff-2026-08-08.md). What *was*
+recorded in every session handoff since — see
+[handoff-2026-08-17-model.md](handoff-2026-08-17-model.md). What *was*
 checked: the file transpiles cleanly through Babel with the React preset, the
 new sort comparator was extracted and run against table-driven cases
 (descending order, missing/unparseable-last, stable ties), and the repo
