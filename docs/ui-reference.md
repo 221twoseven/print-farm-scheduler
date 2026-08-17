@@ -347,6 +347,12 @@ modal open — the same applies to the shop layout and confirmation dialogs.
 
 Tasks in staging hide the fields that only mean something once assigned.
 
+The assigned-task **Status** dropdown carries one extra entry beyond the three
+statuses: **Complete & reprint** — the same action as the context menu's (see
+below), included here because the dropdown is where an operator already is
+when a run finishes. Pending edits flush into the finishing run first; the
+modal then switches to the successor.
+
 A small grey line above the footer reads **Created** with a timestamp, and
 **Completed** alongside it once the job has one — read-only facts, not fields
 anyone edits. Completed disappears again if the job leaves `Complete`.
@@ -356,18 +362,31 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
 **On a task:**
 
 - Set status (Not started / In progress / Complete) — hidden while in staging.
+- **Complete & reprint** (item 33) — an action riding under the statuses:
+  completes this run and queues its successor on the same printer, next
+  suffix letter, same quantity, and **opens the editor on it** so the
+  quantity gets corrected before anyone reads it as fact. The successor gets
+  its own ETA and operator notes (blank), and counts against the job like
+  any run — which also keeps the job from auto-completing. Greyed once the
+  task is already Complete (plain Duplicate covers the copy case). On a
+  legacy task it duplicates "(copy)"-style instead of lettering.
 - Slicing (Sliced / Not Sliced / Needs Nesting).
 - Move to — staging, or any **Ready** printer, labelled with its group. Reserved
   and Maintenance printers are not offered; if none are Ready it says so.
-- Edit details, Duplicate task, Delete task.
+- Edit details, Duplicate task, Delete task. Duplicating a **run** gives the
+  next suffix letter, not "(copy)" — it is a real new run, counted against
+  its job.
 
 **On a printer:** the three statuses with their explanations, and Delete printer
-(tasks go to staging).
+(legacy tasks go to staging; runs are deleted, their quantity returning to
+their job).
 
 ## Drag and drop
 
-- Drop on a **column's open area** → the task moves to that printer, at the end
-  of its queue.
+- Drop a **staging or In Progress job** anywhere on a printer → a **run is
+  created** there (item 32) and its editor opens; the job itself stays put.
+- Drop an assigned task on a **column's open area** → it moves to that
+  printer, at the end of its queue.
 - Drop **on a printer card** → the task inserts before or after it, depending on
   which half you release over; an accent-coloured edge shows where it will
   land. **Staging cards don't accept this** — staging's order is computed, not
@@ -376,8 +395,8 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
   onto a specific card within it.
 - Only **Ready** printers and staging accept drops. Drops elsewhere are ignored,
   not queued.
-- Moving a task **out of staging onto a printer opens its detail modal**, because
-  a job being assigned is the moment its ETA and status need setting.
+- Assigning **opens the new run's detail modal**, because a run being created
+  is the moment its quantity, ETA and status need setting.
 - Drag state is cleared globally on `dragend`/`drop`, because a dragged card can
   unmount mid-drop and leave the board greyed out otherwise.
 

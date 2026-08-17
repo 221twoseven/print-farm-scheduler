@@ -919,26 +919,29 @@ removed the per-printer Completed sections and made the global completed-jobs
 table the only history. Data layer untouched: completed tasks keep their
 `printerId`, only display and the purge path changed.
 
-### 33. "Mark Complete and Duplicate" status option (3)
+### 33. "Complete & reprint" status option (3) — DONE
 
-**Risk: Medium. Unblocked 2026-08-17 — item 32 shipped**, so "counts against
-the Job total" now means something: a duplicated run is a sibling (same
-`ParentID`, next suffix letter) whose quantity counts into the job's
-remaining automatically, because remaining is derived.
+*Shipped 2026-08-17.* The phrasing went to **"Complete & reprint"** — the
+mechanism is what the entry asked for: completes the current run and queues a
+successor (same `ParentID`, next suffix letter, same printer, same quantity)
+whose editor opens immediately so the quantity gets corrected before anyone
+reads it as fact. Lives in both places an operator sets status: the task
+context menu (greyed once Complete) and the detail modal's Status dropdown
+(pending edits flush into the finishing run first; the modal then switches to
+the successor).
 
-A status-dropdown option that completes the current subtask and spawns a new
-one with an **editable quantity** counted against the Job's total. (Phrasing
-open — "Complete & reprint" may read better on the shop floor; the mechanism
-is what matters.)
+Both standing rules held: the guard filters already-Complete rows so the
+completion stamp only writes on a real transition (the 2026-08-08 no-op-write
+bug stays fixed), and the whole action is one state update — one PATCH (the
+finishing run), one POST (the successor), untouched rows keep their
+references. The successor is Not started, which also keeps the job from
+auto-completing in the same pass.
 
-Build on `copyTask`, which already does the right hygiene (fresh `createdAt`,
-cleared `completedAt` — items 20–21). Two standing rules apply directly:
+Rode along: plain **Duplicate task** on a run now gives the next suffix
+letter instead of "PropPart1-A (copy)" — both duplication paths name runs the
+same way. Jobs, legacy tasks, and orphaned runs keep "(copy)".
 
-- `updateTask` stamps completion only on a **real** status transition — do not
-  reintroduce the no-op-write bug fixed in the 2026-08-08 audit
-  ([handoff-2026-08-08.md](handoff-2026-08-08.md)).
-- The save layer diffs by identity: the handler must copy only what it
-  changes.
+**Risk: Medium.** One handler plus two menu wirings; no schema change.
 
 ---
 
@@ -991,30 +994,30 @@ names TBD until its design is signed off.
 
 **What is left, sorted by lowest-hanging fruit:**
 
-1. **Item 33** — Mark Complete and Duplicate. Now the cheapest real build:
-   `copyTask` + sibling-run mechanics that item 32 already provides.
-2. **Item 35's UI-copy half** — the new In Progress panel already speaks
-   job/run; what remains is a label pass over the older copy ("New task",
-   "Add task", card tooltips). Cheap, cosmetic, safe to batch with item 33.
-3. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
+1. **Item 35's UI-copy half** — the new In Progress panel and the reprint
+   action already speak job/run; what remains is a label pass over the older
+   copy ("New task", "Add task", card tooltips). Cheap, cosmetic.
+2. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
    `Other` in SharePoint. Two minutes in list settings, no code, optional;
    nothing breaks either way.
-4. **Tier 11** (12, then 11, then 24) — unchanged posture. Item 32 is now
+3. **Tier 11** (12, then 11, then 24) — unchanged posture. Item 32 is now
    *in*, so item 11's design discussion can start whenever: the fact it was
    waiting on (what parent/child rows do to the identity-diff save layer) is
    settled — assignment is one new row, block membership is derived. 12's
    research is still cheap and still first among the three.
-5. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
+4. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
    and then only with Mac console output in hand.
 
-**Current state (2026-08-17):** the 2026-08-17 request added items 31–35, and
-all of it except item 33 and item 35's label pass shipped the same day:
-item 31 (one history, no UI purge, Printer filter — build `2026-08-17.1`),
-items 32+34 (the job/subtask model and In Progress block — build
-`2026-08-17.2`, one new `ParentID` column), and item 35's docs half. Standing
-caveat, now taller: everything from item 23 through the model work was
-verified by transpile and extracted-function tests only, never in a live
-browser — **the model change is the largest yet to ship that way**, so the
-serve-locally + Teams check (header should read `2026-08-17.2`) matters more
-than usual, and exercising one assign → complete → auto-complete cycle on
-test data before cutover is strongly advised.
+**Current state (2026-08-17):** the whole 2026-08-17 request (items 31–35)
+shipped the day it was made, except item 35's cosmetic label pass: item 31
+(one history, no UI purge, Printer filter — build `2026-08-17.1`), items
+32+34 (the job/subtask model and In Progress block — build `2026-08-17.2`,
+one new `ParentID` column), item 33 (Complete & reprint — build
+`2026-08-17.3`), and item 35's docs half. Standing caveat, now taller:
+everything from item 23 through the model work was verified by transpile and
+extracted-function tests only, never in a live browser — **the model change
+is the largest yet to ship that way**, so the serve-locally + Teams check
+(header should read `2026-08-17.3`) matters more than usual. Worth
+exercising on test data before cutover: assign a staging job → it moves to
+In Progress → Complete & reprint the run → the successor's editor opens →
+complete the successor → the job self-completes into the history table.
