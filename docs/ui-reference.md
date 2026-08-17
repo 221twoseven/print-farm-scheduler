@@ -4,6 +4,23 @@ What the board actually does, feature by feature. This is the behaviour spec:
 when changing the interface, this is the description a change has to stay
 consistent with (or deliberately update).
 
+## Terminology
+
+The shop's words, confirmed 2026-08-17 (todo item 35). Docs and UI copy should
+use these; the code and SharePoint still say "task" everywhere, and the
+internal names stay that way — renaming stored names to look right is
+explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
+
+- **Jobcode** — the *project*: `XX000`, where `XX` identifies the client
+  (`HE` = Hermes) and `000` is that client's sequential project number
+  (`HE270` = Hermes' 270th project). Nothing enforces the format today.
+- **Job** — the production of all of one unique part for a project
+  (PropPart1, total qty 100), raised by a designer into staging. Under todo
+  item 32 its name becomes a persistent ID.
+- **Subtask** — one print run of part of a Job on one printer (PropPart1-A,
+  qty 10), created by the operator at assignment. Does not exist as a distinct
+  thing until item 32 lands — today one row plays both roles.
+
 ## The board, top to bottom
 
 1. **Header** — purple bar, app name, live count of printers and tasks, the
