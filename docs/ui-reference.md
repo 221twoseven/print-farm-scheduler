@@ -151,8 +151,11 @@ staging carries `printerId === "staging"`.
 - **Collapse** — a chevron folds the whole panel.
 - **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
   are all required; **Add task** stays disabled until every one is filled in.
-  **Notify when print starts** is an optional multi-select of tenant people
-  (chips plus a type-ahead over the whole directory, fetched once per session).
+  **Notify when print starts** is an optional multi-select of people (chips
+  plus a type-ahead, fetched once per session). Inside Teams the list is the
+  roster of the team the tab is open in — managed by managing team
+  membership, not Entra — falling back to the whole tenant elsewhere; guests
+  and `[ARCHIVE]`-prefixed (departed) accounts are excluded either way.
   The signed-in creator shows as a pinned "you" chip — they are always
   notified and are not stored in the list; SharePoint already records them as
   the row's author. If the directory can't be read (no consent yet, seed

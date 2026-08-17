@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.6";
+const BUILD = "2026-08-17.7";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -4315,35 +4315,62 @@ function NumberStepper({
 
 /* --------------------------- people picker ---------------------------- */
 
-/* The whole tenant directory, fetched once per session and filtered
+/* The picker's directory, fetched once per session and filtered
    client-side — at this shop's size a per-keystroke Graph query is pure
-   overhead. Resolves to null on failure (no consent yet, seed mode, no
-   network) so the picker can degrade instead of breaking the form; the
-   cache is cleared on failure so the next mount retries. */
+   overhead.
+
+   Inside Teams the source is the roster of the team the tab is open in
+   (the tenant list is full of guests, shared mailboxes and service
+   accounts nobody wants to scroll past), so who appears in the picker
+   is managed by managing team membership — in Teams, not in Entra.
+   Outside Teams, or when the tab isn't in a team channel, it falls back
+   to the whole tenant. The /microsoft.graph.user cast keeps nested
+   groups and devices out of a roster read.
+
+   Resolves to null on failure (no consent yet, seed mode, no network)
+   so the picker can degrade instead of breaking the form; the cache is
+   cleared on failure so the next mount retries. */
 let peopleCache = null;
 function loadPeople() {
   if (!peopleCache)
-    peopleCache = graph("/users?$select=id,displayName,mail&$top=999")
-      .then((res) =>
+    peopleCache = (async () => {
+      let groupId = null;
+      try {
+        if (await inTeams()) {
+          const ctx = await window.microsoftTeams.app.getContext();
+          groupId = ctx?.team?.groupId || null;
+        }
+      } catch {
+        /* no context — the tenant fallback below still works */
+      }
+      const select = "$select=id,displayName,mail,userPrincipalName&$top=999";
+      const res = await graph(
+        groupId
+          ? `/groups/${groupId}/members/microsoft.graph.user?${select}`
+          : `/users?${select}`
+      );
+      return (
         (res.value || [])
           /* mail filters out service accounts and unlicensed objects;
-             "[ARCHIVE] Firstname Lastname" is this tenant's convention for
-             departed users — matched case-insensitively to survive a
-             half-typed rename */
+             #EXT# in the UPN marks guests (invited gmail/external
+             accounts); "[ARCHIVE] Firstname Lastname" is this tenant's
+             convention for departed users — matched case-insensitively
+             to survive a half-typed rename */
           .filter(
             (u) =>
               u.mail &&
               u.displayName &&
+              !(u.userPrincipalName || "").includes("#EXT#") &&
               !u.displayName.toUpperCase().includes("[ARCHIVE]")
           )
           .map((u) => ({ id: u.id, name: u.displayName }))
           .sort((a, b) => a.name.localeCompare(b.name))
-      )
-      .catch((err) => {
-        console.warn("Directory unreadable; people picker degraded.", err);
-        peopleCache = null;
-        return null;
-      });
+      );
+    })().catch((err) => {
+      console.warn("Directory unreadable; people picker degraded.", err);
+      peopleCache = null;
+      return null;
+    });
   return peopleCache;
 }
 
@@ -4757,9 +4784,15 @@ const SP = {
 };
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
-/* User.ReadBasic.All feeds the notify-people picker's directory list.
-   auth.html carries its own copy of this list — keep them in step. */
-const SCOPES = ["Sites.ReadWrite.All", "User.ReadBasic.All"];
+/* User.ReadBasic.All and GroupMember.Read.All feed the notify-people
+   picker: the first reads people's names, the second the roster of the
+   team the tab is open in. auth.html carries its own copy of this list
+   — keep them in step. */
+const SCOPES = [
+  "Sites.ReadWrite.All",
+  "User.ReadBasic.All",
+  "GroupMember.Read.All",
+];
 const configured = () => Boolean(SP.clientId && SP.tenantId);
 
 /* ---------------------------------------------------------------------
