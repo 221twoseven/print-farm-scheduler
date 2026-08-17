@@ -13,25 +13,27 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 
 | Section | Lines | Contents |
 | --- | --- | --- |
-| Imports + persistence-seam note | 1–43 | React, lucide icons, the design note on ordering and the Settings list |
-| Constants | 45–291 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
-| Order helpers | 292–309 | `bySortOrder`, `hydrate()`, `reindex()` |
-| Seed demo data | 310–466 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
-| Helpers | 467–523 | `formatEta()`, `useBackdropClose()`, `isOverdue()`, `nowIso()`, `formatTimestamp()` |
-| `PrintFarmScheduler` | 530–1626 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid, `CompletedJobsPanel` mount |
-| `ConfirmDialog` | 1627–1674 | Destructive-action confirmation |
-| `ContextMenu` | 1675–1917 | Right-click menu for tasks and printers |
-| `StagingArea` | 1918–2252 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
-| `InProgressPanel` | ~2300–2540 | Jobs with at least one run on a printer (items 32/34): remaining-quantity card, expandable runs list, drag-to-assign-another-run |
-| `CompletedJobsPanel` | ~2540–2790 | Both views (item 30): every completed job, newest first, jobcode + printer filters, an in-flow block at the foot of the board, batched loading, read-only |
-| `StatusPicker` | 2450–2559 | Task status control |
-| `PrinterColumn` | 2560–3024 | One printer card: specs, queue, completed section, drop targets |
-| `TaskCard` | 3025–3244 | Collapsed card |
-| `TaskDetailModal` | 3245–3667 | Full task editor, plus the shared `Field` wrapper and modal input styles |
-| `NumberStepper`, `AddTaskForm` | 3668–3987 | Quantity control and the inline new-task form |
-| Persistence | 3988–4632 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
-| `AppShell` | 4633–4886 | Auth phases, save orchestration, `StatusPill`, `Centered` |
-| Mount | 4887–4893 | `createRoot(...).render(<AppShell />)` if `#root` exists |
+| Imports + persistence-seam note | 1–45 | React, lucide icons, the design note on ordering and the Settings list |
+| Constants | 46–303 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
+| Order helpers | 304–362 | `bySortOrder`, `hydrate()`, `reindex()` |
+| Seed demo data | 363–519 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
+| Helpers | 520–576 | `formatEta()`, `useBackdropClose()`, `isOverdue()`, `nowIso()`, `formatTimestamp()` |
+| `PrintFarmScheduler` | 577–1858 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid, `CompletedJobsPanel` mount |
+| `ConfirmDialog` | 1859–1906 | Destructive-action confirmation |
+| `ContextMenu` | 1907–2165 | Right-click menu for tasks and printers |
+| `StagingArea` | 2166–2506 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
+| `InProgressPanel` | 2507–2738 | Jobs with at least one run on a printer (items 32/34): remaining-quantity card, expandable runs list, drag-to-assign-another-run |
+| `CompletedJobsPanel` | 2739–3053 | Both views (item 30): every completed job, newest first, jobcode + printer filters, an in-flow block at the foot of the board, batched loading, read-only |
+| `StatusPicker` | 3054–3163 | Task status control |
+| `PrinterColumn` | 3164–3587 | One printer card: specs, queue, drop targets |
+| `TaskCard` | 3588–3795 | Collapsed card |
+| `TaskDetailModal` | 3796–4240 | Full task editor, plus the shared `Field` wrapper and modal input styles |
+| `NumberStepper` | 4241–4311 | Quantity control |
+| `PeoplePicker` | 4312–4517 | Directory-backed chips + type-ahead (item 12 groundwork): team roster inside Teams, tenant fallback, single- and multi-select modes, free-text degrade |
+| `AddTaskForm` | 4518–4770 | The inline new-task form |
+| Persistence | 4771–5445 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
+| `AppShell` | 5446–5699 | Auth phases, save orchestration, `StatusPill`, `Centered` |
+| Mount | 5700–5706 | `createRoot(...).render(<AppShell />)` if `#root` exists |
 
 To refresh these numbers after the file has drifted, the section banners are
 greppable — `grep -n -A1 '^/\* [-=]\{10,\}' print-farm-scheduler.jsx` prints

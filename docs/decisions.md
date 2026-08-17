@@ -206,6 +206,28 @@ The seven cosmetic dropdowns are read from SharePoint choice columns so the shop
 can edit them freely. Task `Status`, `Priority`, `SliceStatus` and printer
 `Status` stay in code, because the app branches on every value.
 
+### Notifications fire client-side — no server needed
+
+*(2026-08-17, item 12.)* Push notifications looked blocked by the no-server
+decision: Teams activity feed notifications were assumed to need app-only
+credentials, meaning a secret, meaning a server. They don't, because of a fact
+about this app: **both notification triggers are user actions inside the app**
+— a job starting to print (an operator drag) and a job being added to staging
+(a designer submit). Whoever triggers the moment has an open, signed-in
+session, so Graph `sendActivityNotification` can fire from there with the
+delegated `TeamsActivity.Send` scope. No background layer, no secret, no
+server; the settled no-server decision holds unchanged.
+
+Accepted costs: no notification fires if the acting user's send fails or they
+close the tab mid-action (best-effort, not queued), and the scope needs
+another admin consent plus activity types in the Teams app manifest and a
+republished package. Recipients: the job's creator comes from the row's
+SharePoint author (deliberately not stored in any app column), extras from
+`NotifyPeople` (plain text, not a Person column — see
+[data-model.md](data-model.md)); the actor is skipped. The groundwork shipped
+2026-08-17 (PRs #41–#45); the sends themselves are still to build — see
+item 12 in [todo.md](todo.md).
+
 ## Open items
 
 Nothing blocking.

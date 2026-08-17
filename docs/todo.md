@@ -53,6 +53,7 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Tasks~~ | ~~CompletedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CompletedAt`, matches display name; needed by item 20 |
 | ~~Tasks~~ | ~~CreatedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CreatedAt`, matches display name; needed by item 21 (also feeds item 22's sort) |
 | ~~Tasks~~ | ~~ParentID~~ | ~~Single line of text~~ | created 2026-08-17 — internal name confirmed as `ParentID` (capital D, **not** the `ParentId` the design proposed — the confirmation step earned its keep again); the only column item 32 needed |
+| ~~Tasks~~ | ~~NotifyPeople~~ | ~~Single line of text~~ | created 2026-08-17 — JSON `[{id, name}]`, deliberately *not* a Person column (see [data-model.md](data-model.md)); item 12's groundwork |
 
 **After creating each column, send me its internal name** — List settings → click
 the column → the `Field=` value at the end of the address bar. Do not assume it
@@ -802,28 +803,50 @@ it should land on its own with nothing else in the branch. Graph throttling
 (HTTP 429) also becomes a live concern with 10–15 clients polling; the retry
 logic already handles it, but the interval needs choosing with that in mind.
 
-### 12. Teams user assignment and push notifications (7)
+### 12. Teams user assignment and push notifications (7) — GROUNDWORK DONE
 
-**Risk: High — likely blocked by the no-server decision.**
+*Groundwork shipped 2026-08-17, PRs #41–#45 (builds `.4`–`.8`), in a session
+that ran concurrently with the items 31–34 work — see
+[handoff-2026-08-17-notify.md](handoff-2026-08-17-notify.md).* The "blocked by
+the no-server decision" fear did not survive the research: both notification
+triggers are user actions inside the app, so the pings can fire from the
+acting user's own session via delegated Graph — no server, no secret. Recorded
+in [decisions.md](decisions.md#notifications-fire-client-side--no-server-needed).
 
-Two halves, and they are not equally feasible:
+**What shipped** (who to ping, and the picker infrastructure):
 
-- **Assigning to a Teams user** is plausible. It needs an extra Graph permission
-  to list people (`User.Read.All`, delegated, admin consent) and a new column to
-  store the assignee. That is a bigger ask of your sysadmin than the current
-  `Sites.ReadWrite.All`, but it fits the existing shape.
-- **Push notifications for job created / started / finished** almost certainly do
-  not fit. Teams activity feed notifications need application-level credentials —
-  a bot registration or an app-only token — which means a server holding a
-  secret. That is the one thing this app has never had, and adding it changes the
-  deployment model from "commit files to a static host" to "run and maintain a
-  backend", along with everything that implies for whoever inherits it.
+- `NotifyPeople` column on Tasks — JSON `[{id, name}]`, plain text by design
+  ([data-model.md](data-model.md)). The job's creator is *not* stored;
+  SharePoint's row author already records them.
+- `PeoplePicker` component: chips + type-ahead over the Teams team roster
+  (tenant fallback outside Teams), filtering guests and `[ARCHIVE]`-prefixed
+  accounts. On the add-task form ("Notify when print starts", pinned "you"
+  chip) and the detail modal (jobs only).
+- **Sent by** and **Give to** fronted by the same picker in single-select
+  mode — same text columns, no schema change; degrades to free text because
+  those fields are required and must never dead-end.
+- Two new delegated scopes consented tenant-wide: `User.ReadBasic.All` and
+  `GroupMember.Read.All`, in both `SCOPES` copies (jsx and `auth.html`).
 
-**Before I build anything here, I need to research current Graph and Teams
-capabilities and come back with concrete options and costs** — including whether
-something lighter (an adaptive card posted to the channel, say) gets you most of
-the value without a server. Treat this item as "investigate and report", not
-"implement".
+**What remains — the notifications themselves.** Design agreed with Robert
+(details in the handoff and decisions.md):
+
+1. Job starts printing (first run created) → ping creator + `NotifyPeople`,
+   skipping the actor.
+2. New job added to staging → ping the operator(s); operator is a *role*
+   config (a recipient list, empty until the shop hires — likely a code
+   constant first).
+3. Mechanics: Graph `sendActivityNotification`; needs the `TeamsActivity.Send`
+   delegated scope (another admin consent), activity types declared in the
+   Teams app manifest, and a re-published app package. The creator's Entra id
+   comes from the row's `createdBy` — `taskFromRow` receives only
+   `row.fields`, so plumbing `createdBy` through the load path is part of the
+   job.
+
+**Risk of the remainder: Medium** — client-side sends plus a manifest
+republish; no save-layer or schema change. The original "assign to a Teams
+user" half is subsumed: Sent by / Give to are now directory-backed, and
+nothing else asked for a stored assignee.
 
 ### 24. Light mode / dark mode matching system settings (10)
 
@@ -988,36 +1011,48 @@ context menu; operators drag it to a printer to assign another run.
 ## Suggested sequencing
 
 Everything through Tier 9 is closed: items 1, 2, 4–10, 13–23, 25–27, 29 and
-30 shipped; item 3 declined; item 35's docs half shipped with this update.
-Item 28 is shelved indefinitely. Item 32 will need new SharePoint columns —
-names TBD until its design is signed off.
+30 shipped; item 3 declined; item 35's docs half shipped 2026-08-17.
+Item 28 is shelved indefinitely.
 
 **What is left, sorted by lowest-hanging fruit:**
 
-1. **Item 35's UI-copy half** — the new In Progress panel and the reprint
-   action already speak job/run; what remains is a label pass over the older
-   copy ("New task", "Add task", card tooltips). Cheap, cosmetic.
+1. **Item 35's UI-copy half** — the In Progress panel and the reprint action
+   already speak job/run; what remains is a label pass over the older copy
+   ("New task", "Add task", card tooltips). Cheap, cosmetic. Note the add-task
+   form and modal changed under it on 2026-08-17 (people pickers, item 12) —
+   pass over the code as it is now, not as remembered.
 2. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
    `Other` in SharePoint. Two minutes in list settings, no code, optional;
    nothing breaks either way.
-3. **Tier 11** (12, then 11, then 24) — unchanged posture. Item 32 is now
-   *in*, so item 11's design discussion can start whenever: the fact it was
-   waiting on (what parent/child rows do to the identity-diff save layer) is
-   settled — assignment is one new row, block membership is derived. 12's
-   research is still cheap and still first among the three.
-4. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
+3. **Item 12's remainder** — the notifications themselves. Groundwork and
+   design are done (see the item); what's left is the `TeamsActivity.Send`
+   consent, manifest activity types + republished app package, plumbing
+   `createdBy` through the load path, the operator recipient config, and the
+   `sendActivityNotification` calls.
+4. **Tier 11's other two** — item 11 (its design discussion can start
+   whenever: the fact it was waiting on — what parent/child rows do to the
+   identity-diff save layer — is settled: assignment is one new row, block
+   membership is derived), then item 24.
+5. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
    and then only with Mac console output in hand.
 
-**Current state (2026-08-17):** the whole 2026-08-17 request (items 31–35)
-shipped the day it was made, except item 35's cosmetic label pass: item 31
-(one history, no UI purge, Printer filter — build `2026-08-17.1`), items
-32+34 (the job/subtask model and In Progress block — build `2026-08-17.2`,
-one new `ParentID` column), item 33 (Complete & reprint — build
-`2026-08-17.3`), and item 35's docs half. Standing caveat, now taller:
-everything from item 23 through the model work was verified by transpile and
-extracted-function tests only, never in a live browser — **the model change
-is the largest yet to ship that way**, so the serve-locally + Teams check
-(header should read `2026-08-17.3`) matters more than usual. Worth
-exercising on test data before cutover: assign a staging job → it moves to
-In Progress → Complete & reprint the run → the successor's editor opens →
-complete the successor → the job self-completes into the history table.
+**Current state (2026-08-17):** two sessions ran concurrently this day and
+both shipped — reconciled in this update. The items 31–34 session (builds
+`.1`–`.3`): item 31 (one history, no UI purge, Printer filter), items 32+34
+(the job/subtask model and In Progress block, one new `ParentID` column),
+item 33 (Complete & reprint), item 35's docs half — see
+[handoff-2026-08-17-model.md](handoff-2026-08-17-model.md). The notify
+session (builds `.4`–`.8`): item 12's groundwork — `NotifyPeople` column,
+the people picker, Sent by / Give to fronted by it, two new consented
+scopes — see [handoff-2026-08-17-notify.md](handoff-2026-08-17-notify.md).
+The live site was verified serving `2026-08-17.8` during the reconcile.
+
+Standing caveat, now taller: everything from item 23 through the model and
+picker work was verified by transpile and extracted-function tests only,
+never in a live browser — **the model change is the largest yet to ship that
+way**. Worth exercising on test data before cutover: assign a staging job →
+it moves to In Progress → Complete & reprint the run → the successor's
+editor opens → complete the successor → the job self-completes into the
+history table. Then the picker path: add a job with notify recipients →
+confirm the JSON round-trips through `NotifyPeople` and the roster loads
+inside a real team tab.
