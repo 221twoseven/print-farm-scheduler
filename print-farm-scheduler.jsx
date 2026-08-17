@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.7";
+const BUILD = "2026-08-17.8";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -3922,23 +3922,19 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Sent by">
-              <input
+              <PeoplePicker
+                single
                 value={val("sentBy")}
-                onChange={(e) => edit("sentBy", e.target.value)}
-                onBlur={flush}
+                onChange={(v) => commit({ sentBy: v })}
                 placeholder="Requester"
-                className={MODAL_INPUT}
-                style={MODAL_STYLE}
               />
             </Field>
             <Field label="Give to">
-              <input
+              <PeoplePicker
+                single
                 value={val("giveTo")}
-                onChange={(e) => edit("giveTo", e.target.value)}
-                onBlur={flush}
+                onChange={(v) => commit({ giveTo: v })}
                 placeholder="Recipient"
-                className={MODAL_INPUT}
-                style={MODAL_STYLE}
               />
             </Field>
           </div>
@@ -4378,11 +4374,19 @@ function loadPeople() {
    Empty when running on seed data with no sign-in. */
 const currentAccountName = () => msalApp?.getAllAccounts?.()[0]?.name || "";
 
-/* Multi-select of tenant people, rendered as removable chips plus a
-   type-ahead. `value`/`onChange` carry [{id, name}]. `pinnedName`, when
-   set, renders a fixed non-removable chip for the person who is always
-   notified (the job's creator). */
-function PeoplePicker({ value, onChange, pinnedName }) {
+/* People chooser, rendered as removable chips plus a type-ahead.
+
+   Two shapes, one component:
+   - default: multi-select; `value`/`onChange` carry [{id, name}].
+   - `single`: one person; `value`/`onChange` carry a display-name
+     string, so it can front an existing plain-text column (SentBy,
+     GiveTo) without a schema change. The type-ahead hides while a name
+     is chosen, and if the directory can't be read the field falls back
+     to a plain text input rather than dead-ending a required field.
+
+   `pinnedName`, when set, renders a fixed non-removable chip for the
+   person who is always notified (the job's creator). */
+function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
   const [people, setPeople] = useState(undefined); // undefined = loading, null = unavailable
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -4395,7 +4399,11 @@ function PeoplePicker({ value, onChange, pinnedName }) {
     };
   }, []);
 
-  const selected = value || [];
+  const selected = single
+    ? value
+      ? [{ id: value, name: value }]
+      : []
+    : value || [];
   const chosen = new Set(selected.map((p) => p.id));
   const q = query.trim().toLowerCase();
   const matches = (people || [])
@@ -4403,10 +4411,23 @@ function PeoplePicker({ value, onChange, pinnedName }) {
     .slice(0, 8);
 
   const add = (p) => {
-    onChange([...selected, p]);
+    onChange(single ? p.name : [...selected, p]);
     setQuery("");
   };
-  const remove = (id) => onChange(selected.filter((p) => p.id !== id));
+  const remove = (id) =>
+    onChange(single ? "" : selected.filter((p) => p.id !== id));
+
+  if (single && people === null)
+    return (
+      <input
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none"
+        style={{ borderColor: "#C8C6C4" }}
+        aria-label={placeholder}
+      />
+    );
 
   const chip = (label, onRemove, title) => (
     <span
@@ -4441,7 +4462,7 @@ function PeoplePicker({ value, onChange, pinnedName }) {
           <span style={{ color: "#8A8886", fontSize: 11 }}>
             Directory unavailable
           </span>
-        ) : (
+        ) : single && selected.length ? null : (
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -4456,11 +4477,15 @@ function PeoplePicker({ value, onChange, pinnedName }) {
               if (e.key === "Backspace" && !query && selected.length)
                 remove(selected[selected.length - 1].id);
             }}
-            placeholder={people === undefined ? "Loading directory…" : "Add people…"}
+            placeholder={
+              people === undefined
+                ? "Loading directory…"
+                : placeholder || "Add people…"
+            }
             disabled={people === undefined}
             className="flex-1 text-xs outline-none bg-transparent"
             style={{ minWidth: 70, color: "#242424", padding: "2px" }}
-            aria-label="Search people to notify"
+            aria-label={placeholder || "Search people to notify"}
           />
         )}
       </div>
@@ -4499,7 +4524,9 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [needByDate, setNeedByDate] = useState("");
   const [etaDate, setEtaDate] = useState("");
   const [etaTime, setEtaTime] = useState("");
-  const [sentBy, setSentBy] = useState("");
+  /* prefilled with the signed-in user — the requester nearly always is;
+     the chip removes like any other for on-behalf-of submissions */
+  const [sentBy, setSentBy] = useState(currentAccountName());
   const [giveTo, setGiveTo] = useState("");
   const [filepath, setFilepath] = useState("");
   const [sliceStatus, setSliceStatus] = useState("Not Sliced");
@@ -4562,22 +4589,12 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         aria-label="Jobcode (required)"
       />
       <div className="flex gap-2">
-        <input
-          value={sentBy}
-          onChange={(e) => setSentBy(e.target.value)}
-          placeholder="Sent by *"
-          className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-          style={{ borderColor: "#C8C6C4" }}
-          aria-label="Sent by (required)"
-        />
-        <input
-          value={giveTo}
-          onChange={(e) => setGiveTo(e.target.value)}
-          placeholder="Give to *"
-          className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-          style={{ borderColor: "#C8C6C4" }}
-          aria-label="Give to (required)"
-        />
+        <div className="flex-1 min-w-0">
+          <PeoplePicker single value={sentBy} onChange={setSentBy} placeholder="Sent by *" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <PeoplePicker single value={giveTo} onChange={setGiveTo} placeholder="Give to *" />
+        </div>
       </div>
       <div className="text-xs" style={{ color: "#605E5C" }}>
         <span className="block">Notify when print starts</span>
