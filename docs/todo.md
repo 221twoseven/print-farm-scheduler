@@ -52,7 +52,7 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Printers~~ | ~~Status (legacy)~~ | ~~delete~~ | deleted; the code fallback went with it in #19 |
 | ~~Tasks~~ | ~~CompletedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CompletedAt`, matches display name; needed by item 20 |
 | ~~Tasks~~ | ~~CreatedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CreatedAt`, matches display name; needed by item 21 (also feeds item 22's sort) |
-| Tasks | *(parent-job link, per-subtask quantity, derived-ID pieces — names TBD)* | TBD | item 32 — **do not create yet**; the columns come out of the design proposal, which needs sign-off first. Same recipe as ever: column created → internal name confirmed → then code |
+| ~~Tasks~~ | ~~ParentID~~ | ~~Single line of text~~ | created 2026-08-17 — internal name confirmed as `ParentID` (capital D, **not** the `ParentId` the design proposed — the confirmation step earned its keep again); the only column item 32 needed |
 
 **After creating each column, send me its internal name** — List settings → click
 the column → the `Field=` value at the end of the address bar. Do not assume it
@@ -921,8 +921,10 @@ table the only history. Data layer untouched: completed tasks keep their
 
 ### 33. "Mark Complete and Duplicate" status option (3)
 
-**Risk: Medium. Depends on item 32** — "counts against the Job total" means
-nothing until quantities are arithmetic.
+**Risk: Medium. Unblocked 2026-08-17 — item 32 shipped**, so "counts against
+the Job total" now means something: a duplicated run is a sibling (same
+`ParentID`, next suffix letter) whose quantity counts into the job's
+remaining automatically, because remaining is derived.
 
 A status-dropdown option that completes the current subtask and spawns a new
 one with an **editable quantity** counted against the Job's total. (Phrasing
@@ -942,52 +944,41 @@ cleared `completedAt` — items 20–21). Two standing rules apply directly:
 
 ## Tier 14 — the job/subtask model (2026-08-17 request)
 
-The largest change since item 11 was written. Items 32 and 34 ship together or
-not at all; nothing else rides on their branch.
+### 32. Job / subtask data model (2) — DONE
 
-### 32. Job / subtask data model (2)
+*Shipped 2026-08-17, same day the design was signed off and the `ParentID`
+column created (internal name confirmed first — it came back `ParentID`, not
+the proposed `ParentId`).* All four design decisions went the recommended way:
+remaining counts completed runs; jobs auto-complete (and un-complete, two-way
+like Busy/Ready); the history table shows runs *and* a job summary row; the In
+Progress card face is title + "N of M left" pill / jobcode / need-by — which
+settles #35's two open calls: need-by returns on this card type only, ETA
+stays off it (a job spanning printers has no single ETA).
 
-**Risk: High.** Touches the Tasks schema, the save layer, staging, and every
-mutation handler near assignment. **Design proposal and sign-off before any
-code; SharePoint columns created and internal names confirmed before any code
-ships.**
+The model that shipped, in one line: **one new column, everything else
+derived** — see
+[decisions.md](decisions.md#jobs-and-runs-one-list-one-column-everything-else-derived)
+for the reasoning and the accepted ceilings (suffix-letter reuse, no
+parent-edit propagation), and
+[ui-reference.md](ui-reference.md#in-progress-jobs-item-3234-both-views) for
+the behaviour. Migration story: none needed — rows that predate the model
+behave exactly as before.
 
-The model:
+Eviction rules that fell out of it: runs stay put through Maintenance;
+deleting a printer deletes its runs (quantity flows back to the job) while
+legacy tasks return to staging — the confirmation dialogs state both counts.
 
-- A **Job** is the production of all of one unique part (PropPart1, total
-  qty 100), raised by a designer into staging. Its **Name becomes a
-  persistent ID**.
-- Operator assignment creates a **Subtask** per printer with its own derived
-  ID (PropPart1-A) and quantity, counted against the Job's total.
-- The parent Job moves from Staging to the new **In Progress** block (item
-  34), showing remaining qty = total − (assigned or in-progress), with an
-  expandable list of printers and their subtasks.
+**Risk: High** — touched the Tasks schema, staging, assignment, and eviction.
+The save layer itself needed nothing: assignment is one new row, and the
+staging/In Progress split is derived, so there was nothing new to diff.
 
-What the design proposal has to cover:
+### 34. In Progress board block (2) — DONE
 
-- SharePoint columns: parent/child link, per-subtask quantity, ID derivation
-  — names TBD until sign-off (see the SharePoint table at the top).
-- **Migration story for existing rows** — today's rows are job and subtask at
-  once, and quantity is display-only; the model makes it arithmetic, so rows
-  with no subtasks need a stated fallback.
-- **The In Progress job card** — it lands on top of PR #35's three-row layout,
-  built around card = one task, and now needs the same info plus an expandable
-  subtask list. This is where #35's two open calls (need-by off the card face,
-  ETA assigned-only) get settled for good, and it pushes on the already-once-
-  loosened "minimal collapsed cards" decision — what earns a place on the card
-  has to be argued, not assumed.
-
-### 34. In Progress board block (2) — ships with item 32
-
-**Risk: Medium on its own; High as part of the pair.** The UI half of item 32,
-split out so model and board section can be *reviewed* separately — they do
-not ship separately.
-
-Below staging, same formatting as the staging block. Staging keeps jobs not
-yet assigned anywhere; In Progress holds jobs with at least one live subtask;
-completed jobs continue to the history table — since item 31 (shipped first),
-the only history: a completed subtask leaves its printer card straight for the
-table.
+*Shipped 2026-08-17 with item 32*, as `InProgressPanel`: below staging, same
+chrome, hidden when empty, staging's sort (priority → need-by → created-at),
+no search/paging (the block is bounded by printers, not backlog). Interaction
+mirrors staging's view split: designers click into the job and get its
+context menu; operators drag it to a printer to assign another run.
 
 ---
 
@@ -1000,33 +991,30 @@ names TBD until its design is signed off.
 
 **What is left, sorted by lowest-hanging fruit:**
 
-1. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
+1. **Item 33** — Mark Complete and Duplicate. Now the cheapest real build:
+   `copyTask` + sibling-run mechanics that item 32 already provides.
+2. **Item 35's UI-copy half** — the new In Progress panel already speaks
+   job/run; what remains is a label pass over the older copy ("New task",
+   "Add task", card tooltips). Cheap, cosmetic, safe to batch with item 33.
+3. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
    `Other` in SharePoint. Two minutes in list settings, no code, optional;
    nothing breaks either way.
-2. **Item 35's UI-copy half** — rides with item 32. Its open question is
-   answered: **no `XX000` enforcement** (decided 2026-08-17); the glossary
-   documents the convention and the field stays free text.
-3. ~~**Item 31**~~ — done, shipped 2026-08-17. No UI purge, complete goes
-   straight to the table.
-4. **Items 32 + 34** — the job/subtask model and the In Progress block, as one
-   designed change on its own branch. Design proposal → sign-off → columns
-   created and internal names confirmed → code. Nothing else on that branch.
-5. **Item 33** — Mark Complete and Duplicate. After 32; it composes existing
-   pieces once quantities are arithmetic.
-6. **Tier 11** (12, then 11, then 24) — unchanged posture, with one new fact:
-   **item 11's design should now wait for item 32**, since parent/child rows
-   change what the identity-diff save layer has to reconcile. 12's research is
-   still cheap and still first among the three.
-7. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
+4. **Tier 11** (12, then 11, then 24) — unchanged posture. Item 32 is now
+   *in*, so item 11's design discussion can start whenever: the fact it was
+   waiting on (what parent/child rows do to the identity-diff save layer) is
+   settled — assignment is one new row, block membership is derived. 12's
+   research is still cheap and still first among the three.
+5. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
    and then only with Mac console output in hand.
 
-**Current state (2026-08-17):** the 2026-08-17 request added items 31–35.
-Shipped same day: item 35's docs half (glossary, plus the no-enforcement
-answer on `XX000`) and item 31 (one history, no UI purge, Printer filter,
-build `2026-08-17.1`). Left: 32/34 — the big one — waiting on a design
-proposal and sign-off, then 33 behind it, and the decision-gated Tier 11
-three. Standing caveat: items 23, 25–27, 29, 30, the #35 card layout and now
-item 31 were verified by transpile and extracted-function tests only, never in
-a live browser — one deliberate check in Teams (header should read
-`2026-08-17.1` once item 31 deploys) is worth doing before stacking the model
-work on top.
+**Current state (2026-08-17):** the 2026-08-17 request added items 31–35, and
+all of it except item 33 and item 35's label pass shipped the same day:
+item 31 (one history, no UI purge, Printer filter — build `2026-08-17.1`),
+items 32+34 (the job/subtask model and In Progress block — build
+`2026-08-17.2`, one new `ParentID` column), and item 35's docs half. Standing
+caveat, now taller: everything from item 23 through the model work was
+verified by transpile and extracted-function tests only, never in a live
+browser — **the model change is the largest yet to ship that way**, so the
+serve-locally + Teams check (header should read `2026-08-17.2`) matters more
+than usual, and exercising one assign → complete → auto-complete cycle on
+test data before cutover is strongly advised.

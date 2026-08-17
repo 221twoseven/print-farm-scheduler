@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.1";
+const BUILD = "2026-08-17.2";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -317,6 +317,47 @@ const reindex = (rows, scopeOf = () => "board") => {
     const i = (seen[k] = (seen[k] ?? -1) + 1);
     return r.sortOrder === i ? r : { ...r, sortOrder: i };
   });
+};
+
+/* ---- subtask naming (item 32) ----
+   Subtask IDs read PropPart1-A, -B … -Z, then -AA (bijective base-26). The
+   next letter comes from the highest suffix already on the job's subtasks —
+   deleting an old run never shifts later names, and deleting the *latest*
+   frees its letter for reuse. That reuse is accepted over storing a counter,
+   which would cost a parent PATCH on every assignment.
+   ponytail: suffixes are parsed back out of titles, so renaming the parent
+   after runs exist restarts lettering at -A (titles may then repeat, which
+   this app allows everywhere). Store a counter column if that ever bites. */
+const lettersToNum = (s) => {
+  let n = 0;
+  for (const ch of s) {
+    const v = ch.charCodeAt(0) - 64; // 'A' → 1
+    if (v < 1 || v > 26) return 0;
+    n = n * 26 + v;
+  }
+  return n;
+};
+
+const numToLetters = (n) => {
+  let s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+};
+
+const nextSubtaskSuffix = (parentTitle, subtasks) => {
+  const prefix = `${parentTitle}-`;
+  let max = 0;
+  subtasks.forEach((t) => {
+    const title = t.title || "";
+    if (!title.startsWith(prefix)) return;
+    const v = lettersToNum(title.slice(prefix.length));
+    if (v > max) max = v;
+  });
+  return numToLetters(max + 1);
 };
 
 /* --------------------------- seed demo data --------------------------- */
@@ -641,7 +682,50 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     return map;
   }, [tasks]);
 
-  const stagingTasks = tasksByPrinter[STAGING] || [];
+  /* ---- job/subtask split (item 32) ----
+     A row with parentId set is a subtask — one print run on one printer. A
+     row without one that lives in STAGING is a Job; whether it renders in
+     the Staging block or the In Progress block is *derived* from whether it
+     has subtasks, so the "move" between those blocks costs zero writes and
+     leaves the identity-diff save layer nothing to diff. Rows without a
+     parentId that sit on a printer predate the model and behave as before. */
+  const subtasksByParent = useMemo(() => {
+    const map = {};
+    tasks.forEach((t) => {
+      if (t.parentId) (map[t.parentId] ||= []).push(t);
+    });
+    return map;
+  }, [tasks]);
+
+  const stagingRows = tasksByPrinter[STAGING] || [];
+
+  /* Staging = jobs not yet assigned anywhere. Completed jobs are excluded —
+     their home is the history table — and so are subtasks, which belong on
+     printers: an orphaned run (its printer deleted mid-flight) should not be
+     mistaken for a job waiting to be assigned. */
+  const stagingTasks = useMemo(
+    () =>
+      stagingRows.filter(
+        (t) =>
+          !t.parentId &&
+          t.status !== "Complete" &&
+          !(subtasksByParent[t.id]?.length)
+      ),
+    [stagingRows, subtasksByParent]
+  );
+
+  /* In Progress = jobs with at least one run on a printer, until the job
+     completes (see the auto-complete effect below). */
+  const inProgressJobs = useMemo(
+    () =>
+      stagingRows.filter(
+        (t) =>
+          !t.parentId &&
+          t.status !== "Complete" &&
+          (subtasksByParent[t.id]?.length)
+      ),
+    [stagingRows, subtasksByParent]
+  );
 
   /* Designer view's completed-jobs table needs every finished task
      regardless of printer — the one category of assigned-job info that
@@ -724,12 +808,18 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       )
     );
 
-  /* moving a printer to Maintenance sends its queued jobs back to staging */
+  /* Moving a printer to Maintenance sends its queued legacy jobs back to
+     staging. Subtasks stay put: a run cannot live in staging (staging holds
+     jobs), and silently deleting it would eat the operator's notes — so it
+     rides out the maintenance on the card, ready to be dragged to another
+     printer or deleted deliberately. */
   const setPrinterStatus = (id, status) => {
     updatePrinter(id, { status });
     if (PRINTER_STATUS[status]?.evicts) {
       setTasksOrdered((ts) =>
-        ts.map((t) => (t.printerId === id ? { ...t, printerId: STAGING } : t))
+        ts.map((t) =>
+          t.printerId === id && !t.parentId ? { ...t, printerId: STAGING } : t
+        )
       );
     }
   };
@@ -756,6 +846,46 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         return { ...p, status: want };
       });
       return moved ? next : ps;
+    });
+  }, [tasks]);
+
+  /* A job completes itself: the moment its total is fully assigned and every
+     run is Complete, the parent is stamped Complete — it leaves In Progress
+     and joins the history table as a summary row. Two-way, like Busy above:
+     reopening a run (or adding one) takes the stamp back off. Only jobs with
+     runs are ever touched — a plain staging row someone completes by hand is
+     their business. Same identity discipline as the Busy effect: untouched
+     rows keep their reference, and the same array returns when nothing
+     changed, or the save layer would PATCH every task each time one moved. */
+  useEffect(() => {
+    setTasks((ts) => {
+      const byParent = {};
+      ts.forEach((t) => {
+        if (t.parentId) (byParent[t.parentId] ||= []).push(t);
+      });
+      let changed = false;
+      const next = ts.map((t) => {
+        if (t.parentId || t.printerId !== STAGING) return t;
+        const subs = byParent[t.id];
+        if (!subs || subs.length === 0) return t;
+        const assigned = subs.reduce((n, s) => n + (Number(s.quantity) || 0), 0);
+        const done =
+          assigned >= (Number(t.quantity) || 1) &&
+          subs.every((s) => s.status === "Complete");
+        const want = done
+          ? "Complete"
+          : t.status === "Complete"
+          ? "In progress"
+          : t.status;
+        if (want === t.status) return t;
+        changed = true;
+        return {
+          ...t,
+          status: want,
+          completedAt: want === "Complete" ? nowIso() : "",
+        };
+      });
+      return changed ? next : ts;
     });
   }, [tasks]);
 
@@ -796,28 +926,69 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     setExpandedTaskId((cur) => (cur === id ? null : cur));
   };
 
+  /* Assigning a job to a printer creates a *subtask* — the job itself stays
+     in STAGING and renders in the In Progress block from now on (derived, no
+     write to the parent). The run copies the job's request fields at
+     creation; later edits to the job do not propagate. Quantity defaults to
+     the job's remaining (total minus every run so far, finished ones
+     included) and the editor opens on the new run so the operator can adjust
+     it — the same open-after-assign flow drops have always had. */
+  const assignSubtask = (job, printerId) => {
+    const subs = subtasksByParent[job.id] || [];
+    const assigned = subs.reduce((n, s) => n + (Number(s.quantity) || 0), 0);
+    /* fully-assigned jobs can still take another run (a failed print needs a
+       reprint before anything completes) — default that run to 1, not 0 */
+    const remaining = Math.max((Number(job.quantity) || 1) - assigned, 1);
+    const id = uid();
+    setTasksOrdered((ts) => [
+      ...ts,
+      {
+        ...job,
+        id,
+        parentId: job.id,
+        printerId,
+        title: `${job.title}-${nextSubtaskSuffix(job.title, subs)}`,
+        status: "Not started",
+        quantity: remaining,
+        etaDate: "",
+        etaTime: "",
+        operatorNotes: "",
+        createdAt: nowIso(),
+        completedAt: "",
+      },
+    ]);
+    setExpandedTaskId(id);
+  };
+
   /* drop on a column's open area: move to that printer, at the end */
   const moveTask = (taskId, destPrinterId) => {
     setDraggingTaskId(null);
     if (!acceptsTasks(destPrinterId)) return;
     const source = tasks.find((t) => t.id === taskId);
+    if (!source) return;
+    /* A subtask never returns to staging — staging holds jobs, not print
+       runs. Deleting the run (context menu) is the deliberate way to
+       un-assign one; its quantity flows back into the job's remaining the
+       moment the row is gone, since remaining is derived. */
+    if (destPrinterId === STAGING && source.parentId) return;
     /* Dropping a staging job back on staging has nothing left to do: staging
        order is computed (priority → need-by → created-at), so the move would
        be invisible — while still shuffling array position and renumbering
        every staging row after it, i.e. a PATCH per row for no visible effect.
        A printer queue is different: it still orders by sortOrder, so dropping
        a job on its own printer legitimately sends it to the back. */
-    if (destPrinterId === STAGING && source?.printerId === STAGING) return;
+    if (destPrinterId === STAGING && source.printerId === STAGING) return;
+    /* out of staging = an assignment, not a move (item 32) */
+    if (source.printerId === STAGING && destPrinterId !== STAGING) {
+      assignSubtask(source, destPrinterId);
+      return;
+    }
     setTasksOrdered((ts) => {
       const dragged = ts.find((t) => t.id === taskId);
       if (!dragged) return ts;
       const without = ts.filter((t) => t.id !== taskId);
       return [...without, { ...dragged, printerId: destPrinterId }];
     });
-    /* newly assigned from staging → open the editor so ETA/status get set */
-    if (source && source.printerId === STAGING && destPrinterId !== STAGING) {
-      setExpandedTaskId(taskId);
-    }
   };
 
   /* drop onto a specific card: insert before/after it */
@@ -826,7 +997,13 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     if (taskId === targetTaskId) return;
     const source = tasks.find((t) => t.id === taskId);
     const targetNow = tasks.find((t) => t.id === targetTaskId);
-    if (!targetNow || !acceptsTasks(targetNow.printerId)) return;
+    if (!source || !targetNow || !acceptsTasks(targetNow.printerId)) return;
+    /* out of staging = an assignment here too; the drop position is moot —
+       the new run lands at the end of the printer's queue like any drop */
+    if (source.printerId === STAGING && targetNow.printerId !== STAGING) {
+      assignSubtask(source, targetNow.printerId);
+      return;
+    }
     setTasksOrdered((ts) => {
       const dragged = ts.find((t) => t.id === taskId);
       const target = ts.find((t) => t.id === targetTaskId);
@@ -837,9 +1014,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       const updated = { ...dragged, printerId: target.printerId };
       return [...without.slice(0, insertAt), updated, ...without.slice(insertAt)];
     });
-    if (source && source.printerId === STAGING && targetNow.printerId !== STAGING) {
-      setExpandedTaskId(taskId);
-    }
   };
 
   /* duplicate a task in place; copies always reset to Not started */
@@ -896,16 +1070,24 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     setShowNewGroup(false);
   };
 
+  /* Deleting a printer (or a group of them) treats the two row kinds
+     differently: a legacy task falls back to staging as always, but a
+     subtask is deleted with its printer — a run cannot live in staging, and
+     its quantity flows back into the job's remaining the moment the row is
+     gone, since remaining is derived. The confirmation dialogs say so. */
+  const evictPrinterTasks = (ts, printerIds) =>
+    ts
+      .filter((t) => !(printerIds.includes(t.printerId) && t.parentId))
+      .map((t) =>
+        printerIds.includes(t.printerId) ? { ...t, printerId: STAGING } : t
+      );
+
   /* delete a group: remove its printers; their tasks fall back to staging */
   const deleteGroup = (groupId) => {
     const printerIds = printers
       .filter((p) => p.groupId === groupId)
       .map((p) => p.id);
-    setTasksOrdered((ts) =>
-      ts.map((t) =>
-        printerIds.includes(t.printerId) ? { ...t, printerId: STAGING } : t
-      )
-    );
+    setTasksOrdered((ts) => evictPrinterTasks(ts, printerIds));
     setPrinters((ps) => reindex(ps.filter((p) => p.groupId !== groupId), (p) => p.groupId));
     setGroups((gs) => reindex(gs.filter((g) => g.id !== groupId)));
   };
@@ -930,17 +1112,35 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
 
   const deletePrinter = (id) => {
     setPrinters((ps) => reindex(ps.filter((p) => p.id !== id), (p) => p.groupId));
-    setTasksOrdered((ts) =>
-      ts.map((t) => (t.printerId === id ? { ...t, printerId: STAGING } : t))
-    );
+    setTasksOrdered((ts) => evictPrinterTasks(ts, [id]));
   };
 
   /* ---------------------- destructive confirmations -------------------- */
 
+  /* what deleting these printers does to their rows, spelled out for the
+     confirmation: legacy tasks return to staging, subtasks are removed and
+     their quantity returns to the job (remaining is derived) */
+  const evictionSummary = (printerIds, plural) => {
+    const affected = tasks.filter((t) => printerIds.includes(t.printerId));
+    const runs = affected.filter((t) => t.parentId).length;
+    const legacy = affected.length - runs;
+    if (!affected.length)
+      return `No tasks are assigned to ${plural ? "its printers" : "it"}.`;
+    const parts = [];
+    if (legacy)
+      parts.push(
+        `${legacy} task${legacy !== 1 ? "s" : ""} move${legacy === 1 ? "s" : ""} back to the staging area`
+      );
+    if (runs)
+      parts.push(
+        `${runs} print run${runs !== 1 ? "s" : ""} ${runs === 1 ? "is" : "are"} removed — their quantity returns to their job's remaining`
+      );
+    return parts.join("; ") + ".";
+  };
+
   const askDeleteGroup = (groupId) => {
     const g = groups.find((x) => x.id === groupId);
     const gp = printers.filter((p) => p.groupId === groupId);
-    const affected = tasks.filter((t) => gp.some((p) => p.id === t.printerId)).length;
     setConfirm({
       title: `Delete “${g?.name}”?`,
       confirmLabel: "Delete group",
@@ -954,17 +1154,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
             .
           </p>
           <p className="text-sm" style={{ color: "#605E5C" }}>
-            {affected > 0 ? (
-              <>
-                <strong>
-                  {affected} task{affected !== 1 ? "s" : ""}
-                </strong>{" "}
-                on {gp.length !== 1 ? "those printers" : "that printer"} move back to
-                the staging area rather than being deleted.
-              </>
-            ) : (
-              "No tasks are assigned to its printers."
-            )}
+            {evictionSummary(gp.map((p) => p.id), true)}
           </p>
         </>
       ),
@@ -977,24 +1167,13 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
 
   const askDeletePrinter = (printerId) => {
     const p = printers.find((x) => x.id === printerId);
-    const affected = (tasksByPrinter[printerId] || []).length;
     setConfirm({
       title: `Delete “${p?.name}”?`,
       confirmLabel: "Delete printer",
       body: (
         <p className="text-sm" style={{ color: "#605E5C" }}>
           This permanently deletes the printer.{" "}
-          {affected > 0 ? (
-            <>
-              Its{" "}
-              <strong>
-                {affected} task{affected !== 1 ? "s" : ""}
-              </strong>{" "}
-              move back to the staging area rather than being deleted.
-            </>
-          ) : (
-            "It has no tasks assigned."
-          )}
+          {evictionSummary([printerId], false)}
         </p>
       ),
       onConfirm: () => deletePrinter(printerId),
@@ -1246,6 +1425,24 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
            dropping onto a specific card to reposition it would be a dead
            gesture. Dropping anywhere on the panel (onDropTask above) still
            moves a task into or out of staging. */
+        onExpandTask={(id) =>
+          setExpandedTaskId((cur) => (cur === id ? null : id))
+        }
+        onContextMenu={openTaskMenu}
+        onDragStart={setDraggingTaskId}
+        onDragEnd={() => setDraggingTaskId(null)}
+      />
+
+      {/* ---------------- in-progress jobs (item 34) ----------------
+          Jobs mid-production: at least one run on a printer, not yet
+          complete. Hidden entirely when empty, same rule as the jobcode
+          filter below. */}
+      <InProgressPanel
+        jobs={inProgressJobs}
+        subtasksByParent={subtasksByParent}
+        printers={printers}
+        operator={operator}
+        draggingTaskId={draggingTaskId}
         onExpandTask={(id) =>
           setExpandedTaskId((cur) => (cur === id ? null : id))
         }
@@ -2229,6 +2426,238 @@ function StagingArea({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------ in-progress jobs panel ----------------------- */
+
+/* Jobs with at least one run on a printer (item 34). Same chrome and sort as
+   staging — priority tier, then need-by, then created-at — but no search,
+   paging, or tier headers: this block holds what the shop is actively
+   producing, which is bounded by printers, not by the backlog. The card is
+   the approved three-row face (title + remaining pill / jobcode / need-by;
+   no ETA, since a job spanning printers has no single one), plus an
+   expandable list of its runs. Interaction mirrors staging's view split:
+   designers click into the job and get its context menu, operators drag it
+   to a printer to assign another run. */
+function InProgressPanel({
+  jobs,
+  subtasksByParent,
+  printers,
+  operator,
+  draggingTaskId,
+  onExpandTask,
+  onContextMenu,
+  onDragStart,
+  onDragEnd,
+}) {
+  const [openJobs, setOpenJobs] = useState({}); // jobId → runs list expanded
+
+  const printerName = useMemo(() => {
+    const map = {};
+    printers.forEach((p) => {
+      map[p.id] = p.name;
+    });
+    return map;
+  }, [printers]);
+
+  const sorted = useMemo(() => {
+    return jobs
+      .map((t, i) => [t, i])
+      .sort((a, b) => {
+        const pa = PRIORITY_RANK[a[0].priority || "Normal"];
+        const pb = PRIORITY_RANK[b[0].priority || "Normal"];
+        if (pa !== pb) return pa - pb;
+        const na = needByKey(a[0]);
+        const nb = needByKey(b[0]);
+        if (na !== nb) return na - nb;
+        const ca = createdKey(a[0]);
+        const cb = createdKey(b[0]);
+        if (ca !== cb) return ca - cb;
+        return a[1] - b[1]; // stable
+      })
+      .map(([t]) => t);
+  }, [jobs]);
+
+  if (jobs.length === 0) return null;
+
+  return (
+    <div
+      className="mx-5 mt-3 rounded-lg"
+      style={{ background: "white", border: "1px solid #E1DFDD" }}
+    >
+      <div className="px-4 py-2 flex items-center gap-2">
+        <Activity size={16} style={{ color: ACCENT }} />
+        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+          In progress
+        </span>
+        <span
+          className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+          style={{ background: "#EEF1FB", color: ACCENT, fontSize: 11 }}
+        >
+          {jobs.length}
+        </span>
+      </div>
+
+      <div className="px-4 pb-3">
+        <div
+          className="grid gap-2 items-start"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(232px, 1fr))" }}
+        >
+          {sorted.map((job) => {
+            const subs = subtasksByParent[job.id] || [];
+            const total = Number(job.quantity) || 1;
+            const assigned = subs.reduce(
+              (n, s) => n + (Number(s.quantity) || 0),
+              0
+            );
+            const remaining = Math.max(total - assigned, 0);
+            const needBy = job.needByDate ? formatEta(job.needByDate, "") : null;
+            const open = !!openJobs[job.id];
+            return (
+              <div
+                key={job.id}
+                draggable={operator}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", job.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  /* defer, so the browser captures the drag image before the
+                     card re-renders at reduced opacity — same trap TaskCard
+                     documents */
+                  if (onDragStart) setTimeout(() => onDragStart(job.id), 0);
+                }}
+                onDragEnd={() => onDragEnd && onDragEnd()}
+                onContextMenu={(e) => !operator && onContextMenu(e, job.id)}
+                className="rounded-lg border"
+                style={{
+                  borderColor: "#E1DFDD",
+                  background: "white",
+                  opacity: draggingTaskId === job.id ? 0.4 : 1,
+                  cursor: operator ? "grab" : "default",
+                }}
+              >
+                <button
+                  onClick={() => !operator && onExpandTask(job.id)}
+                  disabled={operator}
+                  className="w-full text-left px-2.5 pt-2 pb-1"
+                  title={
+                    operator
+                      ? "Drag to a printer to assign another run"
+                      : "Click for details · right-click for menu"
+                  }
+                >
+                  {/* Row 1: job name · remaining. The pill is the card's whole
+                      reason to exist — what is left to put on a printer. */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className="flex-1 min-w-0 text-sm leading-snug truncate"
+                      title={job.title}
+                      style={{ color: "#242424" }}
+                    >
+                      {job.title}
+                    </span>
+                    {job.priority && job.priority !== "Normal" && (
+                      <Flag
+                        size={11}
+                        className="flex-shrink-0"
+                        style={{ color: PRIORITY_STYLE[job.priority]?.text }}
+                        title={`Priority: ${job.priority}`}
+                      />
+                    )}
+                    <span
+                      className="px-1.5 rounded font-medium flex-shrink-0"
+                      style={{
+                        background: "#EEF1FB",
+                        color: ACCENT,
+                        fontSize: 10,
+                        lineHeight: "15px",
+                      }}
+                      title={`${assigned} of ${total} assigned to printers`}
+                    >
+                      {remaining} of {total} left
+                    </span>
+                  </div>
+
+                  {/* Row 2: jobcode, indented — same reading as TaskCard's */}
+                  {job.jobcode && (
+                    <div
+                      className="mt-0.5 tabular-nums truncate"
+                      style={{ paddingLeft: 12, color: "#605E5C", fontSize: 10 }}
+                      title={`Jobcode: ${job.jobcode}`}
+                    >
+                      {job.jobcode}
+                    </div>
+                  )}
+
+                  {/* Row 3: need-by. Back on this card type deliberately —
+                      the deadline is what drives assigning the rest. */}
+                  {needBy && (
+                    <div className="mt-1" style={{ fontSize: 10, color: "#605E5C" }}>
+                      Need by {needBy.date}
+                    </div>
+                  )}
+                </button>
+
+                {/* the job's runs, one line each */}
+                <button
+                  onClick={() =>
+                    setOpenJobs((s) => ({ ...s, [job.id]: !s[job.id] }))
+                  }
+                  className="w-full flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-gray-50"
+                  style={{ color: "#8A8886" }}
+                  aria-expanded={open}
+                >
+                  {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  {subs.length} run{subs.length !== 1 ? "s" : ""}
+                </button>
+                {open && (
+                  <div
+                    className="px-2.5 pb-2 space-y-1"
+                    style={{ background: "#FAFAFA" }}
+                  >
+                    {subs.map((s) => {
+                      const st = STATUS_STYLE[s.status];
+                      return (
+                        <div
+                          key={s.id}
+                          className="flex items-center gap-1.5 pt-1"
+                          style={{ fontSize: 11 }}
+                        >
+                          <span
+                            className="flex-1 min-w-0 truncate"
+                            style={{ color: "#605E5C" }}
+                            title={`${s.title} on ${printerName[s.printerId] || "—"}`}
+                          >
+                            {s.title} · {printerName[s.printerId] || "—"}
+                          </span>
+                          <span
+                            className="tabular-nums flex-shrink-0"
+                            style={{ color: "#8A8886", fontSize: 10 }}
+                          >
+                            Qty {Number(s.quantity) || 1}
+                          </span>
+                          <span
+                            className="px-1.5 rounded font-medium flex-shrink-0"
+                            style={{
+                              background: st.bg,
+                              color: st.text,
+                              fontSize: 10,
+                              lineHeight: "15px",
+                            }}
+                          >
+                            {s.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -4102,6 +4531,11 @@ const COLS = {
   tasks: {
     uuid: "TaskID",
     printerId: "PrinterID", // holds the literal string "staging" when unassigned
+    /* Empty for a Job (and for every row that predates item 32); a subtask
+       carries its parent Job's TaskID here. Note the internal name's capital
+       D — confirmed at creation 2026-08-17, and not the "ParentId" the design
+       doc proposed. Do not "fix" it. */
+    parentId: "ParentID",
     title: "Title",
     jobcode: "Jobcode",
     /* The requester's note, written while the job is in staging and frozen
@@ -4412,6 +4846,7 @@ const printerToRow = (p) => ({
 const taskFromRow = (f) => ({
   id: str(f[COLS.tasks.uuid]) || uid(),
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
+  parentId: str(f[COLS.tasks.parentId]),
   title: str(f[COLS.tasks.title]),
   jobcode: str(f[COLS.tasks.jobcode]),
   notes: str(f[COLS.tasks.notes]),
@@ -4437,6 +4872,7 @@ const taskFromRow = (f) => ({
 const taskToRow = (t) => ({
   [COLS.tasks.uuid]: t.id,
   [COLS.tasks.printerId]: t.printerId || STAGING,
+  [COLS.tasks.parentId]: t.parentId || "",
   [COLS.tasks.title]: t.title || "",
   [COLS.tasks.jobcode]: t.jobcode || "",
   [COLS.tasks.notes]: t.notes || "",

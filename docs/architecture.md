@@ -22,7 +22,8 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | `ConfirmDialog` | 1627–1674 | Destructive-action confirmation |
 | `ContextMenu` | 1675–1917 | Right-click menu for tasks and printers |
 | `StagingArea` | 1918–2252 | Unassigned queue: search, priority filter, sort keys, tier headers, batched loading |
-| `CompletedJobsPanel` | 2259–2452 | Both views (item 30): every completed job, newest first, jobcode filter, an in-flow block at the foot of the board, batched loading, read-only |
+| `InProgressPanel` | ~2300–2540 | Jobs with at least one run on a printer (items 32/34): remaining-quantity card, expandable runs list, drag-to-assign-another-run |
+| `CompletedJobsPanel` | ~2540–2790 | Both views (item 30): every completed job, newest first, jobcode + printer filters, an in-flow block at the foot of the board, batched loading, read-only |
 | `StatusPicker` | 2450–2559 | Task status control |
 | `PrinterColumn` | 2560–3024 | One printer card: specs, queue, completed section, drop targets |
 | `TaskCard` | 3025–3244 | Collapsed card |
