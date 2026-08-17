@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-12.5";
+const BUILD = "2026-08-17.1";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -935,13 +935,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     );
   };
 
-  /* permanently remove completed jobs from a printer's history */
-  const purgeDone = (printerId) => {
-    setTasksOrdered((ts) =>
-      ts.filter((t) => !(t.printerId === printerId && t.status === "Complete"))
-    );
-  };
-
   /* ---------------------- destructive confirmations -------------------- */
 
   const askDeleteGroup = (groupId) => {
@@ -1005,27 +998,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         </p>
       ),
       onConfirm: () => deletePrinter(printerId),
-    });
-  };
-
-  const askPurgeDone = (printerId) => {
-    const p = printers.find((x) => x.id === printerId);
-    const done = (tasksByPrinter[printerId] || []).filter(
-      (t) => t.status === "Complete"
-    ).length;
-    setConfirm({
-      title: `Clear completed jobs on “${p?.name}”?`,
-      confirmLabel: `Clear ${done} job${done !== 1 ? "s" : ""}`,
-      body: (
-        <p className="text-sm" style={{ color: "#605E5C" }}>
-          This permanently deletes{" "}
-          <strong>
-            {done} completed job{done !== 1 ? "s" : ""}
-          </strong>
-          . They cannot be recovered.
-        </p>
-      ),
-      onConfirm: () => purgeDone(printerId),
     });
   };
 
@@ -1463,7 +1435,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
                         onUpdateSettings={updatePrinterSettings}
                         onUpdateField={updatePrinterField}
                         onDeletePrinter={askDeletePrinter}
-                        onPurgeDone={askPurgeDone}
                         onStartAddTask={() => setAddingTaskIn(printer.id)}
                         onCancelAddTask={() => setAddingTaskIn(null)}
                         onAddTask={(fields) => addTask(printer.id, fields)}
@@ -1581,7 +1552,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
 
       {/* ---------------- task detail modal (single instance, app level) ----
           Kept out of TaskCard so it survives the card unmounting mid-edit —
-          e.g. setting a job Complete moves it to the Completed section. */}
+          e.g. setting a job Complete removes it from the printer card. */}
       {expandedTask && (
         <TaskDetailModal
           task={expandedTask}
@@ -2279,6 +2250,7 @@ function CompletedJobsPanel({ tasks, printers }) {
   const [collapsed, setCollapsed] = useState(true);
   const [limit, setLimit] = useState(COMPLETED_PAGE);
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
+  const [printerFilter, setPrinterFilter] = useState(""); // "" = every printer
   const scrollRef = useRef(null);
   const loadingRef = useRef(false);
 
@@ -2302,6 +2274,24 @@ function CompletedJobsPanel({ tasks, printers }) {
     return Array.from(set).sort();
   }, [tasks]);
 
+  /* Printers that have completed work, by the same record-not-live-board rule
+     as the jobcode list. A deleted printer's tasks go back to staging, whose
+     id has no name here — so an option is only offered while its name can be
+     shown, and a selection is dropped if its printer goes away. */
+  const printerOptions = useMemo(() => {
+    const ids = new Set();
+    tasks.forEach((t) => {
+      if (printerName[t.printerId]) ids.add(t.printerId);
+    });
+    return Array.from(ids).sort((a, b) =>
+      printerName[a].localeCompare(printerName[b])
+    );
+  }, [tasks, printerName]);
+
+  useEffect(() => {
+    if (printerFilter && !printerName[printerFilter]) setPrinterFilter("");
+  }, [printerFilter, printerName]);
+
   const sorted = useMemo(() => {
     return tasks
       .map((t, i) => [t, i])
@@ -2317,10 +2307,16 @@ function CompletedJobsPanel({ tasks, printers }) {
   }, [tasks]);
 
   // Filter after sorting, before pagination, so "load more" pages the matches
-  // rather than paging the full list and hiding most of a page.
+  // rather than paging the full list and hiding most of a page. The two
+  // filters compose: both set means both must match.
   const filtered = useMemo(
-    () => (jobcodeFilter ? sorted.filter((t) => t.jobcode === jobcodeFilter) : sorted),
-    [sorted, jobcodeFilter]
+    () =>
+      sorted.filter(
+        (t) =>
+          (!jobcodeFilter || t.jobcode === jobcodeFilter) &&
+          (!printerFilter || t.printerId === printerFilter)
+      ),
+    [sorted, jobcodeFilter, printerFilter]
   );
 
   const visible = filtered.slice(0, limit);
@@ -2330,7 +2326,7 @@ function CompletedJobsPanel({ tasks, printers }) {
   // a short match list scrolled past its own end.
   useEffect(() => {
     setLimit(COMPLETED_PAGE);
-  }, [jobcodeFilter]);
+  }, [jobcodeFilter, printerFilter]);
 
   useEffect(() => {
     loadingRef.current = false;
@@ -2381,11 +2377,11 @@ function CompletedJobsPanel({ tasks, printers }) {
         </span>
       </button>
 
-      {/* Jobcode filter — outside the scroll area so it stays put while the
-          table scrolls under it. Same visual pattern as the board's main
-          jobcode filter strip. Hidden when nothing completed has a jobcode:
-          an empty dropdown is clutter, not a feature. */}
-      {!collapsed && jobcodes.length > 0 && (
+      {/* Filters — outside the scroll area so they stay put while the table
+          scrolls under them. Same visual pattern as the board's main jobcode
+          filter strip. Each dropdown hides when it has nothing to offer: an
+          empty dropdown is clutter, not a feature. */}
+      {!collapsed && (jobcodes.length > 0 || printerOptions.length > 0) && (
         <div
           className="px-4 py-2 flex items-center gap-2 flex-wrap"
           style={{ background: "#FAFAF9", borderTop: "1px solid #EDEBE9" }}
@@ -2395,29 +2391,50 @@ function CompletedJobsPanel({ tasks, printers }) {
             style={{ color: "#605E5C" }}
           >
             <Search size={14} style={{ color: "#605E5C" }} />
-            Jobcode
+            Filter
           </span>
-          <select
-            value={jobcodeFilter}
-            onChange={(e) => setJobcodeFilter(e.target.value)}
-            className="text-xs px-2 py-1 rounded border bg-white outline-none"
-            style={{ borderColor: jobcodeFilter ? ACCENT : "#C8C6C4", minWidth: 150 }}
-            aria-label="Filter completed jobs by jobcode"
-          >
-            <option value="">All jobcodes</option>
-            {jobcodes.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          {jobcodeFilter && (
+          {jobcodes.length > 0 && (
+            <select
+              value={jobcodeFilter}
+              onChange={(e) => setJobcodeFilter(e.target.value)}
+              className="text-xs px-2 py-1 rounded border bg-white outline-none"
+              style={{ borderColor: jobcodeFilter ? ACCENT : "#C8C6C4", minWidth: 150 }}
+              aria-label="Filter completed jobs by jobcode"
+            >
+              <option value="">All jobcodes</option>
+              {jobcodes.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          {printerOptions.length > 0 && (
+            <select
+              value={printerFilter}
+              onChange={(e) => setPrinterFilter(e.target.value)}
+              className="text-xs px-2 py-1 rounded border bg-white outline-none"
+              style={{ borderColor: printerFilter ? ACCENT : "#C8C6C4", minWidth: 150 }}
+              aria-label="Filter completed jobs by printer"
+            >
+              <option value="">All printers</option>
+              {printerOptions.map((id) => (
+                <option key={id} value={id}>
+                  {printerName[id]}
+                </option>
+              ))}
+            </select>
+          )}
+          {(jobcodeFilter || printerFilter) && (
             <>
               <span className="text-xs" style={{ color: "#605E5C" }}>
                 {filtered.length} job{filtered.length !== 1 && "s"}
               </span>
               <button
-                onClick={() => setJobcodeFilter("")}
+                onClick={() => {
+                  setJobcodeFilter("");
+                  setPrinterFilter("");
+                }}
                 className="text-xs font-medium underline"
                 style={{ color: ACCENT }}
               >
@@ -2440,8 +2457,8 @@ function CompletedJobsPanel({ tasks, printers }) {
               className="text-xs italic py-6 text-center"
               style={{ color: "#8A8886" }}
             >
-              {jobcodeFilter
-                ? `No completed jobs for ${jobcodeFilter}.`
+              {jobcodeFilter || printerFilter
+                ? "No completed jobs match the filter."
                 : "No completed jobs yet."}
             </div>
           ) : (
@@ -2661,7 +2678,6 @@ function PrinterColumn({
   onUpdateSettings,
   onUpdateField,
   onDeletePrinter,
-  onPurgeDone,
   onStartAddTask,
   onCancelAddTask,
   onAddTask,
@@ -2684,19 +2700,19 @@ function PrinterColumn({
   const [dragOver, setDragOver] = useState(false);
   const [specsOpen, setSpecsOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
-  const [doneOpen, setDoneOpen] = useState(false);
 
   /* Maintenance dims the card, but never the control that brings it back —
      a CSS filter applies to the whole subtree, so the dimming lives on a
      wrapper the status button sits outside of */
   const dim = inactive ? { opacity: 0.55, filter: "grayscale(0.9)" } : undefined;
 
-  /* running queue = active (non-complete) jobs; completed jobs collapse
-     into a separate section at the bottom and leave the active slot count */
+  /* running queue = active (non-complete) jobs; a job marked Complete leaves
+     the card entirely — the completed-jobs table at the foot of the board is
+     the only history (item 31; the per-printer Completed section it replaced
+     is in that entry) */
   const exceptions = specExceptions(settings);
 
   const activeTasks = tasks.filter((t) => t.status !== "Complete");
-  const doneTasks = tasks.filter((t) => t.status === "Complete");
 
   /* queue slots: 2 visible by default; force open if the task being edited
      sits beyond slot 2 (e.g. just auto-expanded after assignment) */
@@ -3030,73 +3046,6 @@ function PrinterColumn({
             </button>
           )}
         </div>
-
-        {/* ---- completed jobs: collapsed section ----
-            Same block chrome as the jobcode filter strip and group cards —
-            rounded/bordered container, chevron header row, body on a shaded
-            background — rather than a bare button floating in the queue. */}
-        {doneTasks.length > 0 && (
-          <div
-            className="mx-3 mt-1 mb-2 rounded-lg overflow-hidden"
-            style={{ border: "1px solid #E1DFDD" }}
-          >
-            <button
-              onClick={() => setDoneOpen((v) => !v)}
-              className="w-full flex items-center gap-1.5 text-xs font-medium py-2 px-3 hover:bg-gray-50"
-              style={{ color: "#498205" }}
-              aria-expanded={doneOpen}
-            >
-              {doneOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              <Check size={12} />
-              Completed
-              <span
-                className="ml-1 px-1.5 rounded-full font-semibold"
-                style={{ background: "#DFF6DD", color: "#498205", fontSize: 10 }}
-              >
-                {doneTasks.length}
-              </span>
-            </button>
-            {doneOpen && (
-              <div
-                className="space-y-2 px-3 pt-2 pb-3"
-                style={{ background: "#FAFAFA" }}
-              >
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {doneTasks.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      draggableCard={operator && !editPrintersMode}
-                      disabled={inactive || !operator || editPrintersMode}
-                      expanded={expandedTaskId === task.id}
-                      onExpand={() => !inactive && onExpandTask(task.id)}
-                      onContextMenu={onTaskContextMenu}
-                      onDragStart={onDragStart}
-                      onDragEnd={onDragEnd}
-                      onDropOnTask={accepts ? onDropOnTask : undefined}
-                      dragging={draggingTaskId === task.id}
-                    />
-                  ))}
-                </div>
-                {/* Operator-only. Permanently deleting board state is a
-                    class of control designer view never gets — the same rule
-                    that hides the printer menu and status control there (item
-                    10). The completed section itself stays readable in both
-                    views; only the purge button is withheld. */}
-                {operator && (
-                  <button
-                    onClick={() => onPurgeDone(printer.id)}
-                    className="w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded border border-dashed hover:bg-red-50"
-                    style={{ borderColor: "#F3D6D8", color: "#D13438" }}
-                    title="Permanently remove all completed jobs from this printer"
-                  >
-                    <Trash2 size={12} /> Clear history ({doneTasks.length})
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ---- add task ---- */}
         {operator && (

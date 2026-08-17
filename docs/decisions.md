@@ -54,12 +54,14 @@ card should have to argue for it — and note that need-by just lost its place, 
 ### Designer view never gets a permanent-delete control
 
 Any control that permanently deletes board state is operator view only, full
-stop. Designer view may *read* everything — assigned cards, completed sections,
-the global history table — but it configures nothing and destroys nothing. This
-is the same rule that keeps the shop-layout gear, the printer settings button
-and the printer status control out of designer view (item 10); the per-printer
-**Clear history** button follows it, and any future permanent-delete control
-inherits it without needing to argue the point again.
+stop. Designer view may *read* everything — assigned cards, the global history
+table — but it configures nothing and destroys nothing. This is the same rule
+that keeps the shop-layout gear, the printer settings button and the printer
+status control out of designer view (item 10); any future permanent-delete
+control inherits it without needing to argue the point again. (The per-printer
+**Clear history** button was this rule's first application; item 31 later
+removed that button in both views — see the next entry — which satisfies the
+rule vacuously rather than retiring it.)
 
 *Why this is a rule and not a per-button choice:* Clear history shipped with no
 gate at all — it rendered, enabled, in designer view, and its confirmation
@@ -71,6 +73,26 @@ than rediscovering it the next time someone adds a delete button.
 own completed view) would also be blocked and would have to argue for an
 exception. Accepted: the failure mode of a too-permissive delete is worse than
 the friction of a too-strict one.
+
+### Completed jobs are never purged from the UI
+
+Decided 2026-08-17 with item 31, which removed the per-printer Completed
+sections and made the completed-jobs table the only history. Clear history —
+the only purge path — went with them, and deliberately got no replacement: the
+board has **no control that deletes a completed job**, in either view. A job
+marked Complete leaves its printer card immediately and lives in the table
+from then on.
+
+*Why:* the table is meant to be the permanent record, and a record with a
+delete button is one accident away from not being one. Nothing on the board
+needs the rows gone — filters keep the table usable as it grows, and the
+batched loading already assumes an unbounded list.
+
+*Cost:* the record grows forever, and genuinely trimming it means editing the
+SharePoint Tasks list directly (filter to status Complete, delete rows) —
+deliberate friction, in the one place that already requires care. If the shop
+ever asks for purging back, it returns as an operator-view-only control on the
+table, per the rule above.
 
 ### Batched auto-loading over list virtualization
 
