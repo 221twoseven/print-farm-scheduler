@@ -94,6 +94,39 @@ deliberate friction, in the one place that already requires care. If the shop
 ever asks for purging back, it returns as an operator-view-only control on the
 table, per the rule above.
 
+### Jobs and runs: one list, one column, everything else derived
+
+Decided 2026-08-17 with items 32/34. Jobs and subtasks ("runs" in UI copy)
+became distinct things with **one new SharePoint column** — `ParentID` on
+Tasks (note the capital D; confirmed at creation, and not the "ParentId" the
+design proposed) — rather than a second list, a type column, or stored state
+for the staging/In Progress split:
+
+- A row with `ParentID` empty in staging is a **Job**; set, it is a **run** on
+  a printer. Rows with it empty *on* a printer predate the model and behave
+  exactly as before — **the migration story is that there is no migration**.
+- Whether a job renders in Staging or In Progress is **derived from whether
+  it has runs**. The parent is never PATCHed by assignment; the save layer's
+  identity diff sees only the one new run row.
+- Run names (`-A`, `-B`, … `-AA`) are parsed back out of titles to find the
+  next letter. Accepted ceilings, marked in the code: deleting the *latest*
+  run frees its letter for reuse, and renaming a parent after runs exist
+  restarts lettering (duplicate titles are legal everywhere in this app).
+  A counter column fixes both if they ever bite.
+- Runs **snapshot** the job's request fields at creation; later edits to the
+  job do not propagate. The frozen-notes rule (item 14) is preserved by the
+  snapshot, which is why the job's own notes stay editable in its modal.
+- The job **auto-completes** (and un-completes) from its runs — two-way
+  automation with the same identity discipline as Busy/Ready.
+
+*Why one column:* every alternative stored a fact that could be derived, and
+every stored fact is a write the identity-diff save layer has to get right.
+The one-column model adds exactly one write per assignment (the new row).
+
+*Cost:* remaining quantity, block membership, and completion are recomputed
+every render from the full task list — O(n) scans that are trivial at this
+shop's scale (tens of rows) and would need memo restructuring at thousands.
+
 ### Batched auto-loading over list virtualization
 
 Staging renders 60 cards and adds 60 more as you scroll. Virtualization would

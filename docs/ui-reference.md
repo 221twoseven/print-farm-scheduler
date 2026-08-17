@@ -17,9 +17,10 @@ explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
 - **Job** — the production of all of one unique part for a project
   (PropPart1, total qty 100), raised by a designer into staging. Under todo
   item 32 its name becomes a persistent ID.
-- **Subtask** — one print run of part of a Job on one printer (PropPart1-A,
-  qty 10), created by the operator at assignment. Does not exist as a distinct
-  thing until item 32 lands — today one row plays both roles.
+- **Subtask** (a *run* in UI copy) — one print run of part of a Job on one
+  printer (PropPart1-A, qty 10), created by the operator at assignment.
+  Distinct rows since item 32; rows that predate the model still play both
+  roles and behave as they always did.
 
 ## The board, top to bottom
 
@@ -38,12 +39,14 @@ explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
 2. **In-progress bar** — a chip per printer that has at least one `In progress`
    task, with a count, in the `In progress` status blue. Reads "No printers have
    tasks in progress" when empty.
-3. **Staging area** — the unassigned queue.
-4. **Jobcode filter** — dims every printer not working the selected jobcode.
+3. **Staging area** — jobs not yet assigned anywhere.
+4. **In progress jobs** — jobs with at least one run on a printer (item 34).
+   Hidden entirely when empty.
+5. **Jobcode filter** — dims every printer not working the selected jobcode.
    Hidden entirely when no assigned job carries one.
-5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
+6. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
-6. **Completed jobs panel** — the last block on the board, in both views.
+7. **Completed jobs panel** — the last block on the board, in both views.
 
 ## Operator view and Designer view
 
@@ -152,6 +155,42 @@ staging carries `printerId === "staging"`.
 - Staging cards use the same three-row layout as assigned cards (title + status,
   jobcode, then quantity), minus the ETA — see "Task cards" below.
 
+## In progress jobs (item 32/34, both views)
+
+Jobs mid-production: at least one run on a printer, not yet complete. Sits
+directly below staging, same chrome, hidden entirely when empty.
+
+**The model behind it (item 32):** dragging a job out of staging no longer
+moves the row — it **creates a run** (a subtask) on the target printer, named
+`<job>-A`, `-B`, … (`-Z`, then `-AA`), with quantity defaulting to the job's
+remaining and the detail editor opening on the new run, exactly like the old
+assign flow. The run copies the job's request fields at creation; **later
+edits to the job do not propagate to runs already made**. The job itself
+stays put and renders here instead of staging — that "move" is derived from
+its runs, not stored.
+
+- **Card face** (approved 2026-08-17): job name + a **"N of M left"** pill /
+  jobcode / **need-by**. Need-by is back on this card type deliberately — the
+  deadline is what drives assigning the rest. No ETA: a job spanning printers
+  has no single one.
+- **Runs list** — each card expands to its runs: name, printer, qty, status.
+- **Remaining = total − every run so far, finished ones included.** It only
+  ever goes down. A fully-assigned job can still take another run (a failed
+  print needs a reprint); that run defaults to qty 1.
+- **The job completes itself** the moment its total is fully assigned and
+  every run is Complete — it leaves this block and joins the history table as
+  a summary row (printer "—", qty = total). Reopening a run takes the stamp
+  back off and brings it back here. Both directions are automation, like
+  Busy/Ready on printers.
+- **Interaction mirrors staging's view split**: designers click into the job
+  (it is still their job data — total, need-by, priority) and get its context
+  menu; operators drag it to a printer to assign another run.
+- **A run never returns to staging** — staging holds jobs, not runs. Dropping
+  one there is refused; deleting the run (context menu) is the deliberate way
+  to un-assign it, and its quantity flows back into the job's remaining.
+- Deleting a job with live runs orphans them: they keep printing and complete
+  to the table as themselves. Nothing cascades.
+
 ## Completed jobs panel (both views)
 
 The permanent, cross-printer record of finished work — one table sorted by
@@ -209,8 +248,11 @@ printer belongs to is answered by the group it is sitting in.
   running; setting Reserved or Maintenance yourself overrules that for as long
   as you leave it set. Busy still takes new queued work — a printer mid-print is
   where the next job belongs. Moving a printer to **Maintenance** sends its
-  queued jobs back to staging and greys out the card (but never the control that
-  brings it back).
+  queued legacy jobs back to staging and greys out the card (but never the
+  control that brings it back). **Runs stay put through maintenance** — a run
+  cannot live in staging, and deleting it would eat the operator's notes — so
+  it rides out the downtime on the card, ready to be dragged to another
+  printer or deleted deliberately.
 - **Reserved and Maintenance refuse to start work.** "In progress" is greyed in
   the task context menu and the detail modal, with the reason in its tooltip.
 - **Specs summary** — the collapsed line reads **Standard setup** when every
@@ -238,7 +280,9 @@ printer belongs to is answered by the group it is sitting in.
   and nothing purges it from the UI).
 - **Empty state** — reads "No active jobs", "Reserved — no new jobs", "Out for
   maintenance", or "Drop task here" while dragging.
-- Deleting a printer sends its tasks to staging rather than deleting them.
+- Deleting a printer sends its legacy tasks to staging; **its runs are
+  deleted** (a run cannot live in staging), and their quantity returns to
+  their job's remaining. The confirmation dialog states both counts.
 
 ## Task cards
 
