@@ -174,7 +174,10 @@ staging carries `printerId === "staging"`.
 ## In progress jobs (item 32/34, both views)
 
 Jobs mid-production: at least one run on a printer, not yet complete. Sits
-directly below staging, same chrome, hidden entirely when empty.
+directly below staging, same chrome. Always visible: it used to hide when
+empty, which read as the feature being missing (it caused a false alarm the
+day it shipped); empty it reads "Nothing in progress — assign a staging job
+to a printer."
 
 **The model behind it (item 32):** dragging a job out of staging no longer
 moves the row — it **creates a run** (a subtask) on the target printer, named
@@ -242,8 +245,15 @@ space; the header expands it.
   dropdown hides when it has nothing to offer. A printer that has been deleted
   drops out of the filter (its completed jobs went back to staging and show
   "—" in the Printer column).
-- **Read-only, like every assigned job in designer view** — no click, no
-  drag, no context menu; the table exists to show history, not to edit it.
+- **Read-only except for one action**: right-click a row → **Reprint job**,
+  in both views — it queues a fresh copy of that row in staging (status Not
+  started, fresh creation stamp, blank ETA/operator notes/completion) and
+  changes nothing in the record. The original is deliberately never
+  un-completed: the table is a record, not a queue, and a job whose runs
+  still cover its quantity would just auto-complete itself again. A recalled
+  **run** comes back as a standalone job (parent link stripped) — staging
+  holds jobs, never runs. No click, no drag otherwise; the table exists to
+  show history, not to edit it.
 - **No purge control anywhere.** Clear history went with the per-printer
   sections (item 31, decided 2026-08-17): completed jobs are never removed
   from the UI. If the record ever genuinely needs trimming, that happens in
@@ -398,6 +408,9 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
 **On a printer:** the three statuses with their explanations, and Delete printer
 (legacy tasks go to staging; runs are deleted, their quantity returning to
 their job).
+
+**On a completed-jobs row:** one item, **Reprint job** — see the completed
+jobs panel section. Both views.
 
 ## Drag and drop
 
