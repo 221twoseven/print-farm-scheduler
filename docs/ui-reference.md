@@ -151,6 +151,14 @@ staging carries `printerId === "staging"`.
 - **Collapse** — a chevron folds the whole panel.
 - **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
   are all required; **Add task** stays disabled until every one is filled in.
+  **Notify when print starts** is an optional multi-select of tenant people
+  (chips plus a type-ahead over the whole directory, fetched once per session).
+  The signed-in creator shows as a pinned "you" chip — they are always
+  notified and are not stored in the list; SharePoint already records them as
+  the row's author. If the directory can't be read (no consent yet, seed
+  mode), the field degrades to "Directory unavailable" and the form still
+  works. Recipients are stored now; the notifications themselves are a later
+  change.
 - Drop a card anywhere on the panel to send it back to staging.
 - Staging cards use the same three-row layout as assigned cards (title + status,
   jobcode, then quantity), minus the ETA — see "Task cards" below.
@@ -337,6 +345,8 @@ the feedback was that the board read as visually busy.
 
 Every task field: title, jobcode, quantity (stepper), status, priority, print
 material, slice status, need-by date, ETA date and time, sent by, give to,
+notify when print starts (jobs only, not runs — the same people picker as the
+new-task form; a run inherits a snapshot nothing reads, so the field hides),
 notes, operator notes, filepath, print quality, print strength. The task's print material is what the
 job asks for, and is separate from what a printer is loaded with. Edits commit
 on blur and on close; there is no Save button. Delete lives here too.

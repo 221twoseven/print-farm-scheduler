@@ -144,6 +144,7 @@ PATCH every printer on every keystroke.
 | `needByDate` | `NeedByDate` | Date and Time | The deadline, where `EtaDate` is the prediction. Same noon-UTC write |
 | `sentBy` | `SentBy` | Text | Requesting designer |
 | `giveTo` | `GiveTo` | Text | Who receives the print |
+| `notifyPeople` | `NotifyPeople` | Text | JSON `[{id, name}]`, Entra object ids — extra people to ping when the job starts printing. Deliberately not a Person column (site-user lookup ids are painful via Graph). The creator isn't stored here; SharePoint's author field already records them |
 | `filepath` | `Filepath` | Text | Where the model lives |
 | `printQuality` | `PrintQuality` | Choice | |
 | `printStrength` | `PrintStrength` | Choice | |

@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.3";
+const BUILD = "2026-08-17.4";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -3943,6 +3943,18 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
             </Field>
           </div>
 
+          {/* Jobs only — a run carries a snapshot of this list, but the
+              notification will read it off the job, so editing it on a run
+              would edit a copy nothing looks at. */}
+          {!task.parentId && (
+            <Field label="Notify when print starts">
+              <PeoplePicker
+                value={val("notifyPeople", [])}
+                onChange={(next) => commit({ notifyPeople: next })}
+              />
+            </Field>
+          )}
+
           {/* The requester's note. Editable only while the job is in staging:
               once it is on a printer it is a record of what was asked for, and
               a record that can be rewritten afterwards is not one. Read-only
@@ -4301,6 +4313,148 @@ function NumberStepper({
   );
 }
 
+/* --------------------------- people picker ---------------------------- */
+
+/* The whole tenant directory, fetched once per session and filtered
+   client-side — at this shop's size a per-keystroke Graph query is pure
+   overhead. Resolves to null on failure (no consent yet, seed mode, no
+   network) so the picker can degrade instead of breaking the form; the
+   cache is cleared on failure so the next mount retries. */
+let peopleCache = null;
+function loadPeople() {
+  if (!peopleCache)
+    peopleCache = graph("/users?$select=id,displayName,mail&$top=999")
+      .then((res) =>
+        (res.value || [])
+          /* mail filters out service accounts and unlicensed objects */
+          .filter((u) => u.mail && u.displayName)
+          .map((u) => ({ id: u.id, name: u.displayName }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      )
+      .catch((err) => {
+        console.warn("Directory unreadable; people picker degraded.", err);
+        peopleCache = null;
+        return null;
+      });
+  return peopleCache;
+}
+
+/* Display name of the signed-in account, for the pinned "you" chip.
+   Empty when running on seed data with no sign-in. */
+const currentAccountName = () => msalApp?.getAllAccounts?.()[0]?.name || "";
+
+/* Multi-select of tenant people, rendered as removable chips plus a
+   type-ahead. `value`/`onChange` carry [{id, name}]. `pinnedName`, when
+   set, renders a fixed non-removable chip for the person who is always
+   notified (the job's creator). */
+function PeoplePicker({ value, onChange, pinnedName }) {
+  const [people, setPeople] = useState(undefined); // undefined = loading, null = unavailable
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    loadPeople().then((p) => live && setPeople(p));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const selected = value || [];
+  const chosen = new Set(selected.map((p) => p.id));
+  const q = query.trim().toLowerCase();
+  const matches = (people || [])
+    .filter((p) => !chosen.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
+    .slice(0, 8);
+
+  const add = (p) => {
+    onChange([...selected, p]);
+    setQuery("");
+  };
+  const remove = (id) => onChange(selected.filter((p) => p.id !== id));
+
+  const chip = (label, onRemove, title) => (
+    <span
+      key={label}
+      title={title}
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+      style={{ background: `${ACCENT}1A`, color: "#444791", fontSize: 11 }}
+    >
+      {label}
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className="rounded-full hover:bg-white"
+          aria-label={`Stop notifying ${label}`}
+        >
+          <X size={11} />
+        </button>
+      )}
+    </span>
+  );
+
+  return (
+    <div className="relative">
+      <div
+        className="flex flex-wrap items-center gap-1 rounded border bg-white px-1.5 py-1"
+        style={{ borderColor: "#C8C6C4", minHeight: 34 }}
+      >
+        {pinnedName &&
+          chip(`${pinnedName} · you`, null, "The job's creator is always notified")}
+        {selected.map((p) => chip(p.name, () => remove(p.id)))}
+        {people === null ? (
+          <span style={{ color: "#8A8886", fontSize: 11 }}>
+            Directory unavailable
+          </span>
+        ) : (
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && matches[0]) {
+                e.preventDefault();
+                add(matches[0]);
+              }
+              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Backspace" && !query && selected.length)
+                remove(selected[selected.length - 1].id);
+            }}
+            placeholder={people === undefined ? "Loading directory…" : "Add people…"}
+            disabled={people === undefined}
+            className="flex-1 text-xs outline-none bg-transparent"
+            style={{ minWidth: 70, color: "#242424", padding: "2px" }}
+            aria-label="Search people to notify"
+          />
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <div
+          className="absolute left-0 right-0 z-10 rounded-b border bg-white shadow-lg overflow-y-auto"
+          style={{ borderColor: "#C8C6C4", maxHeight: 180 }}
+        >
+          {matches.map((p) => (
+            <button
+              key={p.id}
+              /* onMouseDown, so selection lands before the input's blur
+                 closes the list */
+              onMouseDown={(e) => {
+                e.preventDefault();
+                add(p);
+              }}
+              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100"
+              style={{ color: "#242424" }}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* --------------------------- add task form ---------------------------- */
 
 function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
@@ -4319,6 +4473,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
   const [printStrength, setPrintStrength] = useState("Standard");
   const [quantity, setQuantity] = useState(1);
   const [priority, setPriority] = useState("Normal");
+  const [notifyPeople, setNotifyPeople] = useState([]);
 
   const needsSlicing =
     sliceStatus === "Not Sliced" || sliceStatus === "Needs Nesting";
@@ -4342,6 +4497,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       printMaterial,
       quantity,
       priority,
+      notifyPeople,
       ...(needsSlicing ? { printQuality, printStrength } : {}),
     });
   };
@@ -4387,6 +4543,16 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           style={{ borderColor: "#C8C6C4" }}
           aria-label="Give to (required)"
         />
+      </div>
+      <div className="text-xs" style={{ color: "#605E5C" }}>
+        <span className="block">Notify when print starts</span>
+        <div className="mt-0.5">
+          <PeoplePicker
+            value={notifyPeople}
+            onChange={setNotifyPeople}
+            pinnedName={currentAccountName()}
+          />
+        </div>
       </div>
       <textarea
         rows={2}
@@ -4583,7 +4749,9 @@ const SP = {
 };
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
-const SCOPES = ["Sites.ReadWrite.All"];
+/* User.ReadBasic.All feeds the notify-people picker's directory list.
+   auth.html carries its own copy of this list — keep them in step. */
+const SCOPES = ["Sites.ReadWrite.All", "User.ReadBasic.All"];
 const configured = () => Boolean(SP.clientId && SP.tenantId);
 
 /* ---------------------------------------------------------------------
@@ -4645,6 +4813,13 @@ const COLS = {
     needByDate: "NeedByDate",
     sentBy: "SentBy",
     giveTo: "GiveTo",
+    /* Extra people to ping when the job starts printing, as JSON —
+       [{id, name}] with Entra object ids — in a plain text column. A
+       Person column would round-trip through site-user lookup ids,
+       which Graph makes painful, and nothing but this app reads the
+       field. The job's creator is not stored here: SharePoint already
+       records them as the row's author. */
+    notifyPeople: "NotifyPeople",
     filepath: "Filepath",
     printQuality: "PrintQuality",
     printStrength: "PrintStrength",
@@ -4931,6 +5106,17 @@ const printerToRow = (p) => ({
   }, {}),
 });
 
+/* Tolerates hand-edited or blank NotifyPeople cells — anything that
+   isn't a JSON array reads as "nobody extra". */
+const parsePeople = (s) => {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+};
+
 const taskFromRow = (f) => ({
   id: str(f[COLS.tasks.uuid]) || uid(),
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
@@ -4948,6 +5134,7 @@ const taskFromRow = (f) => ({
   needByDate: isoToDate(f[COLS.tasks.needByDate]),
   sentBy: str(f[COLS.tasks.sentBy]),
   giveTo: str(f[COLS.tasks.giveTo]),
+  notifyPeople: parsePeople(str(f[COLS.tasks.notifyPeople])),
   filepath: str(f[COLS.tasks.filepath]),
   printQuality: str(f[COLS.tasks.printQuality]) || "Medium",
   printStrength: str(f[COLS.tasks.printStrength]) || "Standard",
@@ -4974,6 +5161,9 @@ const taskToRow = (t) => ({
   [COLS.tasks.needByDate]: dateToIso(t.needByDate),
   [COLS.tasks.sentBy]: t.sentBy || "",
   [COLS.tasks.giveTo]: t.giveTo || "",
+  [COLS.tasks.notifyPeople]: t.notifyPeople?.length
+    ? JSON.stringify(t.notifyPeople)
+    : "",
   [COLS.tasks.filepath]: t.filepath || "",
   [COLS.tasks.printQuality]: t.printQuality || "Medium",
   [COLS.tasks.printStrength]: t.printStrength || "Standard",

@@ -30,7 +30,10 @@
 
 var CLIENT_ID = "948b6982-588a-4a0f-a109-169675cb4fd9";
 var TENANT_ID = "70aa5330-416f-48cb-a64f-1a89f0196577";
-var SCOPES = ["https://graph.microsoft.com/Sites.ReadWrite.All"];
+var SCOPES = [
+  "https://graph.microsoft.com/Sites.ReadWrite.All",
+  "https://graph.microsoft.com/User.ReadBasic.All",
+];
 var SELF = window.location.origin + window.location.pathname;
 
 function fail(text) {
