@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.8";
+const BUILD = "2026-08-17.9";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1091,6 +1091,36 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     setExpandedTaskId(id);
   };
 
+  /* Recall from history: a fresh job in staging built from a completed row.
+     The original is deliberately never un-completed — the table is a record,
+     not a queue, and a job whose runs still cover its quantity would just
+     auto-complete itself again in the same pass. Runs recalled this way come
+     back as standalone jobs (parentId stripped): their old job is finished,
+     and a run must never sit in staging (item 32). */
+  const reprintTask = (taskId) => {
+    setTasksOrdered((ts) => {
+      const row = ts.find((t) => t.id === taskId);
+      if (!row) return ts;
+      return [
+        ...ts,
+        {
+          ...row,
+          id: uid(),
+          parentId: "",
+          printerId: STAGING,
+          status: "Not started",
+          /* same reset as Complete & reprint: its own prediction, its own
+             working notes, its own history */
+          etaDate: "",
+          etaTime: "",
+          operatorNotes: "",
+          createdAt: nowIso(),
+          completedAt: "",
+        },
+      ];
+    });
+  };
+
   const addTask = (printerId, fields) => {
     setTasksOrdered((ts) => [
       ...ts,
@@ -1246,6 +1276,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ type: "printer", id: printerId, x: e.clientX, y: e.clientY });
+  };
+
+  /* history rows get their own menu type: the full task menu offers status,
+     moves and delete, none of which belong on a finished record */
+  const openHistoryMenu = (e, taskId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ type: "history", id: taskId, x: e.clientX, y: e.clientY });
   };
 
   /* ------------------------------ render ------------------------------ */
@@ -1799,9 +1837,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           completion, filterable by jobcode. Shown in both views: an operator
           and a designer have equal reason to look up what shipped, and it
           carries no control that either shouldn't have (it has no purge
-          button in either view — see decisions.md). Read-only, same as every
-          assigned job in designer view: no click, no drag, no context menu. */}
-      <CompletedJobsPanel tasks={completedTasks} printers={printers} />
+          button in either view — see decisions.md). Read-only except for one
+          action, in both views: right-click → Reprint job, which queues a
+          fresh copy in staging and touches nothing in the record. */}
+      <CompletedJobsPanel
+        tasks={completedTasks}
+        printers={printers}
+        onContextMenu={openHistoryMenu}
+      />
 
       {/* ---------------- task detail modal (single instance, app level) ----
           Kept out of TaskCard so it survives the card unmounting mid-edit —
@@ -1847,6 +1890,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           onCompleteReprint={completeAndReprint}
           onMoveTask={moveTask}
           onCopyTask={copyTask}
+          onReprintTask={reprintTask}
           onSetStatus={setPrinterStatus}
           onDeletePrinter={askDeletePrinter}
           onExpandTask={(id) => setExpandedTaskId(id)}
@@ -1919,6 +1963,7 @@ function ContextMenu({
   onDeleteTask,
   onMoveTask,
   onCopyTask,
+  onReprintTask,
   onCompleteReprint,
   onSetStatus,
   onDeletePrinter,
@@ -2104,6 +2149,25 @@ function ContextMenu({
           label="Delete task"
           danger
           onClick={() => onDeleteTask(task.id)}
+        />
+      </>
+    );
+  }
+
+  /* a completed row's one action: recall it to staging as a fresh job.
+     Available in both views — a designer re-raising finished work is the
+     whole point of the record. */
+  if (menu.type === "history") {
+    const task = tasks.find((t) => t.id === menu.id);
+    if (!task) return null;
+    content = (
+      <>
+        <Header>{task.title}</Header>
+        <Item
+          icon={<Copy size={14} style={{ color: "#605E5C" }} />}
+          label="Reprint job"
+          title="Queue a fresh copy of this job in the staging area"
+          onClick={() => onReprintTask(task.id)}
         />
       </>
     );
@@ -2554,8 +2618,6 @@ function InProgressPanel({
       .map(([t]) => t);
   }, [jobs]);
 
-  if (jobs.length === 0) return null;
-
   return (
     <div
       className="mx-5 mt-3 rounded-lg"
@@ -2575,6 +2637,13 @@ function InProgressPanel({
       </div>
 
       <div className="px-4 pb-3">
+        {jobs.length === 0 ? (
+          /* the block used to hide when empty, which read as the feature
+             being missing — it stays put now, stating its own empty case */
+          <div className="text-xs italic" style={{ color: "#8A8886" }}>
+            Nothing in progress — assign a staging job to a printer.
+          </div>
+        ) : (
         <div
           className="grid gap-2 items-start"
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(232px, 1fr))" }}
@@ -2731,6 +2800,7 @@ function InProgressPanel({
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );
@@ -2749,7 +2819,7 @@ const completedAtKey = (t) => {
   return Number.isNaN(v) ? null : v;
 };
 
-function CompletedJobsPanel({ tasks, printers }) {
+function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
   const [collapsed, setCollapsed] = useState(true);
   const [limit, setLimit] = useState(COMPLETED_PAGE);
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
@@ -2994,7 +3064,12 @@ function CompletedJobsPanel({ tasks, printers }) {
                   const completed = formatTimestamp(task.completedAt);
                   const operatorNote = (task.operatorNotes || "").trim();
                   return (
-                    <tr key={task.id} style={{ borderBottom: "1px solid #F3F2F1" }}>
+                    <tr
+                      key={task.id}
+                      onContextMenu={(e) => onContextMenu(e, task.id)}
+                      title="Right-click to reprint"
+                      style={{ borderBottom: "1px solid #F3F2F1" }}
+                    >
                       <td className="px-3 py-1.5" style={{ color: "#605E5C" }}>
                         {printerName[task.printerId] || "—"}
                       </td>
@@ -4406,13 +4481,16 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
     : value || [];
   const chosen = new Set(selected.map((p) => p.id));
   const q = query.trim().toLowerCase();
-  const matches = (people || [])
-    .filter((p) => !chosen.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
-    .slice(0, 8);
+  const matches = (people || []).filter(
+    (p) => !chosen.has(p.id) && (!q || p.name.toLowerCase().includes(q))
+  );
 
   const add = (p) => {
     onChange(single ? p.name : [...selected, p]);
     setQuery("");
+    /* in single mode the pick unmounts the input, so its blur never fires —
+       close here or the list sticks open with nothing left to close it */
+    if (single) setOpen(false);
   };
   const remove = (id) =>
     onChange(single ? "" : selected.filter((p) => p.id !== id));
@@ -4493,6 +4571,10 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
         <div
           className="absolute left-0 right-0 z-10 rounded-b border bg-white shadow-lg overflow-y-auto"
           style={{ borderColor: "#C8C6C4", maxHeight: 180 }}
+          /* the list scrolls the whole directory now, so its scrollbar is a
+             click target — preventDefault keeps that click from blurring the
+             input and closing the list mid-scroll */
+          onMouseDown={(e) => e.preventDefault()}
         >
           {matches.map((p) => (
             <button
