@@ -15,7 +15,10 @@ Checked this session, not remembered:
   sourcing, build .7) are both merged. A third PR — Sent by / Give to as
   single-select pickers, build **2026-08-17.8**, branch
   `claude/sentby-giveto-picker` — was opened at the end of this session;
-  check its state rather than assuming.
+  check its state rather than assuming. *(Reconcile note, later 2026-08-17:
+  it merged as PR #45, `6bbad8f`, and the live site was verified serving
+  BUILD `2026-08-17.8`. This session ran concurrently with the items 31–34
+  session — builds `.1`–`.3`, [handoff-2026-08-17-model.md](handoff-2026-08-17-model.md).)*
 - **Two new delegated Graph scopes are consented in the tenant**, granted by
   the admin during this session: `User.ReadBasic.All` (directory names) and
   `GroupMember.Read.All` (team roster). `Sites.ReadWrite.All` was already
