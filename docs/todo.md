@@ -3,8 +3,9 @@
 Working list of bugs and feature requests, ordered **simplest first**. Numbers in
 parentheses are the item's position in the original request, so the two lists can
 be cross-referenced. Items 1–14 trace to the original handoff request; items
-15–24 trace to the 2026-08-07 follow-up request — the two use separate (N)
-sequences, so cross-reference against whichever request you're reading.
+15–24 to the 2026-08-07 follow-up; items 25–30 to the 2026-08-12 request;
+items 31–35 to the 2026-08-17 request — each uses its own (N) sequence, so
+cross-reference against whichever request you're reading.
 
 Each entry records what changes, where, whether SharePoint needs a parallel
 change, and what could break. Items are marked DONE as they merge.
@@ -51,6 +52,7 @@ Every column below has to exist **before** the matching code change ships, or
 | ~~Printers~~ | ~~Status (legacy)~~ | ~~delete~~ | deleted; the code fallback went with it in #19 |
 | ~~Tasks~~ | ~~CompletedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CompletedAt`, matches display name; needed by item 20 |
 | ~~Tasks~~ | ~~CreatedAt~~ | ~~Date and Time~~ | created — internal name confirmed as `CreatedAt`, matches display name; needed by item 21 (also feeds item 22's sort) |
+| Tasks | *(parent-job link, per-subtask quantity, derived-ID pieces — names TBD)* | TBD | item 32 — **do not create yet**; the columns come out of the design proposal, which needs sign-off first. Same recipe as ever: column created → internal name confirmed → then code |
 
 **After creating each column, send me its internal name** — List settings → click
 the column → the `Field=` value at the end of the address bar. Do not assume it
@@ -688,16 +690,45 @@ always-shown quantity are actually missing.
   plus a detail modal". It is a deliberate, requested loosening rather than
   drift, so note it there if the card starts feeling busy again.
 
+**Superseded in part by PR #35 (2026-08-12), the three-row card layout:** title
++ status pill / jobcode indented / ETA + `Qty N`. Two calls were made in #35
+without an answer, both one line to reverse: **need-by left the card face**
+(modal-only — the three-row spec had no slot for it) and **ETA stays
+assigned-only** (hidden in staging). Both get resolved for good in item 32/34's
+card design rather than relitigated separately. The note icon and priority flag
+stayed on row 1 though the spec didn't mention them.
+
+### 30. Two-tier job history (6) — DONE
+
+*Shipped 2026-08-12, PRs #33/#34.* Per-printer Completed sections **plus** the
+global completed-jobs panel, now in **both** views (it was designer-only from
+item 23), with a jobcode filter built from every jobcode that has ever
+completed. Clear history (the purge) became operator-view-only, and a new
+decision was recorded: **designer view never gets a permanent-delete control**
+(see [decisions.md](decisions.md)).
+
+A caution for whoever reads the PR trail: **PR #33's body claimed this item
+while its diff only shipped item 27** — the follow-up commit (`9f1fde8`)
+implemented it for real. Judge what shipped by reading `main`, not PR
+descriptions or merged-flags; PRs here are merged locally and closed by hand.
+
+**Risk: Medium.** Read paths and one purge control; no schema change.
+
+**Item 31 partially reverses this** — see that entry before extending the
+per-printer sections.
+
 ---
 
 ## Tier 10 — a live bug, effort unknown until diagnosed (2026-08-12 request)
 
-### 28. Mac Teams: sign-in prompt, then a blank screen (4) — TABLED
+### 28. Mac Teams: sign-in prompt, then a blank screen (4) — SHELVED
 
-*Tabled 2026-08-12, waiting on a Mac.* The requester has a MacBook available
-from 2026-08-13 and will capture the console then. Nothing to do until that
-output exists — the three suspects below are guesses, and picking one without
-evidence is how auth gets rewritten for no reason.
+*Shelved indefinitely 2026-08-17 at the requester's direction* — Mac
+compatibility stays parked; it no longer jumps the queue. If it is ever picked
+back up, the entry below still holds: the first move is console output from an
+affected Mac captured across the whole load, and the three suspects are
+guesses until then — picking one without evidence is how auth gets rewritten
+for no reason.
 
 **Risk: High**, and unlike everything else on this list it is **currently
 broken for real users** rather than merely absent. Sorted here because its
@@ -831,35 +862,165 @@ Treat this item as "propose an approach and get it signed off", not
 
 ---
 
+## Tier 12 — docs and labels (2026-08-17 request)
+
+### 35. Terminology pass: jobcode / job / subtask — docs half DONE
+
+*Definitions confirmed 2026-08-17 and recorded in
+[ui-reference.md](ui-reference.md#terminology), shipped with this docs
+update.* What remains is the UI-copy half, which rides with item 32 — renaming
+"task" to "job"/"subtask" in labels before the model distinguishes them would
+mislabel today's rows, which play both roles at once.
+
+- **Jobcode** = the *project*: `XX000` — `XX` the client (`HE` = Hermes),
+  `000` that client's sequential project number (`HE270` = Hermes' 270th).
+- **Job** = producing all of one unique part for a project (PropPart1,
+  qty 100), raised by a designer.
+- **Subtask** = one print run of part of a Job on one printer (PropPart1-A,
+  qty 10), operator-created at assignment.
+
+**Do not rename the SharePoint list, columns, or `COLS` internal names**
+(CLAUDE.md rule 3) — UI copy and docs only.
+
+**Open question, flagged not decided:** item 16 made jobcode required; item 4
+noted the `XX000` shape with nothing enforcing it. Should the format now be
+enforced on the new-task form? Cheap either way; needs the shop's answer, since
+a hard format block on a field the shop free-types is the kind of thing that
+surprises someone mid-request.
+
+**Risk: Low.** Words.
+
+---
+
+## Tier 13 — moderate, decision-gated (2026-08-17 request)
+
+### 31. One job history: drop the per-printer tier, add a Printer filter (1)
+
+**Risk: Medium — and it partially reverses item 30, shipped five days before
+it was requested.** Item 30 built the two-tier history deliberately; this
+removes the per-printer Completed sections and makes the global completed-jobs
+table the only history, adding a **Printer filter** beside the existing
+jobcode filter (the table already has a Printer *column* from item 23, and the
+jobcode *filter* from item 30 is the model to copy).
+
+Mostly independent of item 32 and can land before it, but **two decisions are
+needed first**:
+
+- **Where does purging move?** Clear history lives in the per-printer section
+  being removed — it is the only purge path. Either completed jobs become
+  unpurgeable from the UI, or the global table gains a purge control. A purge
+  on the global table is fine **only as operator-view-only** — "designer view
+  never gets a permanent-delete control" is a fresh, deliberate decision
+  ([decisions.md](decisions.md)).
+- **Where does a just-completed job visually go?** Today it collapses into the
+  printer's own Completed section. With that gone, does it drop straight off
+  the printer card into the table?
+
+### 33. "Mark Complete and Duplicate" status option (3)
+
+**Risk: Medium. Depends on item 32** — "counts against the Job total" means
+nothing until quantities are arithmetic.
+
+A status-dropdown option that completes the current subtask and spawns a new
+one with an **editable quantity** counted against the Job's total. (Phrasing
+open — "Complete & reprint" may read better on the shop floor; the mechanism
+is what matters.)
+
+Build on `copyTask`, which already does the right hygiene (fresh `createdAt`,
+cleared `completedAt` — items 20–21). Two standing rules apply directly:
+
+- `updateTask` stamps completion only on a **real** status transition — do not
+  reintroduce the no-op-write bug fixed in the 2026-08-08 audit
+  ([handoff-2026-08-08.md](handoff-2026-08-08.md)).
+- The save layer diffs by identity: the handler must copy only what it
+  changes.
+
+---
+
+## Tier 14 — the job/subtask model (2026-08-17 request)
+
+The largest change since item 11 was written. Items 32 and 34 ship together or
+not at all; nothing else rides on their branch.
+
+### 32. Job / subtask data model (2)
+
+**Risk: High.** Touches the Tasks schema, the save layer, staging, and every
+mutation handler near assignment. **Design proposal and sign-off before any
+code; SharePoint columns created and internal names confirmed before any code
+ships.**
+
+The model:
+
+- A **Job** is the production of all of one unique part (PropPart1, total
+  qty 100), raised by a designer into staging. Its **Name becomes a
+  persistent ID**.
+- Operator assignment creates a **Subtask** per printer with its own derived
+  ID (PropPart1-A) and quantity, counted against the Job's total.
+- The parent Job moves from Staging to the new **In Progress** block (item
+  34), showing remaining qty = total − (assigned or in-progress), with an
+  expandable list of printers and their subtasks.
+
+What the design proposal has to cover:
+
+- SharePoint columns: parent/child link, per-subtask quantity, ID derivation
+  — names TBD until sign-off (see the SharePoint table at the top).
+- **Migration story for existing rows** — today's rows are job and subtask at
+  once, and quantity is display-only; the model makes it arithmetic, so rows
+  with no subtasks need a stated fallback.
+- **The In Progress job card** — it lands on top of PR #35's three-row layout,
+  built around card = one task, and now needs the same info plus an expandable
+  subtask list. This is where #35's two open calls (need-by off the card face,
+  ETA assigned-only) get settled for good, and it pushes on the already-once-
+  loosened "minimal collapsed cards" decision — what earns a place on the card
+  has to be argued, not assumed.
+
+### 34. In Progress board block (2) — ships with item 32
+
+**Risk: Medium on its own; High as part of the pair.** The UI half of item 32,
+split out so model and board section can be *reviewed* separately — they do
+not ship separately.
+
+Below staging, same formatting as the staging block. Staging keeps jobs not
+yet assigned anywhere; In Progress holds jobs with at least one live subtask;
+completed jobs continue to the history table — which item 31 is reshaping,
+so sequence 31 and 34 consciously if both are in flight.
+
+---
+
 ## Suggested sequencing
 
-Everything through Tier 9 is closed: items 1, 2, 4–10, 13–23, 25–27 and 29
-shipped; item 3 declined. Both SharePoint column batches exist and `checkSchema()` accepts
-them. **Nothing outstanding needs a new column** — the only SharePoint work
-left is item 6's optional wording tidy-up, which breaks nothing either way.
+Everything through Tier 9 is closed: items 1, 2, 4–10, 13–23, 25–27, 29 and
+30 shipped; item 3 declined; item 35's docs half shipped with this update.
+Item 28 is shelved indefinitely. Item 32 will need new SharePoint columns —
+names TBD until its design is signed off.
 
-**What is left, in the order I would do it:**
+**What is left, sorted by lowest-hanging fruit:**
 
-1. ~~**Tier 8** (25, 29, 26)~~ — done, shipped 2026-08-12 in one PR. Both open
-   decisions were answered rather than defaulted: exceptions stack one per
-   line, and the account name left the pill along with Sign out.
-2. ~~**Tier 9** (27)~~ — done, shipped 2026-08-12. It was exactly what the
-   entry predicted: ungating a line that already existed, with the real work
-   being what left the card (`×N`) rather than what joined it.
-3. **Tier 10** (28) — the Mac blank screen. **Tabled until a Mac is
-   available (2026-08-13).** It is the only item on this list actively broken
-   for someone, so it goes first the moment the console output lands; the
-   effort estimate does not exist before then.
-4. **Tier 11** (12, then 11, then 24) — the decision-gated three. Take **12**
-   first: the research is cheap and its answer may well be "the notifications
-   half is off the table", which is worth knowing before anyone plans around
-   it. Then **11**, which carries the real operational payoff. Then **24**,
-   the largest diff for the least functional gain — and the one that gets
-   materially easier once the interface stops moving, which items 25–27 are
-   evidence it has not yet.
+1. **Item 6's tail** — reword the Printers `PrintMaterial` choices to `ABS` /
+   `Other` in SharePoint. Two minutes in list settings, no code, optional;
+   nothing breaks either way.
+2. **Item 35's UI-copy half** — rides with item 32, plus one open question
+   (enforce `XX000` on the jobcode field?) that only needs an answer.
+3. **Item 31** — one job history with a Printer filter. Mostly independent of
+   the model work; buildable as soon as its two decisions (purge location,
+   completed-job flow off the printer card) are answered.
+4. **Items 32 + 34** — the job/subtask model and the In Progress block, as one
+   designed change on its own branch. Design proposal → sign-off → columns
+   created and internal names confirmed → code. Nothing else on that branch.
+5. **Item 33** — Mark Complete and Duplicate. After 32; it composes existing
+   pieces once quantities are arithmetic.
+6. **Tier 11** (12, then 11, then 24) — unchanged posture, with one new fact:
+   **item 11's design should now wait for item 32**, since parent/child rows
+   change what the identity-diff save layer has to reconcile. 12's research is
+   still cheap and still first among the three.
+7. **Item 28** — shelved indefinitely; only reopens at the requester's say-so,
+   and then only with Mac console output in hand.
 
-**Current state (2026-08-12):** five new items (25–29) came in, none needing
-SharePoint, and all four buildable ones — 25, 26, 27, 29 — shipped the same
-day. Left: **28**, tabled until a Mac is on hand tomorrow, and the
-decision-gated three. Everything through Tier 9 is now closed, and no
-outstanding item needs a SharePoint column.
+**Current state (2026-08-17):** nothing has landed since 2026-08-12 (`main` @
+PR #35, build `2026-08-12.5`). The 2026-08-17 request added items 31–35:
+item 35's docs half shipped with this update, 31 waits on two decisions, and
+32/34 — the big one — waits on a design proposal and sign-off. Standing
+caveat: items 23, 25–27, 29, 30 and the #35 card layout were verified by
+transpile and extracted-function tests only, never in a live browser — one
+deliberate check in Teams (header should read `2026-08-12.5`) is worth doing
+before stacking the new work on top.
