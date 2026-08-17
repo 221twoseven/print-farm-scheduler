@@ -151,6 +151,11 @@ staging carries `printerId === "staging"`.
 - **Collapse** — a chevron folds the whole panel.
 - **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
   are all required; **Add task** stays disabled until every one is filled in.
+  **Sent by** and **Give to** are single-select people pickers over the same
+  directory as Notify (below) — they still store a plain display name in the
+  same text columns, and fall back to free-text inputs if the directory can't
+  be read, since a required field must never dead-end. Sent by prefills with
+  the signed-in user; remove the chip to submit on someone else's behalf.
   **Notify when print starts** is an optional multi-select of people (chips
   plus a type-ahead, fetched once per session). Inside Teams the list is the
   roster of the team the tab is open in — managed by managing team
