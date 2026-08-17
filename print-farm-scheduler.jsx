@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.2";
+const BUILD = "2026-08-17.3";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1016,6 +1016,21 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     });
   };
 
+  /* A duplicated run is a real new run — it takes the next suffix letter and
+     counts against its job like any other, not a "(copy)" that reads like a
+     mistake. Rows without a parent (jobs, legacy tasks) keep the old
+     behaviour. Orphaned runs (parent deleted) fall back to "(copy)" too:
+     there is no parent title to derive from. */
+  const dupTitle = (ts, row) => {
+    const parent = row.parentId ? ts.find((t) => t.id === row.parentId) : null;
+    return parent
+      ? `${parent.title}-${nextSubtaskSuffix(
+          parent.title,
+          ts.filter((t) => t.parentId === row.parentId)
+        )}`
+      : `${row.title} (copy)`;
+  };
+
   /* duplicate a task in place; copies always reset to Not started */
   const copyTask = (taskId) => {
     setTasksOrdered((ts) => {
@@ -1024,7 +1039,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       const copy = {
         ...ts[idx],
         id: uid(),
-        title: `${ts[idx].title} (copy)`,
+        title: dupTitle(ts, ts[idx]),
         status: "Not started",
         /* a duplicate is a new job, not a continuation of the original's
            history — fresh creation stamp, no inherited completion */
@@ -1033,6 +1048,47 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       };
       return [...ts.slice(0, idx + 1), copy, ...ts.slice(idx + 1)];
     });
+  };
+
+  /* "Complete & reprint" (item 33): one action that completes the run and
+     queues its successor — the shop-floor case is a run that finished with
+     some parts bad and needs N more. The completed row heads for the history
+     table (item 31); the successor starts Not started on the same printer
+     with the same quantity, and the editor opens on it so the quantity gets
+     corrected before anyone reads it as fact. Completing here matches
+     updateTask's transition rule: the guard filters out already-Complete
+     rows, so the stamp only ever writes on a real transition. Both rows
+     change in one update — one PATCH, one POST, nothing else moves. The
+     successor also keeps the parent from auto-completing in the same pass. */
+  const completeAndReprint = (taskId) => {
+    const cur = tasks.find((t) => t.id === taskId);
+    if (!cur || cur.status === "Complete" || cur.printerId === STAGING) return;
+    const id = uid();
+    setTasksOrdered((ts) => {
+      const row = ts.find((t) => t.id === taskId);
+      if (!row || row.status === "Complete") return ts;
+      const copy = {
+        ...row,
+        id,
+        title: dupTitle(ts, row),
+        status: "Not started",
+        /* a new run gets its own prediction and its own working notes */
+        etaDate: "",
+        etaTime: "",
+        operatorNotes: "",
+        createdAt: nowIso(),
+        completedAt: "",
+      };
+      return [
+        ...ts.map((t) =>
+          t.id === taskId
+            ? { ...t, status: "Complete", completedAt: nowIso() }
+            : t
+        ),
+        copy,
+      ];
+    });
+    setExpandedTaskId(id);
   };
 
   const addTask = (printerId, fields) => {
@@ -1758,6 +1814,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           choices={choices}
           onUpdate={updateTask}
           onDelete={deleteTask}
+          onCompleteReprint={completeAndReprint}
           onClose={() => setExpandedTaskId(null)}
         />
       )}
@@ -1787,6 +1844,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           onClose={() => setContextMenu(null)}
           onUpdateTask={updateTask}
           onDeleteTask={deleteTask}
+          onCompleteReprint={completeAndReprint}
           onMoveTask={moveTask}
           onCopyTask={copyTask}
           onSetStatus={setPrinterStatus}
@@ -1861,6 +1919,7 @@ function ContextMenu({
   onDeleteTask,
   onMoveTask,
   onCopyTask,
+  onCompleteReprint,
   onSetStatus,
   onDeletePrinter,
   onExpandTask,
@@ -1960,6 +2019,21 @@ function ContextMenu({
                 />
               );
             })}
+            {/* An action, not a state: completes this run and queues its
+                successor with the quantity open in the editor (item 33).
+                Greyed once Complete — there is nothing left to complete, and
+                plain Duplicate below covers the copy. */}
+            <Item
+              icon={<Copy size={14} style={{ color: "#605E5C" }} />}
+              disabled={task.status === "Complete"}
+              title={
+                task.status === "Complete"
+                  ? "Already complete — use Duplicate task instead"
+                  : "Complete this run and queue a reprint; the editor opens to set its quantity"
+              }
+              label="Complete & reprint"
+              onClick={() => onCompleteReprint(task.id)}
+            />
             <Divider />
           </>
         )}
@@ -3724,7 +3798,7 @@ function TaskCard({
 /* Typing edits a local draft and commits on blur, so a task name is one save
    rather than one per letter. Discrete controls (selects, dates, steppers)
    commit immediately, folding in any pending text edit. */
-function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, onDelete, onClose }) {
+function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, onDelete, onCompleteReprint, onClose }) {
   const [draft, setDraft] = useState({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -4025,7 +4099,18 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
               <Field label="Status">
                 <select
                   value={task.status}
-                  onChange={(e) => commit({ status: e.target.value })}
+                  onChange={(e) => {
+                    /* an action riding in the status dropdown (item 33):
+                       flush pending edits into *this* row first — the modal
+                       switches to the successor, and drafts reset on task
+                       change rather than following it */
+                    if (e.target.value === "Complete & reprint") {
+                      flush();
+                      onCompleteReprint(task.id);
+                      return;
+                    }
+                    commit({ status: e.target.value });
+                  }}
                   className={MODAL_SELECT}
                   style={MODAL_STYLE}
                   title={
@@ -4042,6 +4127,9 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
                       {s}
                     </option>
                   ))}
+                  <option disabled={task.status === "Complete"}>
+                    Complete &amp; reprint
+                  </option>
                 </select>
               </Field>
             )}
