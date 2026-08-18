@@ -80,10 +80,11 @@ editing an unassigned job is the designer's. **Designer view keeps staging
 fully editable**, per the table above. Dragging a staging card onto a printer
 still works in both views; only the click-to-open and the context menu lock.
 
-The choice is remembered per browser (`localStorage`), unlike group collapse
-which resets each load — somebody who works as a designer should stay one
-without re-picking every morning. It is still per-person and still nothing
-SharePoint knows about.
+The choice is remembered per browser (`localStorage`) — somebody who works as
+a designer should stay one without re-picking every morning. Group collapse
+and the completed-jobs fold are remembered the same way. All of it is
+per-person and nothing SharePoint knows about: one person folding a panel
+never changes anyone else's board.
 
 Three things are hidden that the original request did not list — **Edit
 printers mode** (which is where adding and removing printers now lives), the
@@ -123,7 +124,8 @@ matching printers and a **Clear** link sit beside the dropdown.
   bug.
 - **The selection clears itself** if its jobcode stops being live, rather than
   leaving the board dimmed against something that no longer exists.
-- Per-person and not stored, like group collapse and the staging filters.
+- Per-person and not stored anywhere — it resets on reload, like the staging
+  filters.
 - The whole strip is hidden when no assigned job has a jobcode.
 
 ## Staging area
@@ -225,7 +227,9 @@ cards: same side margins, rounded corners, white background, one-pixel border,
 header row at the top with a chevron. It was originally anchored to the bottom
 of the viewport, which made it read as browser furniture rather than as part of
 the board. Collapsed by default so it doesn't compete with the groups grid for
-space; the header expands it.
+space; the header expands it, and the fold is remembered per browser
+(`localStorage`) like group collapse — one person expanding it never changes
+anyone else's board.
 
 - **Every task with status Complete, across every printer** — not scoped to
   one group or printer.
@@ -444,8 +448,10 @@ jobs panel section. Both views.
 
 ## Groups
 
-- Click the header to collapse or expand. **Collapse is per-person and is not
-  saved** — folding a group is one operator's view, not a fact about the shop.
+- Click the header to collapse or expand. **Collapse is per-person** — folding
+  a group is one operator's view, not a fact about the shop, so it is never
+  written to SharePoint. It is remembered per browser (`localStorage`), so a
+  fold survives reload without touching anyone else's board.
 - Rename in place via the pencil.
 - Groups have no colour in the interface. A colour is still assigned and stored
   against each group, but nothing renders it — see
