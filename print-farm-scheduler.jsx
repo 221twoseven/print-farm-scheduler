@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.8";
+const BUILD = "2026-08-18.9";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -3541,7 +3541,7 @@ function PrinterColumn({
             already say which group this is, so the chip was spending scarce
             card width to repeat them. */}
         <div className="px-3 pb-2 text-xs" style={{ color: "#8A8886" }}>
-          {tasks.length} task{tasks.length !== 1 && "s"}
+          {tasks.length} run{tasks.length !== 1 && "s"}
         </div>
 
         {/* assigned printer settings — compact, collapsible readout */}
