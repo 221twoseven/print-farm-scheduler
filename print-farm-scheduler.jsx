@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.18";
+const BUILD = "2026-08-18.19";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -992,7 +992,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     );
 
   const deleteTask = (id) => {
-    setTasksOrdered((ts) => ts.filter((t) => t.id !== id));
+    /* A job's runs go with it — a run whose parentId points at nothing is
+       invisible to both panels and can never auto-complete. */
+    setTasksOrdered((ts) => ts.filter((t) => t.id !== id && t.parentId !== id));
     setExpandedTaskId((cur) => (cur === id ? null : cur));
   };
 
@@ -2821,7 +2823,7 @@ function InProgressPanel({
                     style={{ background: "#FAFAFA" }}
                   >
                     {subs.map((s) => {
-                      const st = STATUS_STYLE[s.status];
+                      const st = STATUS_STYLE[s.status] || STATUS_STYLE["Not started"];
                       return (
                         <div
                           key={s.id}
@@ -3829,7 +3831,9 @@ function TaskCard({
      have one, so the icon carries the fact and its tooltip carries the text. */
   const operatorNote = (task.operatorNotes || "").trim();
   const overdue = isOverdue(task);
-  const st = STATUS_STYLE[task.status];
+  /* status is a SharePoint choice column — a value outside the three known
+     keys must not take the board down. */
+  const st = STATUS_STYLE[task.status] || STATUS_STYLE["Not started"];
   const [overPos, setOverPos] = useState(null); // 'before' | 'after' | null
 
   const indicatorShadow = !overPos
