@@ -391,7 +391,7 @@ the feedback was that the board read as visually busy.
 
 ### Detail modal
 
-Every task field: title, jobcode, quantity (stepper), status, priority, print
+Every task field: title, jobcode, quantity (number input), status, priority, print
 material, slice status, need-by date, ETA (preset buttons), sent by, give to,
 notify when print starts (jobs only, not runs — the same people picker as the
 new-task form; a run inherits a snapshot nothing reads, so the field hides),

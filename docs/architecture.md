@@ -28,7 +28,7 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | `PrinterColumn` | 3164–3587 | One printer card: specs, queue, drop targets |
 | `TaskCard` | 3588–3795 | Collapsed card |
 | `TaskDetailModal` | 3796–4240 | Full task editor, plus the shared `Field` wrapper and modal input styles |
-| `NumberStepper` | 4241–4311 | Quantity control |
+| `QuantityInput` | 4241–4311 | Quantity control (native number input) |
 | `PeoplePicker` | 4312–4517 | Directory-backed chips + type-ahead (item 12 groundwork): team roster inside Teams, tenant fallback, single- and multi-select modes, free-text degrade |
 | `AddTaskForm` | 4518–4770 | The inline new-task form |
 | Persistence | 4771–5445 | `SP`, `COLS`, MSAL, Graph, row mappers, schema check, load, save |
