@@ -154,7 +154,8 @@ history and [decisions.md](decisions.md).
 - **16** Five required fields on new tasks (#25) — all hard-block; existing
   blank rows untouched.
 - **17** View toggle survives Teams restart — verified 2026-08-08, no code.
-- **18** Operator-view staging cards read-only summary (#25).
+- **18** Operator-view staging cards read-only summary (#25); since
+  2026-08-18 the click opens a read-only preview modal instead of nothing.
 - **19** "Edit printers" mode replaces per-group Add printer (#25) — one
   global toggle.
 - **20** `CompletedAt` timestamp — stamps on the transition to Complete,

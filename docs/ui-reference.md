@@ -80,11 +80,13 @@ SharePoint permissions and a server-side check, which this app deliberately does
 not have. Do not describe it to anyone as access control.
 
 **One asymmetry runs the other way.** Staging is normally identical in both
-views, but in **operator view only**, staging cards stop opening the detail
-modal and drop their right-click menu — reading the summary is enough, and
-editing an unassigned job is the designer's. **Designer view keeps staging
-fully editable**, per the table above. Dragging a staging card onto a printer
-still works in both views; only the click-to-open and the context menu lock.
+views, but in **operator view only**, clicking a staging card opens the detail
+modal as a **read-only preview**: every designer-set field is visible, none is
+editable, Delete is replaced by a "Preview — assign to a printer to edit"
+note, and the right-click menu stays locked — an operator gets to see a job's
+full specs before assigning it, but editing an unassigned job is the
+designer's. **Designer view keeps staging fully editable**, per the table
+above. Dragging a staging card onto a printer still works in both views.
 
 The choice is remembered per browser (`localStorage`) — somebody who works as
 a designer should stay one without re-picking every morning. Group collapse
@@ -396,7 +398,10 @@ Closes on the X, on Escape, or on a click on the dimmed backdrop. Selecting text
 inside the panel and releasing outside it is a drag, not a click, and leaves the
 modal open — the same applies to the shop layout and confirmation dialogs.
 
-Tasks in staging hide the fields that only mean something once assigned.
+Tasks in staging hide the fields that only mean something once assigned. In
+**operator view**, the modal on a staging job is a read-only preview — all
+fields shown, all disabled, no Delete (see "One asymmetry runs the other
+way" above).
 
 ETA has no date or time pickers — entry is four one-click preset buttons,
 **Short / Medium / Long / Weekend**, each with its duration (~3 hrs, ~6 hrs,
