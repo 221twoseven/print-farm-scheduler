@@ -145,7 +145,7 @@ const optionsFor = (list, current) => {
 const specExceptions = (settings) => {
   const defaults = defaultPrinterFields();
   return PRINTER_FIELDS.filter(
-    (f) => (settings?.fields?.[f.key] || "") !== defaults[f.key]
+    (f) => (settings.fields[f.key] || "") !== defaults[f.key]
   ).map((f) => {
     const value = settings.fields[f.key];
     /* "Other" is not a material. If the operator named what is actually
@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.19";
+const BUILD = "2026-08-18.20";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -358,7 +358,11 @@ const nextSubtaskSuffix = (parentTitle, subtasks) => {
   subtasks.forEach((t) => {
     const title = t.title || "";
     if (!title.startsWith(prefix)) return;
-    const v = lettersToNum(title.slice(prefix.length));
+    const suffix = title.slice(prefix.length);
+    /* only real suffix shapes count — a hand-renamed run like "Bracket-REDO"
+       would otherwise parse as millions and jump the lettering forever */
+    if (!/^[A-Z]{1,2}$/.test(suffix)) return;
+    const v = lettersToNum(suffix);
     if (v > max) max = v;
   });
   return numToLetters(max + 1);
@@ -1127,7 +1131,12 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         title: dupTitle(ts, ts[idx]),
         status: "Not started",
         /* a duplicate is a new job, not a continuation of the original's
-           history — fresh creation stamp, no inherited completion */
+           history — fresh creation stamp, no inherited completion, and the
+           same reset the reprint paths do: its own prediction, its own
+           working notes */
+        etaDate: "",
+        etaTime: "",
+        operatorNotes: "",
         createdAt: nowIso(),
         completedAt: "",
       };
@@ -1397,7 +1406,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     >
       {/* board scrolls horizontally below its minimum width; thin styled bar */}
       <style>{`
-        .pp-board-scroll { overflow-x: auto; overflow-y: visible; }
+        /* overflow-y is computed to auto here regardless (one axis non-visible
+           forces the other), so the board IS a clip container on both axes —
+           anything that must escape it has to be position: fixed */
+        .pp-board-scroll { overflow-x: auto; }
         .pp-board-scroll::-webkit-scrollbar { height: 10px; }
         .pp-board-scroll::-webkit-scrollbar-track { background: #E8E8EC; border-radius: 5px; }
         .pp-board-scroll::-webkit-scrollbar-thumb { background: #C0BFCC; border-radius: 5px; }
@@ -1589,8 +1601,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
 
       {/* ---------------- in-progress jobs (item 34) ----------------
           Jobs mid-production: at least one run on a printer, not yet
-          complete. Hidden entirely when empty, same rule as the jobcode
-          filter below. */}
+          complete. */}
       <InProgressPanel
         jobs={inProgressJobs}
         subtasksByParent={subtasksByParent}
@@ -2165,7 +2176,9 @@ function ContextMenu({
           <>
             <Divider />
             <Header>Move to</Header>
-        {task.printerId !== STAGING && (
+        {/* runs never sit in staging (moveTask refuses them) — offering the
+            item would be a click that does nothing */}
+        {task.printerId !== STAGING && !task.parentId && (
           <Item
             icon={<Inbox size={14} style={{ color: "#605E5C" }} />}
             label={stagingName || "Staging area"}
@@ -2265,7 +2278,7 @@ function ContextMenu({
         <Divider />
         <Item
           icon={<Trash2 size={14} />}
-          label="Delete printer (work returns to staging)"
+          label="Delete printer"
           danger
           onClick={() => onDeletePrinter(printer.id)}
         />
@@ -2561,7 +2574,9 @@ function StagingArea({
               className="text-xs italic py-6 text-center"
               style={{ color: "#8A8886" }}
             >
-              No parts match your search.
+              {query || priorityFilter !== "All"
+                ? "No parts match your search."
+                : "Nothing in staging yet."}
             </div>
           ) : (
             <div
@@ -2600,6 +2615,9 @@ function StagingArea({
                     <TaskCard
                       task={task}
                       disabled={false}
+                      /* designers can't drop anywhere (every printer's onDrop
+                         requires operator), so don't let them pick cards up */
+                      draggableCard={operator}
                       expanded={expandedTaskId === task.id}
                       onExpand={() => onExpandTask(task.id)}
                       onContextMenu={onContextMenu}
@@ -3310,6 +3328,8 @@ function StatusPicker({ status, onSelect, readOnly }) {
     e.stopPropagation();
     const r = btnRef.current.getBoundingClientRect();
     setPos({
+      /* 176 ≈ rendered menu height for the current 3 statuses — recompute if
+         PRINTER_STATUSES grows or the menu silently clips off-screen */
       top: Math.min(r.bottom + 4, window.innerHeight - 176),
       left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
     });
@@ -4682,7 +4702,12 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
   const chosen = new Set(selected.map((p) => p.id));
   const q = query.trim().toLowerCase();
   const matches = (people || []).filter(
-    (p) => !chosen.has(p.id) && (!q || p.name.toLowerCase().includes(q))
+    (p) =>
+      !chosen.has(p.id) &&
+      /* the pinned creator is already notified — offering them again would
+         make a second chip and a double ping */
+      !(pinnedName && p.name === pinnedName) &&
+      (!q || p.name.toLowerCase().includes(q))
   );
 
   const add = (p) => {
@@ -4750,8 +4775,19 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
               if (e.key === "Enter" && matches[0]) {
                 e.preventDefault();
                 add(matches[0]);
+              } else if (e.key === "Enter" && q) {
+                /* nobody in the roster matched — take the typed name verbatim,
+                   or a required Sent by/Give to is unfillable for anyone
+                   outside the team */
+                e.preventDefault();
+                add({ id: query.trim(), name: query.trim() });
               }
-              if (e.key === "Escape") setOpen(false);
+              if (e.key === "Escape" && open) {
+                /* dismiss just the list — without this the modal's
+                   window-level Escape handler closes the whole editor too */
+                e.stopPropagation();
+                setOpen(false);
+              }
               if (e.key === "Backspace" && !query && selected.length)
                 remove(selected[selected.length - 1].id);
             }}
@@ -4767,7 +4803,7 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
           />
         )}
       </div>
-      {open && matches.length > 0 && (
+      {open && (matches.length > 0 || q) && (
         <div
           className="absolute left-0 right-0 z-10 rounded-b border bg-white shadow-lg overflow-y-auto"
           style={{ borderColor: "#C8C6C4", maxHeight: 180 }}
@@ -4791,6 +4827,20 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
               {p.name}
             </button>
           ))}
+          {matches.length === 0 && (
+            /* same free-text escape the directory-down path gets: a name
+               outside the roster is still a name */
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                add({ id: query.trim(), name: query.trim() });
+              }}
+              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100"
+              style={{ color: "#242424" }}
+            >
+              Add “{query.trim()}”
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -5445,8 +5495,12 @@ const isoToDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
    not a date-input string, so the noon-UTC fudge above doesn't apply and
    would only throw away the time of day. Round-trip the ISO string as-is. */
 
-const groupFromRow = (f) => ({
-  id: str(f[COLS.groups.uuid]) || uid(),
+/* All three fromRow mappers fall back to the SharePoint row id when the app's
+   uuid cell is blank (hand-added row, failed first write). It must be a STABLE
+   fallback — minting uid() here gave the row a new identity on every poll, so
+   mergeList saw a delete+create each tick and itemIds leaked a key per poll. */
+const groupFromRow = (f, row) => ({
+  id: str(f[COLS.groups.uuid]) || str(row?.id) || uid(),
   name: str(f[COLS.groups.name]),
   color: str(f[COLS.groups.color]) || GROUP_COLORS[0],
   collapsed: false,
@@ -5460,8 +5514,8 @@ const groupToRow = (g) => ({
   [COLS.groups.sortOrder]: num(g.sortOrder),
 });
 
-const printerFromRow = (f) => ({
-  id: str(f[COLS.printers.uuid]) || uid(),
+const printerFromRow = (f, row) => ({
+  id: str(f[COLS.printers.uuid]) || str(row?.id) || uid(),
   name: str(f[COLS.printers.name]),
   groupId: str(f[COLS.printers.groupId]),
   status: str(f[COLS.printers.status]) || "Ready",
@@ -5509,7 +5563,7 @@ const parsePeople = (s) => {
    signed-in user, who as the acting party is skipped anyway. */
 const taskFromRow = (f, row) => ({
   createdById: str(row?.createdBy?.user?.id),
-  id: str(f[COLS.tasks.uuid]) || uid(),
+  id: str(f[COLS.tasks.uuid]) || str(row?.id) || uid(),
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
   parentId: str(f[COLS.tasks.parentId]),
   title: str(f[COLS.tasks.title]),
@@ -5603,20 +5657,21 @@ async function loadChoices() {
 }
 
 /* Settings is a key/value list. A missing key falls back to the code
-   default rather than erroring, so a deleted row degrades gracefully. */
+   default rather than erroring, so a deleted row degrades gracefully.
+
+   A FAILED read must not be swallowed like a missing key: returning defaults
+   without registering itemIds means the next settings change takes the create
+   branch and duplicates rows for keys that already exist. Let the error reach
+   the load screen, which has a Try again button. */
 async function loadSettings(itemIds) {
   const out = { ...DEFAULT_APP_SETTINGS };
-  try {
-    const rows = await readList("Settings");
-    for (const row of rows) {
-      const key = str(row.fields?.Title);
-      if (!(key in out)) continue;
-      itemIds.set(`settings:${key}`, row.id);
-      const raw = str(row.fields?.Value);
-      out[key] = typeof out[key] === "number" ? num(raw, out[key]) : raw || out[key];
-    }
-  } catch (err) {
-    console.warn("Settings list unreadable, using defaults.", err);
+  const rows = await readList("Settings");
+  for (const row of rows) {
+    const key = str(row.fields?.Title);
+    if (!(key in out)) continue;
+    itemIds.set(`settings:${key}`, row.id);
+    const raw = str(row.fields?.Value);
+    out[key] = typeof out[key] === "number" ? num(raw, out[key]) : raw || out[key];
   }
   return out;
 }
