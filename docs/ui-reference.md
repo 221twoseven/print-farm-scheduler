@@ -230,6 +230,15 @@ space; the header expands it.
 
 - **Every task with status Complete, across every printer** — not scoped to
   one group or printer.
+- **Grouped by job**: the primary rows are finished jobs (plus legacy tasks,
+  orphaned runs, and runs whose job is still live — those stay top-level so
+  no completed work hides behind a parent that isn't in the table). Clicking
+  a job row expands its runs beneath it, chronological by completion,
+  indented on a grey ground; collapsed, only the primary rows show. The
+  header count is primary rows. Filters match the whole group — a job row
+  stays when any of its runs matches (a job carries no printer of its own,
+  so the printer filter would otherwise never show finished jobs), and an
+  expanded job shows all its runs, not just the matches.
 - **Sort: most recently completed first.** A job with no completion stamp (or
   an unparseable one) sorts last regardless — same "missing sorts last"
   principle staging's need-by/created-at tiebreakers use, just applied to a

@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.1";
+const BUILD = "2026-08-18.2";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -2825,6 +2825,7 @@ const completedAtKey = (t) => {
 
 function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
   const [collapsed, setCollapsed] = useState(true);
+  const [expanded, setExpanded] = useState({}); // jobId → its runs shown
   const [limit, setLimit] = useState(COMPLETED_PAGE);
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
   const [printerFilter, setPrinterFilter] = useState(""); // "" = every printer
@@ -2869,8 +2870,33 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
     if (printerFilter && !printerName[printerFilter]) setPrinterFilter("");
   }, [printerFilter, printerName]);
 
+  /* Runs nest under their parent job's row when that job is itself in the
+     table; the primary rows are jobs, legacy tasks, and runs whose parent is
+     still live or deleted — those stay top-level so no completed work ever
+     becomes unreachable behind a parent that isn't here. */
+  const { primaries, childrenOf } = useMemo(() => {
+    const ids = new Set(tasks.map((t) => t.id));
+    const childrenOf = {};
+    const primaries = [];
+    tasks.forEach((t) => {
+      if (t.parentId && ids.has(t.parentId)) {
+        (childrenOf[t.parentId] ||= []).push(t);
+      } else {
+        primaries.push(t);
+      }
+    });
+    /* runs read in the order they finished — chronological, missing last */
+    Object.values(childrenOf).forEach((runs) =>
+      runs.sort(
+        (a, b) =>
+          (completedAtKey(a) ?? Infinity) - (completedAtKey(b) ?? Infinity)
+      )
+    );
+    return { primaries, childrenOf };
+  }, [tasks]);
+
   const sorted = useMemo(() => {
-    return tasks
+    return primaries
       .map((t, i) => [t, i])
       .sort((a, b) => {
         const ka = completedAtKey(a[0]);
@@ -2881,20 +2907,22 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
         return kb - ka;
       })
       .map(([t]) => t);
-  }, [tasks]);
+  }, [primaries]);
 
   // Filter after sorting, before pagination, so "load more" pages the matches
   // rather than paging the full list and hiding most of a page. The two
-  // filters compose: both set means both must match.
-  const filtered = useMemo(
-    () =>
-      sorted.filter(
-        (t) =>
-          (!jobcodeFilter || t.jobcode === jobcodeFilter) &&
-          (!printerFilter || t.printerId === printerFilter)
-      ),
-    [sorted, jobcodeFilter, printerFilter]
-  );
+  // filters compose: both set means both must match. Filters match the whole
+  // group: a job row stays when any of its runs matches (a job's row carries
+  // no printer of its own, so the printer filter would otherwise never show
+  // finished jobs), and an expanded job shows all its runs, not just matches.
+  const filtered = useMemo(() => {
+    const matches = (t) =>
+      (!jobcodeFilter || t.jobcode === jobcodeFilter) &&
+      (!printerFilter || t.printerId === printerFilter);
+    return sorted.filter(
+      (t) => matches(t) || (childrenOf[t.id] || []).some(matches)
+    );
+  }, [sorted, childrenOf, jobcodeFilter, printerFilter]);
 
   const visible = filtered.slice(0, limit);
   const hidden = filtered.length - visible.length;
@@ -2919,6 +2947,88 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
     const el = scrollRef.current;
     if (!el || hidden <= 0) return;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
+  };
+
+  /* One renderer for both row kinds. A primary row with runs toggles them on
+     click; a child row indents its printer cell to sit under the chevron.
+     Rows without runs get a chevron-width spacer so the columns line up. */
+  const renderRow = (task, { child, runCount, open } = {}) => {
+    const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+    const completed = formatTimestamp(task.completedAt);
+    const operatorNote = (task.operatorNotes || "").trim();
+    const expandable = !child && runCount > 0;
+    return (
+      <tr
+        key={task.id}
+        onClick={
+          expandable
+            ? () => setExpanded((s) => ({ ...s, [task.id]: !s[task.id] }))
+            : undefined
+        }
+        onContextMenu={(e) => onContextMenu(e, task.id)}
+        title={
+          expandable
+            ? `${open ? "Hide" : "Show"} ${runCount} run${
+                runCount !== 1 ? "s" : ""
+              } · right-click to reprint`
+            : "Right-click to reprint"
+        }
+        style={{
+          borderBottom: "1px solid #F3F2F1",
+          background: child ? "#FAFAFA" : undefined,
+          cursor: expandable ? "pointer" : undefined,
+        }}
+      >
+        <td
+          className="px-3 py-1.5"
+          style={{ color: "#605E5C", paddingLeft: child ? 28 : undefined }}
+        >
+          <span className="inline-flex items-center gap-1">
+            {!child &&
+              (expandable ? (
+                open ? (
+                  <ChevronDown size={12} className="flex-shrink-0" />
+                ) : (
+                  <ChevronRight size={12} className="flex-shrink-0" />
+                )
+              ) : (
+                <span className="flex-shrink-0" style={{ width: 12 }} />
+              ))}
+            {printerName[task.printerId] || "—"}
+          </span>
+        </td>
+        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+          {task.jobcode || ""}
+        </td>
+        <td
+          className="px-3 py-1.5"
+          style={{ color: "#242424", textDecoration: "line-through" }}
+        >
+          {task.title}
+        </td>
+        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+          {task.quantity || 1}
+        </td>
+        <td className="px-3 py-1.5">
+          <span style={{ color: PRIORITY_STYLE[task.priority || "Normal"]?.text }}>
+            {task.priority || "Normal"}
+          </span>
+        </td>
+        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+          {needBy ? needBy.date : ""}
+        </td>
+        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+          {completed || ""}
+        </td>
+        <td className="px-3 py-1.5">
+          {operatorNote && (
+            <span title={`Operator notes: ${operatorNote}`}>
+              <StickyNote size={11} style={{ color: "#8A8886" }} />
+            </span>
+          )}
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -2949,8 +3059,9 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
         <span
           className="px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
           style={{ background: "#DFF6DD", color: "#498205", fontSize: 11 }}
+          title="Finished jobs — expand a row to see its runs"
         >
-          {tasks.length}
+          {primaries.length}
         </span>
       </button>
 
@@ -3063,51 +3174,14 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((task) => {
-                  const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
-                  const completed = formatTimestamp(task.completedAt);
-                  const operatorNote = (task.operatorNotes || "").trim();
+                {visible.map((job) => {
+                  const runs = childrenOf[job.id] || [];
+                  const open = !!expanded[job.id];
                   return (
-                    <tr
-                      key={task.id}
-                      onContextMenu={(e) => onContextMenu(e, task.id)}
-                      title="Right-click to reprint"
-                      style={{ borderBottom: "1px solid #F3F2F1" }}
-                    >
-                      <td className="px-3 py-1.5" style={{ color: "#605E5C" }}>
-                        {printerName[task.printerId] || "—"}
-                      </td>
-                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
-                        {task.jobcode || ""}
-                      </td>
-                      <td
-                        className="px-3 py-1.5"
-                        style={{ color: "#242424", textDecoration: "line-through" }}
-                      >
-                        {task.title}
-                      </td>
-                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
-                        {task.quantity || 1}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <span style={{ color: PRIORITY_STYLE[task.priority || "Normal"]?.text }}>
-                          {task.priority || "Normal"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
-                        {needBy ? needBy.date : ""}
-                      </td>
-                      <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
-                        {completed || ""}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {operatorNote && (
-                          <span title={`Operator notes: ${operatorNote}`}>
-                            <StickyNote size={11} style={{ color: "#8A8886" }} />
-                          </span>
-                        )}
-                      </td>
-                    </tr>
+                    <React.Fragment key={job.id}>
+                      {renderRow(job, { runCount: runs.length, open })}
+                      {open && runs.map((r) => renderRow(r, { child: true }))}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
