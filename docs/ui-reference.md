@@ -398,6 +398,14 @@ modal open — the same applies to the shop layout and confirmation dialogs.
 
 Tasks in staging hide the fields that only mean something once assigned.
 
+Under the assigned-task ETA pickers sit four one-click presets — **~3 hrs,
+~6 hrs, ~24 hrs, 2–3 days** — that fill both date and time from "now plus the
+bucket", rounded up to a half-day: by noon (12:00) or end of day (17:00), with
+after-hours and weekend landings rolled to the next workday morning. One click
+answers the question the shop actually asks — done today, tomorrow morning, or
+tomorrow EOD — without typing a date and a time per run. The pickers remain for
+manual override.
+
 The assigned-task **Status** dropdown carries one extra entry beyond the three
 statuses: **Complete & reprint** — the same action as the context menu's (see
 below), included here because the dropdown is where an operator already is
