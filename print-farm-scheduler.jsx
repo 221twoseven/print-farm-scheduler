@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.4";
+const BUILD = "2026-08-18.5";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -580,8 +580,32 @@ function formatTimestamp(iso) {
    configured. With neither, the board runs on sample data exactly as it
    did before Phase 2. */
 export default function PrintFarmScheduler({ initial = null, onPersist = null }) {
-  /* hydrate() is the entry point storage rows will use too */
-  const [groups, setGroups] = useState(() => hydrate(initial?.groups ?? seedGroups));
+  /* hydrate() is the entry point storage rows will use too.
+     Group collapse is remembered per browser like the view toggle — never
+     SharePoint (see the note by groupFromRow). The overlay makes fresh
+     objects only at init, so the save layer's identity baseline is intact;
+     a flagged group still costs nothing because toRow drops `collapsed`. */
+  const [groups, setGroups] = useState(() => {
+    let folded;
+    try {
+      folded = new Set(JSON.parse(localStorage.getItem("pfs.collapsedGroups")) || []);
+    } catch {
+      folded = new Set();
+    }
+    return hydrate(initial?.groups ?? seedGroups).map((g) =>
+      folded.has(g.id) ? { ...g, collapsed: true } : g
+    );
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "pfs.collapsedGroups",
+        JSON.stringify(groups.filter((g) => g.collapsed).map((g) => g.id))
+      );
+    } catch {
+      /* not remembering the fold is survivable */
+    }
+  }, [groups]);
   const [printers, setPrinters] = useState(() => hydrate(initial?.printers ?? seedPrinters));
   const [tasks, setTasks] = useState(() => hydrate(initial?.tasks ?? seedTasks));
   const [appSettings, setAppSettings] = useState(initial?.appSettings ?? DEFAULT_APP_SETTINGS);
@@ -623,9 +647,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
      more. Real enforcement would need SharePoint permissions and a server-side
      check, which this app deliberately does not have.
 
-     Stickier than group collapse, which resets every load: someone who works
-     as a designer wants to stay one, so it is remembered per browser. Still
-     per-person, and still nothing SharePoint knows about. */
+     Remembered per browser, like group collapse and the history panel's
+     fold. Still per-person, and still nothing SharePoint knows about. */
   const [designerView, setDesignerView] = useState(() => {
     try {
       return localStorage.getItem("pfs.view") === "designer";
@@ -2775,7 +2798,21 @@ const completedAtKey = (t) => {
 };
 
 function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
-  const [collapsed, setCollapsed] = useState(true);
+  /* fold state is per browser like the view toggle; collapsed by default */
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("pfs.historyCollapsed") !== "expanded";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("pfs.historyCollapsed", collapsed ? "collapsed" : "expanded");
+    } catch {
+      /* not remembering the fold is survivable */
+    }
+  }, [collapsed]);
   const [expanded, setExpanded] = useState({}); // jobId → its runs shown
   const [limit, setLimit] = useState(COMPLETED_PAGE);
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
@@ -5009,7 +5046,8 @@ const COLS = {
 /* `collapsed` is per-person and is not written to SharePoint. Folding a
    group is one operator's view of the board, not a fact about the shop,
    and a shared Yes/No column would have folded it for everyone. The
-   Collapsed column in the Groups list is left unused on purpose. */
+   Collapsed column in the Groups list is left unused on purpose; the
+   per-person memory of it lives in localStorage (pfs.collapsedGroups). */
 
 /* ------------------------------ MSAL ---------------------------------- */
 
