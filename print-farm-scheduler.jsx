@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.17";
+const BUILD = "2026-08-18.18";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -5309,7 +5309,7 @@ async function token() {
 
 /* ------------------------------ Graph --------------------------------- */
 
-async function graph(path, init = {}) {
+async function graph(path, init = {}, tries = 0) {
   const t = await token();
   const url = path.startsWith("http") ? path : GRAPH + path;
   const res = await fetch(url, {
@@ -5320,10 +5320,14 @@ async function graph(path, init = {}) {
       ...(init.headers || {}),
     },
   });
-  if (res.status === 429 || res.status >= 500) {
-    const wait = Number(res.headers.get("Retry-After") || 2) * 1000;
+  if ((res.status === 429 || res.status >= 500) && tries < 4) {
+    /* Retry-After can be an HTTP-date, which Number() turns into NaN — the
+       fallback must sit outside the cast or the wait collapses to 0 and a
+       throttled tenant gets hammered. Capped so a persistent 500 fails into
+       the error path instead of wedging the save pill on "Saving…" forever. */
+    const wait = (Number(res.headers.get("Retry-After")) || 2) * 1000;
     await new Promise((r) => setTimeout(r, wait));
-    return graph(path, init);
+    return graph(path, init, tries + 1);
   }
   if (!res.ok) {
     const body = await res.text();
@@ -5779,8 +5783,17 @@ async function saveList(kind, prev, next, itemIds) {
   let writes = 0;
 
   for (const rec of created) {
-    const row = await createItem(spec.name, spec.toRow(rec));
-    itemIds.set(`${kind}:${rec.id}`, row.id);
+    /* On a retry after a partially-failed flush, `prev` is still the old
+       baseline (it only advances when the whole snapshot lands), so a row
+       created by the failed attempt diffs as "created" again. itemIds
+       remembers it — patch instead of minting a duplicate SharePoint row. */
+    const existing = itemIds.get(`${kind}:${rec.id}`);
+    if (existing) {
+      await patchItem(spec.name, existing, spec.toRow(rec));
+    } else {
+      const row = await createItem(spec.name, spec.toRow(rec));
+      itemIds.set(`${kind}:${rec.id}`, row.id);
+    }
     writes++;
   }
   for (const rec of updated) {
