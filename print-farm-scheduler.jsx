@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.13";
+const BUILD = "2026-08-18.14";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1918,6 +1918,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           inStaging={expandedTask.printerId === STAGING}
           printerStatus={printerStatusOf(expandedTask.printerId)}
           choices={choices}
+          readOnly={operator && expandedTask.printerId === STAGING}
           onUpdate={updateTask}
           onDelete={deleteTask}
           onCompleteReprint={completeAndReprint}
@@ -3830,10 +3831,11 @@ function TaskCard({
   operator,
 }) {
   const eta = formatEta(task.etaDate, task.etaTime);
-  /* Operator view, staging only: reading the summary is enough — opening the
-     job or its context menu is the designer's job. Dragging stays live, since
-     that's how an operator assigns the job to a printer; only the click-to-
-     open and the right-click menu lock. */
+  /* Operator view, staging only: the card opens a read-only preview — the
+     shop asked to see a job's full specs before assigning it, but editing an
+     unassigned job stays the designer's. Dragging stays live, since that's
+     how an operator assigns the job to a printer; only the right-click menu
+     locks. */
   const stagingLocked = inStaging && operator;
   /* An operator note is worth knowing about from the board, and a designer
      cannot open an assigned job at all. Hover alone would hide which cards
@@ -3898,13 +3900,13 @@ function TaskCard({
           Need by is not here — it lives in the detail modal. Detail in modal. */}
       <button
         onClick={onExpand}
-        disabled={disabled || stagingLocked}
+        disabled={disabled}
         className="w-full text-left px-2.5 py-2"
         title={
           disabled
             ? undefined
             : stagingLocked
-            ? "Drag to assign to a printer"
+            ? "Click to preview · drag to assign to a printer"
             : "Click for details · drag to move · right-click for menu"
         }
       >
@@ -4026,7 +4028,7 @@ function TaskCard({
 /* Typing edits a local draft and commits on blur, so a task name is one save
    rather than one per letter. Discrete controls (selects, dates, steppers)
    commit immediately, folding in any pending text edit. */
-function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, onDelete, onCompleteReprint, onClose }) {
+function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, onUpdate, onDelete, onCompleteReprint, onClose }) {
   /* item 35 vocabulary: a row with a parent is a run, anything else a job */
   const noun = task.parentId ? "run" : "job";
   const [draft, setDraft] = useState({});
@@ -4126,8 +4128,12 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
           </button>
         </div>
 
-        {/* modal body — scrolls if tall */}
-        <div className="px-4 py-3 space-y-3 overflow-y-auto">
+        {/* modal body — scrolls if tall. Operator previewing a staging job:
+            one disabled fieldset turns every control read-only at once —
+            no per-field plumbing, nothing to forget on the next field.
+            min-w-0 because fieldset's native min-width is min-content. */}
+        <div className="px-4 py-3 overflow-y-auto">
+          <fieldset disabled={readOnly} className="min-w-0 space-y-3">
           <Field label={task.parentId ? "Run name" : "Job name"}>
             <input
               value={val("title")}
@@ -4389,6 +4395,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
               </Field>
             </div>
           )}
+          </fieldset>
         </div>
 
         {/* Created / completed stamps — read-only facts, not fields anyone
@@ -4410,14 +4417,24 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
           className="flex items-center justify-between px-4 py-3 border-t flex-shrink-0"
           style={{ borderColor: "#EDEBE9" }}
         >
-          <button
-            onClick={() => onDelete(task.id)}
-            className="flex items-center gap-1.5 text-sm font-medium px-2 py-1.5 rounded hover:bg-red-50"
-            style={{ color: "#D13438" }}
-            title={`Delete ${noun}`}
-          >
-            <Trash2 size={15} /> Delete
-          </button>
+          {readOnly ? (
+            /* keeps Done pinned right under justify-between */
+            <span
+              className="text-sm px-2 py-1.5"
+              style={{ color: "#8A8886" }}
+            >
+              Preview — assign to a printer to edit
+            </span>
+          ) : (
+            <button
+              onClick={() => onDelete(task.id)}
+              className="flex items-center gap-1.5 text-sm font-medium px-2 py-1.5 rounded hover:bg-red-50"
+              style={{ color: "#D13438" }}
+              title={`Delete ${noun}`}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+          )}
           <button
             onClick={close}
             className="text-sm font-medium px-4 py-1.5 rounded text-white"
