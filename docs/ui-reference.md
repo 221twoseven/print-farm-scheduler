@@ -407,7 +407,8 @@ the next workday morning. One click answers the question the shop actually
 asks — done today, tomorrow morning, or tomorrow EOD. A readout line under the
 buttons shows the resulting ETA (or "Not set") with a **clear** link, which is
 the only way to unset one. The same control appears in the new-task form on
-printer columns.
+printer columns, with the buttons stacked two per row because the column is
+too narrow for four across.
 
 The assigned-task **Status** dropdown carries one extra entry beyond the three
 statuses: **Complete & reprint** — the same action as the context menu's (see

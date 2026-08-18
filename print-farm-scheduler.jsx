@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.11";
+const BUILD = "2026-08-18.12";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -4460,11 +4460,13 @@ function Field({ label, children }) {
    runs. The readout line underneath is the feedback that the click landed,
    and its "clear" is the only way left to unset an ETA now that the
    pickers are gone. */
-function EtaQuickPick({ etaDate, etaTime, onPick }) {
+function EtaQuickPick({ etaDate, etaTime, onPick, stack }) {
   const eta = formatEta(etaDate, etaTime);
   return (
     <div>
-      <div className="flex gap-2">
+      {/* stack: two-up grid for the narrow printer-column add form, where
+          four across cramps the labels */}
+      <div className={stack ? "grid grid-cols-2 gap-2" : "flex gap-2"}>
         {ETA_PRESETS.map(([label, sub, hours]) => (
           <button
             key={label}
@@ -4947,6 +4949,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           <EtaQuickPick
             etaDate={etaDate}
             etaTime={etaTime}
+            stack
             onPick={(p) => {
               setEtaDate(p.etaDate);
               setEtaTime(p.etaTime);
