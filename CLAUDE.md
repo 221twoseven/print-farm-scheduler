@@ -6,14 +6,10 @@ Read this first, then `docs/` as needed. Start with
 ## What this is
 
 A Microsoft Teams tab for a 3D print shop, built for ~10–15 designers and
-operators. Deployed and live in Teams; the shop is still running its previous
-ticketing system, so the lists hold test data until cutover.
-
-**Hold the production bar anyway.** Cutover could be any day, the app has to be
-usable when it happens, and the mistakes this file warns about — a partial
-schema change, a broken identity diff, an unverified deploy — are all cheaper to
-avoid than to find later. Nothing below is relaxed because the data is currently
-disposable.
+operators. **Deployed, live in Teams, and in use — the lists hold the shop's
+real work.** The mistakes this file warns about — a partial schema change, a
+broken identity diff, an unverified deploy — now lose real jobs, not test
+rows.
 
 One JSX file, transpiled in the browser, hosted on GitHub Pages, storing data in
 SharePoint lists via Microsoft Graph. No build step, no server, no tests.
