@@ -141,9 +141,9 @@ const optionsFor = (list, current) => {
    choice columns would mean the first value of each list silently became the
    standard. The cost is that editing a choice column so a default value no
    longer exists makes every printer read as an exception — visible immediately,
-   and fixed by editing defaultPrinterFields to match. */
+   and fixed by editing DEFAULT_PRINTER_FIELDS to match. */
 const specExceptions = (settings) => {
-  const defaults = defaultPrinterFields();
+  const defaults = DEFAULT_PRINTER_FIELDS;
   return PRINTER_FIELDS.filter(
     (f) => (settings.fields[f.key] || "") !== defaults[f.key]
   ).map((f) => {
@@ -162,13 +162,15 @@ const specExceptions = (settings) => {
    match on the stem rather than on an exact string. */
 const isOtherMaterial = (v) => /^\s*other\b/i.test(v || "");
 
-const defaultPrinterFields = () => ({
+/* Nothing mutates a printer's fields in place (updates spread), but creation
+   sites still spread this so no two printers ever share the object. */
+const DEFAULT_PRINTER_FIELDS = {
   nozzleSize: "0.4mm",
   nozzleType: "Standard",
   nozzleMaterial: "Standard",
   bedType: "Textured",
   printMaterial: "ABS",
-});
+};
 
 /* Global task tag — same dropdown choices across all tasks */
 const TASK_TAGS = ["Sliced", "Not Sliced", "Needs Nesting"];
@@ -246,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.20";
+const BUILD = "2026-08-18.21";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -311,6 +313,14 @@ const bySortOrder = (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
 
 /* rows in from storage → array order the app can trust */
 const hydrate = (rows) => [...rows].sort(bySortOrder);
+
+/* one-row patch that keeps every other row's reference — the save layer
+   diffs by object identity, so a handler must never hand back fresh objects
+   for rows it did not touch. `patch` may be a function of the current row. */
+const patchById = (rows, id, patch) =>
+  rows.map((r) =>
+    r.id === id ? { ...r, ...(typeof patch === "function" ? patch(r) : patch) } : r
+  );
 
 /* array order → sortOrder, renumbered per scope. Unchanged rows keep their
    identity so the save layer can diff by reference. */
@@ -822,31 +832,31 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     [tasks]
   );
 
-  /* Jobcodes worth filtering by: live work sitting on a printer. Staging is
-     excluded because the filter dims printers, and a job with no printer
-     cannot tell you anything about one. Completed jobs are excluded too —
-     "assigned or in progress" is about what the shop is working on now. */
-  const liveJobcodes = useMemo(() => {
-    const set = new Set();
-    tasks.forEach((t) => {
-      if (t.printerId !== STAGING && t.status !== "Complete" && t.jobcode) {
-        set.add(t.jobcode);
-      }
-    });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [tasks]);
+  /* Live work sitting on a printer, shared by the two jobcode memos below.
+     Staging is excluded because the filter dims printers, and a job with no
+     printer cannot tell you anything about one. Completed jobs are excluded
+     too — "assigned or in progress" is about what the shop is working on now. */
+  const liveRows = useMemo(
+    () => tasks.filter((t) => t.printerId !== STAGING && t.status !== "Complete"),
+    [tasks]
+  );
+
+  /* jobcodes worth filtering by */
+  const liveJobcodes = useMemo(
+    () =>
+      [...new Set(liveRows.map((t) => t.jobcode).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [liveRows]
+  );
 
   /* Printer ids carrying the selected jobcode. Everything else dims. */
   const jobcodeMatches = useMemo(() => {
     if (!jobcodeFilter) return null;
-    const ids = new Set();
-    tasks.forEach((t) => {
-      if (t.printerId !== STAGING && t.status !== "Complete" && t.jobcode === jobcodeFilter) {
-        ids.add(t.printerId);
-      }
-    });
-    return ids;
-  }, [tasks, jobcodeFilter]);
+    return new Set(
+      liveRows.filter((t) => t.jobcode === jobcodeFilter).map((t) => t.printerId)
+    );
+  }, [liveRows, jobcodeFilter]);
 
   /* A jobcode can stop being live while it is selected — the last job on it
      finishes, or moves back to staging. Drop the selection rather than leaving
@@ -864,22 +874,18 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     setTasks((ts) => reindex(fn(ts), (t) => t.printerId));
 
   const updatePrinter = (id, patch) =>
-    setPrinters((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    setPrinters((ps) => patchById(ps, id, patch));
 
   const updatePrinterSettings = (id, patch) =>
     setPrinters((ps) =>
-      ps.map((p) =>
-        p.id === id ? { ...p, settings: { ...p.settings, ...patch } } : p
-      )
+      patchById(ps, id, (p) => ({ settings: { ...p.settings, ...patch } }))
     );
 
   const updatePrinterField = (id, key, value) =>
     setPrinters((ps) =>
-      ps.map((p) =>
-        p.id === id
-          ? { ...p, settings: { ...p.settings, fields: { ...p.settings.fields, [key]: value } } }
-          : p
-      )
+      patchById(ps, id, (p) => ({
+        settings: { ...p.settings, fields: { ...p.settings.fields, [key]: value } },
+      }))
     );
 
   /* Moving a printer to Maintenance sends its queued legacy jobs back to
@@ -963,10 +969,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     });
   }, [tasks]);
 
-  /* the printer a task sits on, for the rules that depend on its state */
-  const printerStatusOf = (printerId) =>
-    printers.find((p) => p.id === printerId)?.status || "Ready";
-
   /* only a Ready printer takes new work */
   const acceptsTasks = (printerId) => {
     if (printerId === STAGING) return true;
@@ -985,9 +987,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
      to record that it finished at the moment someone looked at the menu. */
   const updateTask = (id, patch) =>
     setTasks((ts) =>
-      ts.map((t) => {
-        if (t.id !== id) return t;
-        const next = { ...t, ...patch };
+      patchById(ts, id, (t) => {
+        const next = { ...patch };
         if ("status" in patch && patch.status !== t.status) {
           next.completedAt = patch.status === "Complete" ? nowIso() : "";
         }
@@ -1120,6 +1121,18 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       : `${row.title} (copy)`;
   };
 
+  /* What every copy/reprint path resets: a copy is a new piece of work, not
+     a continuation of the original's history — fresh creation stamp, no
+     inherited completion, its own prediction, its own working notes. */
+  const runReset = () => ({
+    status: "Not started",
+    etaDate: "",
+    etaTime: "",
+    operatorNotes: "",
+    createdAt: nowIso(),
+    completedAt: "",
+  });
+
   /* duplicate a task in place; copies always reset to Not started */
   const copyTask = (taskId) => {
     setTasksOrdered((ts) => {
@@ -1129,16 +1142,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         ...ts[idx],
         id: uid(),
         title: dupTitle(ts, ts[idx]),
-        status: "Not started",
-        /* a duplicate is a new job, not a continuation of the original's
-           history — fresh creation stamp, no inherited completion, and the
-           same reset the reprint paths do: its own prediction, its own
-           working notes */
-        etaDate: "",
-        etaTime: "",
-        operatorNotes: "",
-        createdAt: nowIso(),
-        completedAt: "",
+        ...runReset(),
       };
       return [...ts.slice(0, idx + 1), copy, ...ts.slice(idx + 1)];
     });
@@ -1165,20 +1169,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         ...row,
         id,
         title: dupTitle(ts, row),
-        status: "Not started",
-        /* a new run gets its own prediction and its own working notes */
-        etaDate: "",
-        etaTime: "",
-        operatorNotes: "",
-        createdAt: nowIso(),
-        completedAt: "",
+        ...runReset(),
       };
       return [
-        ...ts.map((t) =>
-          t.id === taskId
-            ? { ...t, status: "Complete", completedAt: nowIso() }
-            : t
-        ),
+        ...patchById(ts, taskId, { status: "Complete", completedAt: nowIso() }),
         copy,
       ];
     });
@@ -1203,14 +1197,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           id,
           parentId: "",
           printerId: STAGING,
-          status: "Not started",
-          /* same reset as Complete & reprint: its own prediction, its own
-             working notes, its own history */
-          etaDate: "",
-          etaTime: "",
-          operatorNotes: "",
-          createdAt: nowIso(),
-          completedAt: "",
+          ...runReset(),
         },
       ];
     });
@@ -1239,14 +1226,11 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
   };
 
   const toggleGroup = (id) =>
-    setGroups((gs) =>
-      gs.map((g) => (g.id === id ? { ...g, collapsed: !g.collapsed } : g))
-    );
+    setGroups((gs) => patchById(gs, id, (g) => ({ collapsed: !g.collapsed })));
 
   const renameGroup = (id, name) => {
     const clean = name.trim();
-    if (clean)
-      setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name: clean } : g)));
+    if (clean) setGroups((gs) => patchById(gs, id, { name: clean }));
     setEditingGroupId(null);
   };
 
@@ -1295,7 +1279,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
             name: "New printer",
             groupId,
             status: "Ready",
-            settings: { fields: defaultPrinterFields(), notes: "" },
+            settings: { fields: { ...DEFAULT_PRINTER_FIELDS }, notes: "" },
           },
         ],
         (p) => p.groupId
@@ -1373,24 +1357,24 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     });
   };
 
-  const openTaskMenu = (e, taskId) => {
+  const openMenu = (type) => (e, id) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ type: "task", id: taskId, x: e.clientX, y: e.clientY });
+    setContextMenu({ type, id, x: e.clientX, y: e.clientY });
   };
-
-  const openPrinterMenu = (e, printerId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ type: "printer", id: printerId, x: e.clientX, y: e.clientY });
-  };
+  const openTaskMenu = openMenu("task");
+  const openPrinterMenu = openMenu("printer");
 
   /* history rows get their own menu type: the full task menu offers status,
      moves and delete, none of which belong on a finished record */
-  const openHistoryMenu = (e, taskId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ type: "history", id: taskId, x: e.clientX, y: e.clientY });
+  const openHistoryMenu = openMenu("history");
+
+  /* the expand toggle and drag wiring repeat on every task-hosting block */
+  const toggleExpand = (id) =>
+    setExpandedTaskId((cur) => (cur === id ? null : id));
+  const dragProps = {
+    onDragStart: setDraggingTaskId,
+    onDragEnd: () => setDraggingTaskId(null),
   };
 
   /* ------------------------------ render ------------------------------ */
@@ -1491,58 +1475,30 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
             </p>
 
             <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium" style={{ color: "#242424" }}>
-                    Printers per row, within a group
-                  </span>
-                  <NumberStepper
-                    value={appSettings.printersPerRow}
-                    min={1}
-                    max={8}
-                    height={30}
-                    onChange={(v) =>
-                      setAppSettings((s) => ({ ...s, printersPerRow: v }))
-                    }
-                  />
+              {[
+                ["printersPerRow", "Printers per row, within a group", 8,
+                  "e.g. a group of 4 printers shown 2-wide displays as a 2×2 block."],
+                ["groupsPerRow", "Groups per row, across the board", 6,
+                  "How many groups sit side by side before wrapping to the next row."],
+              ].map(([key, label, max, hint]) => (
+                <div key={key}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium" style={{ color: "#242424" }}>
+                      {label}
+                    </span>
+                    <NumberStepper
+                      value={appSettings[key]}
+                      min={1}
+                      max={max}
+                      height={30}
+                      onChange={(v) => setAppSettings((s) => ({ ...s, [key]: v }))}
+                    />
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: "#8A8886" }}>
+                    {hint}
+                  </p>
                 </div>
-                <p className="text-xs mt-1" style={{ color: "#8A8886" }}>
-                  e.g. a group of 4 printers shown 2-wide displays as a 2×2 block.
-                </p>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium" style={{ color: "#242424" }}>
-                    Groups per row, across the board
-                  </span>
-                  <NumberStepper
-                    value={appSettings.groupsPerRow}
-                    min={1}
-                    max={6}
-                    height={30}
-                    onChange={(v) =>
-                      setAppSettings((s) => ({ ...s, groupsPerRow: v }))
-                    }
-                  />
-                </div>
-                <p className="text-xs mt-1" style={{ color: "#8A8886" }}>
-                  How many groups sit side by side before wrapping to the next row.
-                </p>
-              </div>
-
-              <div
-                className="rounded-lg p-3 text-xs"
-                style={{ background: "#F4F6FD", color: "#5B5FC7" }}
-              >
-                Current: groups display{" "}
-                <strong>{appSettings.printersPerRow}</strong> printer
-                {appSettings.printersPerRow !== 1 ? "s" : ""} wide,{" "}
-                <strong>{appSettings.groupsPerRow}</strong> group
-                {appSettings.groupsPerRow !== 1 ? "s" : ""} across. The board scrolls
-                horizontally below{" "}
-                {boardMinW(appSettings.printersPerRow, appSettings.groupsPerRow)}px.
-              </div>
+              ))}
             </div>
 
             <div className="flex justify-between items-center mt-5">
@@ -1591,12 +1547,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
            dropping onto a specific card to reposition it would be a dead
            gesture. Dropping anywhere on the panel (onDropTask above) still
            moves a task into or out of staging. */
-        onExpandTask={(id) =>
-          setExpandedTaskId((cur) => (cur === id ? null : id))
-        }
+        onExpandTask={toggleExpand}
         onContextMenu={openTaskMenu}
-        onDragStart={setDraggingTaskId}
-        onDragEnd={() => setDraggingTaskId(null)}
+        {...dragProps}
       />
 
       {/* ---------------- in-progress jobs (item 34) ----------------
@@ -1608,12 +1561,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         printers={printers}
         operator={operator}
         draggingTaskId={draggingTaskId}
-        onExpandTask={(id) =>
-          setExpandedTaskId((cur) => (cur === id ? null : id))
-        }
+        onExpandTask={toggleExpand}
         onContextMenu={openTaskMenu}
-        onDragStart={setDraggingTaskId}
-        onDragEnd={() => setDraggingTaskId(null)}
+        {...dragProps}
       />
 
       {/* ---------------- jobcode filter ----------------
@@ -1779,7 +1729,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                         key={printer.id}
                         printer={printer}
                         filteredOut={!!jobcodeMatches && !jobcodeMatches.has(printer.id)}
-                        groupName={group.name}
                         tasks={tasksByPrinter[printer.id] || []}
                         choices={choices}
                         settingsOpen={!!openSettings[printer.id]}
@@ -1800,17 +1749,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                         onStartAddTask={() => setAddingTaskIn(printer.id)}
                         onCancelAddTask={() => setAddingTaskIn(null)}
                         onAddTask={(fields) => addTask(printer.id, fields)}
-                        onExpandTask={(id) =>
-                          setExpandedTaskId((cur) => (cur === id ? null : id))
-                        }
+                        onExpandTask={toggleExpand}
                         onDropTask={(taskId) => moveTask(taskId, printer.id)}
                         onDropOnTask={moveTaskRelative}
                         onTaskContextMenu={openTaskMenu}
                         onPrinterContextMenu={openPrinterMenu}
                         operator={operator}
                         editPrintersMode={editPrintersMode}
-                        onDragStart={setDraggingTaskId}
-                        onDragEnd={() => setDraggingTaskId(null)}
+                        {...dragProps}
                       />
                     ))}
 
@@ -1924,7 +1870,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         <TaskDetailModal
           task={expandedTask}
           inStaging={expandedTask.printerId === STAGING}
-          printerStatus={printerStatusOf(expandedTask.printerId)}
+          printerStatus={
+            printers.find((p) => p.id === expandedTask.printerId)?.status || "Ready"
+          }
           choices={choices}
           readOnly={operator && expandedTask.printerId === STAGING}
           onUpdate={updateTask}
@@ -2323,6 +2271,24 @@ const timeKey = (v) => {
 const needByKey = (t) => timeKey(t.needByDate);
 const createdKey = (t) => timeKey(t.createdAt);
 
+/* The queue order both work panels share: priority tier, then need-by
+   (soonest first), then created-at (oldest first). Callers sort a copy;
+   Array.prototype.sort is stable, so equal keys keep their incoming order
+   without a decorate/undecorate dance. */
+const byQueueOrder = (a, b) => {
+  const pa = PRIORITY_RANK[a.priority || "Normal"];
+  const pb = PRIORITY_RANK[b.priority || "Normal"];
+  if (pa !== pb) return pa - pb;
+  const na = needByKey(a);
+  const nb = needByKey(b);
+  if (na !== nb) return na - nb;
+  return createdKey(a) - createdKey(b);
+};
+
+/* the printer-id → name lookup both panels build */
+const printerNamesOf = (printers) =>
+  Object.fromEntries(printers.map((p) => [p.id, p.name]));
+
 function StagingArea({
   name,
   onRename,
@@ -2368,27 +2334,9 @@ function StagingArea({
     });
   }, [tasks, query, priorityFilter]);
 
-  /* Within a priority tier, order is fully computed — need-by (soonest
-     first), then created-at (oldest first) — rather than manual drag order.
-     Array index is the final fallback, purely for a deterministic sort when
-     every other key ties. */
-  const sorted = useMemo(() => {
-    return filtered
-      .map((t, i) => [t, i])
-      .sort((a, b) => {
-        const pa = PRIORITY_RANK[a[0].priority || "Normal"];
-        const pb = PRIORITY_RANK[b[0].priority || "Normal"];
-        if (pa !== pb) return pa - pb;
-        const na = needByKey(a[0]);
-        const nb = needByKey(b[0]);
-        if (na !== nb) return na - nb;
-        const ca = createdKey(a[0]);
-        const cb = createdKey(b[0]);
-        if (ca !== cb) return ca - cb;
-        return a[1] - b[1]; // stable
-      })
-      .map(([t]) => t);
-  }, [filtered]);
+  /* Within a priority tier, order is fully computed — see byQueueOrder —
+     rather than manual drag order. */
+  const sorted = useMemo(() => [...filtered].sort(byQueueOrder), [filtered]);
 
   /* tier counts once per change, rather than a filter per header row */
   const tierCounts = useMemo(() => {
@@ -2614,7 +2562,6 @@ function StagingArea({
                     )}
                     <TaskCard
                       task={task}
-                      disabled={false}
                       /* designers can't drop anywhere (every printer's onDrop
                          requires operator), so don't let them pick cards up */
                       draggableCard={operator}
@@ -2673,31 +2620,9 @@ function InProgressPanel({
 }) {
   const [openJobs, setOpenJobs] = useState({}); // jobId → runs list expanded
 
-  const printerName = useMemo(() => {
-    const map = {};
-    printers.forEach((p) => {
-      map[p.id] = p.name;
-    });
-    return map;
-  }, [printers]);
+  const printerName = useMemo(() => printerNamesOf(printers), [printers]);
 
-  const sorted = useMemo(() => {
-    return jobs
-      .map((t, i) => [t, i])
-      .sort((a, b) => {
-        const pa = PRIORITY_RANK[a[0].priority || "Normal"];
-        const pb = PRIORITY_RANK[b[0].priority || "Normal"];
-        if (pa !== pb) return pa - pb;
-        const na = needByKey(a[0]);
-        const nb = needByKey(b[0]);
-        if (na !== nb) return na - nb;
-        const ca = createdKey(a[0]);
-        const cb = createdKey(b[0]);
-        if (ca !== cb) return ca - cb;
-        return a[1] - b[1]; // stable
-      })
-      .map(([t]) => t);
-  }, [jobs]);
+  const sorted = useMemo(() => [...jobs].sort(byQueueOrder), [jobs]);
 
   return (
     <div
@@ -2737,7 +2662,7 @@ function InProgressPanel({
               0
             );
             const remaining = Math.max(total - assigned, 0);
-            const needBy = job.needByDate ? formatEta(job.needByDate, "") : null;
+            const needBy = formatEta(job.needByDate, "");
             const open = !!openJobs[job.id];
             return (
               <div
@@ -2895,9 +2820,8 @@ const COMPLETED_PAGE = 60; // same batching pattern as staging
    of direction — same principle as staging's timeKey, kept separate here
    since the ordering itself is reversed (newest first, not soonest first). */
 const completedAtKey = (t) => {
-  if (!t.completedAt) return null;
-  const v = Date.parse(t.completedAt);
-  return Number.isNaN(v) ? null : v;
+  const v = timeKey(t.completedAt);
+  return v === Infinity ? null : v;
 };
 
 function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
@@ -2923,25 +2847,16 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
   const scrollRef = useRef(null);
   const loadingRef = useRef(false);
 
-  const printerName = useMemo(() => {
-    const map = {};
-    printers.forEach((p) => {
-      map[p.id] = p.name;
-    });
-    return map;
-  }, [printers]);
+  const printerName = useMemo(() => printerNamesOf(printers), [printers]);
 
   /* Every jobcode that has ever completed, distinct and sorted. Built from the
      record itself, not the live board's liveJobcodes — this table outlives the
      work, so a code whose last job finished months ago must still be selectable
      here even though nothing on a printer carries it any more. */
-  const jobcodes = useMemo(() => {
-    const set = new Set();
-    tasks.forEach((t) => {
-      if (t.jobcode) set.add(t.jobcode);
-    });
-    return Array.from(set).sort();
-  }, [tasks]);
+  const jobcodes = useMemo(
+    () => [...new Set(tasks.map((t) => t.jobcode).filter(Boolean))].sort(),
+    [tasks]
+  );
 
   /* Printers that have completed work, by the same record-not-live-board rule
      as the jobcode list. A deleted printer's tasks go back to staging, whose
@@ -2986,19 +2901,18 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
     return { primaries, childrenOf };
   }, [tasks]);
 
-  const sorted = useMemo(() => {
-    return primaries
-      .map((t, i) => [t, i])
-      .sort((a, b) => {
-        const ka = completedAtKey(a[0]);
-        const kb = completedAtKey(b[0]);
-        if (ka === null && kb === null) return a[1] - b[1]; // stable
-        if (ka === null) return 1;
+  const sorted = useMemo(
+    () =>
+      /* sort is stable, so unstamped rows keep their incoming order */
+      [...primaries].sort((a, b) => {
+        const ka = completedAtKey(a);
+        const kb = completedAtKey(b);
+        if (ka === null) return kb === null ? 0 : 1;
         if (kb === null) return -1;
         return kb - ka;
-      })
-      .map(([t]) => t);
-  }, [primaries]);
+      }),
+    [primaries]
+  );
 
   // Filter after sorting, before pagination, so "load more" pages the matches
   // rather than paging the full list and hiding most of a page. The two
@@ -3044,7 +2958,7 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
      click; a child row indents its printer cell to sit under the chevron.
      Rows without runs get a chevron-width spacer so the columns line up. */
   const renderRow = (task, { child, runCount, open } = {}) => {
-    const needBy = task.needByDate ? formatEta(task.needByDate, "") : null;
+    const needBy = formatEta(task.needByDate, "");
     const completed = formatTimestamp(task.completedAt);
     const operatorNote = (task.operatorNotes || "").trim();
     const expandable = !child && runCount > 0;
@@ -3414,7 +3328,6 @@ function PrinterColumn({
   operator,
   editPrintersMode,
   filteredOut,
-  groupName,
   tasks,
   choices,
   settingsOpen,
@@ -3768,22 +3681,21 @@ function PrinterColumn({
           )}
 
           {/* expand / collapse the rest of the active queue */}
-          {hiddenCount > 0 && !queueExpanded && (
+          {hiddenCount > 0 && (
             <button
-              onClick={() => setQueueOpen(true)}
+              onClick={() => setQueueOpen(!queueExpanded)}
               className="w-full flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded hover:bg-gray-50"
               style={{ color: inactive ? "#8A8886" : ACCENT }}
             >
-              <ChevronDown size={13} /> Show {hiddenCount} more queued
-            </button>
-          )}
-          {queueExpanded && activeTasks.length > 2 && (
-            <button
-              onClick={() => setQueueOpen(false)}
-              className="w-full flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded hover:bg-gray-50"
-              style={{ color: inactive ? "#8A8886" : ACCENT }}
-            >
-              <ChevronUp size={13} /> Show less
+              {queueExpanded ? (
+                <>
+                  <ChevronUp size={13} /> Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={13} /> Show {hiddenCount} more queued
+                </>
+              )}
             </button>
           )}
         </div>
@@ -5226,10 +5138,16 @@ const COLS = {
 
 /* ------------------------------ MSAL ---------------------------------- */
 
+/* Memoize the PROMISE, not the client: assigning the client before its
+   initialize() resolved handed a concurrent caller a half-built instance
+   (uninitialized_public_client_application). A failed init clears the memo
+   so a retry can succeed. */
+let msalPromise = null;
+/* set once initialize() completes — currentAccountName reads it synchronously */
 let msalApp = null;
-async function msal() {
-  if (!msalApp) {
-    msalApp = new PublicClientApplication({
+const msal = () =>
+  (msalPromise ??= (async () => {
+    const app = new PublicClientApplication({
       auth: {
         clientId: SP.clientId,
         authority: `https://login.microsoftonline.com/${SP.tenantId}`,
@@ -5237,11 +5155,14 @@ async function msal() {
       },
       cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false },
     });
-    await msalApp.initialize();
-    await msalApp.handleRedirectPromise();
-  }
-  return msalApp;
-}
+    await app.initialize();
+    await app.handleRedirectPromise();
+    msalApp = app;
+    return app;
+  })().catch((err) => {
+    msalPromise = null;
+    throw err;
+  }));
 
 /* Are we running inside a Teams tab? The SDK resolves only in Teams, so a
    short race against a timer answers it without hanging in a browser. */
@@ -5436,14 +5357,19 @@ async function sendActivityPings({ activityType, preview, jobName, userIds }) {
   }
 }
 
-let siteIdCache = null;
-async function siteId() {
-  if (!siteIdCache) {
-    const site = await graph(`/sites/${SP.hostname}:${SP.sitePath}`);
-    siteIdCache = site.id;
-  }
-  return siteIdCache;
-}
+/* Same promise-memo shape as msal(): the three parallel readLists in
+   loadLists all hit this before the first lookup lands, so caching the
+   resolved value fired three identical site lookups per load and per poll.
+   A failed lookup clears the memo rather than poisoning every retry. */
+let siteIdPromise = null;
+const siteId = () =>
+  (siteIdPromise ??= graph(`/sites/${SP.hostname}:${SP.sitePath}`).then(
+    (site) => site.id,
+    (err) => {
+      siteIdPromise = null;
+      throw err;
+    }
+  ));
 
 async function readList(list) {
   const sid = await siteId();
@@ -5524,7 +5450,7 @@ const printerFromRow = (f, row) => ({
     notes: str(f[COLS.printers.notes]),
     printMaterialOther: str(f[COLS.printers.printMaterialOther]),
     fields: PRINTER_FIELDS.reduce((acc, pf) => {
-      acc[pf.key] = str(f[pf.column]) || defaultPrinterFields()[pf.key];
+      acc[pf.key] = str(f[pf.column]) || DEFAULT_PRINTER_FIELDS[pf.key];
       return acc;
     }, {}),
   },
@@ -5629,18 +5555,18 @@ const LISTS = {
 /* Dropdown options come from the SharePoint choice columns so the shop can
    edit them without a code change. A failed read keeps the built-in list —
    a stale dropdown beats an empty one. */
-async function loadChoices() {
+async function loadChoices(colsByList) {
   const out = { ...DEFAULT_CHOICES };
   try {
-    const sid = await siteId();
-    /* Keyed by list, not just by column name. Printers and Tasks both have a
-       PrintMaterial column and they are deliberately different lists — a flat
-       map would let whichever list was read last silently win. */
+    /* Column metadata comes from checkSchema's read — same payload, no
+       second round-trip. Keyed by list, not just by column name: Printers
+       and Tasks both have a PrintMaterial column and they are deliberately
+       different lists — a flat map would let whichever list was read last
+       silently win. */
     const byList = {};
     for (const list of ["Printers", "Tasks"]) {
-      const cols = await graph(`/sites/${sid}/lists/${list}/columns`);
       byList[list] = {};
-      for (const c of cols.value || []) {
+      for (const c of colsByList?.[list] || []) {
         if (c.choice?.choices?.length) byList[list][c.name] = c.choice.choices;
       }
     }
@@ -5686,9 +5612,12 @@ async function loadSettings(itemIds) {
    discover that one failed save at a time, compare every name in COLS
    against the live lists on load and report all mismatches together.
    --------------------------------------------------------------------- */
+/* Returns the raw column arrays by list so loadChoices can reuse them
+   instead of re-fetching the same payload. */
 async function checkSchema() {
   const sid = await siteId();
   const problems = [];
+  const colsByList = {};
 
   const expected = {
     Groups: Object.values(COLS.groups),
@@ -5704,7 +5633,8 @@ async function checkSchema() {
     let actual;
     try {
       const res = await graph(`/sites/${sid}/lists/${list}/columns`);
-      actual = (res.value || []).filter((c) => !c.readOnly).map((c) => c.name);
+      colsByList[list] = res.value || [];
+      actual = colsByList[list].filter((c) => !c.readOnly).map((c) => c.name);
     } catch {
       problems.push(`${list}: list not found on the site.`);
       continue;
@@ -5725,6 +5655,7 @@ async function checkSchema() {
         problems.join("\n\n")
     );
   }
+  return colsByList;
 }
 
 /* The three data lists, mapped and registered in itemIds. Shared by the
@@ -5755,10 +5686,10 @@ async function loadLists(itemIds) {
 }
 
 async function loadEverything(itemIds) {
-  await checkSchema();
+  const colsByList = await checkSchema();
   const lists = await loadLists(itemIds);
   const [choices, appSettings] = await Promise.all([
-    loadChoices(),
+    loadChoices(colsByList),
     loadSettings(itemIds),
   ]);
 
@@ -5832,13 +5763,12 @@ function diffByIdentity(prev, next) {
   const created = next.filter((r) => !before.has(r.id));
   const deleted = prev.filter((r) => !after.has(r.id));
   const updated = next.filter((r) => before.has(r.id) && before.get(r.id) !== r);
-  return { created, updated, deleted };
+  return { created, updated, deleted, before };
 }
 
 async function saveList(kind, prev, next, itemIds) {
   const spec = LISTS[kind];
-  const { created, updated, deleted } = diffByIdentity(prev, next);
-  const before_ = new Map(prev.map((r) => [r.id, r]));
+  const { created, updated, deleted, before } = diffByIdentity(prev, next);
   let writes = 0;
 
   for (const rec of created) {
@@ -5862,8 +5792,8 @@ async function saveList(kind, prev, next, itemIds) {
       /* A row can be a new object without any stored column differing —
          toggling a group's collapse is view state, not shop state. Compare
          the mapped row so those changes cost nothing. */
-      const before = spec.toRow(before_.get(rec.id));
-      if (sameRow(before, row)) continue;
+      const beforeRow = spec.toRow(before.get(rec.id));
+      if (sameRow(beforeRow, row)) continue;
       await patchItem(spec.name, itemId, row);
       writes++;
     } else {
