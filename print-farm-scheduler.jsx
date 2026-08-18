@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.10";
+const BUILD = "2026-08-18.11";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -584,10 +584,10 @@ function quickEta(hours) {
 }
 
 const ETA_PRESETS = [
-  ["~3 hrs", 3],
-  ["~6 hrs", 6],
-  ["~24 hrs", 24],
-  ["2–3 days", 72],
+  ["Short", "~3 hrs", 3],
+  ["Medium", "~6 hrs", 6],
+  ["Long", "~24 hrs", 24],
+  ["Weekend", "2–3 days", 72],
 ];
 
 /* CreatedAt/CompletedAt stamp. A real instant, not a date-input string —
@@ -4286,40 +4286,11 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
           {/* ETA — printers only */}
           {!inStaging && (
             <Field label="ETA">
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={val("etaDate")}
-                  onChange={(e) => commit({ etaDate: e.target.value })}
-                  className={MODAL_INPUT}
-                  style={MODAL_STYLE}
-                  aria-label="ETA date"
-                />
-                <input
-                  type="time"
-                  value={val("etaTime")}
-                  onChange={(e) => commit({ etaTime: e.target.value })}
-                  className={MODAL_INPUT}
-                  style={MODAL_STYLE}
-                  aria-label="ETA time"
-                />
-              </div>
-              {/* one click instead of two pickers: now + duration bucket.
-                  "Now" is when the operator is at this modal flipping the
-                  run to In progress, which is the timestamp that matters. */}
-              <div className="flex gap-2 mt-2">
-                {ETA_PRESETS.map(([label, hours]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => commit(quickEta(hours))}
-                    className="flex-1 text-xs px-2 py-1.5 rounded border bg-white hover:bg-gray-50"
-                    style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <EtaQuickPick
+                etaDate={val("etaDate")}
+                etaTime={val("etaTime")}
+                onPick={commit}
+              />
             </Field>
           )}
 
@@ -4480,6 +4451,54 @@ function Field({ label, children }) {
         {label}
       </span>
       {children}
+    </div>
+  );
+}
+
+/* The only ETA entry: one click on a duration bucket — the shop asked for
+   this after date+time pickers per run failed to scale to hundreds of
+   runs. The readout line underneath is the feedback that the click landed,
+   and its "clear" is the only way left to unset an ETA now that the
+   pickers are gone. */
+function EtaQuickPick({ etaDate, etaTime, onPick }) {
+  const eta = formatEta(etaDate, etaTime);
+  return (
+    <div>
+      <div className="flex gap-2">
+        {ETA_PRESETS.map(([label, sub, hours]) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onPick(quickEta(hours))}
+            className="flex-1 min-w-0 px-1 py-1.5 rounded border bg-white hover:bg-gray-50 text-center"
+            style={{ borderColor: "#C8C6C4" }}
+          >
+            <span className="block text-xs font-semibold" style={{ color: "#323130" }}>
+              {label}
+            </span>
+            <span className="block" style={{ fontSize: 9, color: "#8A8886" }}>
+              {sub}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-1" style={{ fontSize: 11, color: "#605E5C" }}>
+        {eta ? (
+          <>
+            {`${eta.date} ${eta.time}`.trim()}{" "}
+            <button
+              type="button"
+              onClick={() => onPick({ etaDate: "", etaTime: "" })}
+              className="underline"
+              style={{ color: "#8A8886" }}
+            >
+              clear
+            </button>
+          </>
+        ) : (
+          "Not set"
+        )}
+      </div>
     </div>
   );
 }
@@ -4924,25 +4943,15 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       </label>
       {showEta && (
         <div className="text-xs" style={{ color: "#605E5C" }}>
-          <span className="block">ETA</span>
-          <div className="mt-0.5 flex gap-2">
-            <input
-              type="date"
-              value={etaDate}
-              onChange={(e) => setEtaDate(e.target.value)}
-              className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-              style={{ borderColor: "#C8C6C4" }}
-              aria-label="ETA date"
-            />
-            <input
-              type="time"
-              value={etaTime}
-              onChange={(e) => setEtaTime(e.target.value)}
-              className="flex-1 min-w-0 text-xs px-2 py-1.5 rounded border outline-none"
-              style={{ borderColor: "#C8C6C4" }}
-              aria-label="ETA time"
-            />
-          </div>
+          <span className="block mb-0.5">ETA</span>
+          <EtaQuickPick
+            etaDate={etaDate}
+            etaTime={etaTime}
+            onPick={(p) => {
+              setEtaDate(p.etaDate);
+              setEtaTime(p.etaTime);
+            }}
+          />
         </div>
       )}
       <label className="block text-xs" style={{ color: "#605E5C" }}>
