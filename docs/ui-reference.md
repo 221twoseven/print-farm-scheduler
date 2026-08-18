@@ -36,17 +36,14 @@ explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
    not-yet-deployed change apart from a cached tab — see
    [operations.md](operations.md#deploying-a-change). It is deliberately plain
    text, not a link or a control: it is diagnostic, and nothing acts on it.
-2. **In-progress bar** — a chip per printer that has at least one `In progress`
-   task, with a count, in the `In progress` status blue. Reads "No printers have
-   tasks in progress" when empty.
-3. **Staging area** — jobs not yet assigned anywhere.
-4. **In progress jobs** — jobs with at least one run on a printer (item 34).
+2. **Staging area** — jobs not yet assigned anywhere.
+3. **In progress jobs** — jobs with at least one run on a printer (item 34).
    Hidden entirely when empty.
-5. **Jobcode filter** — dims every printer not working the selected jobcode.
+4. **Jobcode filter** — dims every printer not working the selected jobcode.
    Hidden entirely when no assigned job carries one.
-6. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
+5. **Groups grid** — `groupsPerRow` groups across, each group holding its printer
    cards `printersPerRow` across.
-7. **Completed jobs panel** — the last block on the board, in both views.
+6. **Completed jobs panel** — the last block on the board, in both views.
 
 ## Operator view and Designer view
 
