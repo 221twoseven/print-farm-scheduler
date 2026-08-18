@@ -385,7 +385,7 @@ the feedback was that the board read as visually busy.
 ### Detail modal
 
 Every task field: title, jobcode, quantity (stepper), status, priority, print
-material, slice status, need-by date, ETA date and time, sent by, give to,
+material, slice status, need-by date, ETA (preset buttons), sent by, give to,
 notify when print starts (jobs only, not runs — the same people picker as the
 new-task form; a run inherits a snapshot nothing reads, so the field hides),
 notes, operator notes, filepath, print quality, print strength. The task's print material is what the
@@ -398,13 +398,16 @@ modal open — the same applies to the shop layout and confirmation dialogs.
 
 Tasks in staging hide the fields that only mean something once assigned.
 
-Under the assigned-task ETA pickers sit four one-click presets — **~3 hrs,
-~6 hrs, ~24 hrs, 2–3 days** — that fill both date and time from "now plus the
-bucket", rounded up to a half-day: by noon (12:00) or end of day (17:00), with
-after-hours and weekend landings rolled to the next workday morning. One click
-answers the question the shop actually asks — done today, tomorrow morning, or
-tomorrow EOD — without typing a date and a time per run. The pickers remain for
-manual override.
+ETA has no date or time pickers — entry is four one-click preset buttons,
+**Short / Medium / Long / Weekend**, each with its duration (~3 hrs, ~6 hrs,
+~24 hrs, 2–3 days) as smaller text below the label. A click fills the stored
+date and time from "now plus the bucket", rounded up to a half-day: by noon
+(12:00) or end of day (17:00), with after-hours and weekend landings rolled to
+the next workday morning. One click answers the question the shop actually
+asks — done today, tomorrow morning, or tomorrow EOD. A readout line under the
+buttons shows the resulting ETA (or "Not set") with a **clear** link, which is
+the only way to unset one. The same control appears in the new-task form on
+printer columns.
 
 The assigned-task **Status** dropdown carries one extra entry beyond the three
 statuses: **Complete & reprint** — the same action as the context menu's (see
