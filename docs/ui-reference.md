@@ -408,10 +408,9 @@ way" above).
 ETA has no date or time pickers — entry is four one-click preset buttons,
 **Short / Medium / Long / Weekend**, each with its duration (~3 hrs, ~6 hrs,
 ~24 hrs, 2–3 days) as smaller text below the label. A click fills the stored
-date and time from "now plus the bucket", rounded up to a half-day: by noon
-(12:00) or end of day (17:00), with after-hours and weekend landings rolled to
-the next workday morning. One click answers the question the shop actually
-asks — done today, tomorrow morning, or tomorrow EOD. A readout line under the
+date and time with the actual finish instant — now plus the bucket's hours,
+to the minute, with no business-hours or weekend rounding, because printers
+run unattended. A readout line under the
 buttons shows the resulting ETA (or "Not set") with a **clear** link, which is
 the only way to unset one. The same control appears in the new-task form on
 printer columns, with the buttons stacked two per row because the column is

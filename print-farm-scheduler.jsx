@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.16";
+const BUILD = "2026-08-18.17";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -566,24 +566,15 @@ function isOverdue(task) {
 }
 
 /* One-click ETA presets. Operator feedback: typing a date and a time per
-   run doesn't scale to hundreds of runs, and the distinction that actually
-   matters is done-today vs tomorrow-morning vs tomorrow-EOD. So: now plus
-   the bucket's upper bound, rounded up to a half-day — by noon (12:00) or
-   by end of day (17:00) — with after-hours and weekend landings rolled
-   forward to the next workday morning. */
+   run doesn't scale to hundreds of runs. Printers run unattended, so the
+   ETA is the actual finish instant — now plus the bucket's hours, no
+   business-hours or weekend rounding. */
 function quickEta(hours) {
   const t = new Date(Date.now() + hours * 3600 * 1000);
-  if (t.getHours() >= 17) {
-    t.setDate(t.getDate() + 1);
-    t.setHours(9, 0, 0, 0);
-  }
-  /* lands on a weekend → really "ready when the shop reopens" */
-  if (t.getDay() === 0 || t.getDay() === 6) t.setHours(9, 0, 0, 0);
-  while (t.getDay() === 0 || t.getDay() === 6) t.setDate(t.getDate() + 1);
   const pad = (n) => String(n).padStart(2, "0");
   return {
     etaDate: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`,
-    etaTime: t.getHours() < 12 ? "12:00" : "17:00",
+    etaTime: `${pad(t.getHours())}:${pad(t.getMinutes())}`,
   };
 }
 
