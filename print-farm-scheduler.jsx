@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.5";
+const BUILD = "2026-08-18.6";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -945,6 +945,19 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
      it — the same open-after-assign flow drops have always had. */
   const assignSubtask = (job, printerId) => {
     const subs = subtasksByParent[job.id] || [];
+    /* first run = the job starts printing (item 12): ping its creator and
+       the Notify list, fire-and-forget from this session. Later runs are
+       the same job still going — no new ping. */
+    if (subs.length === 0) {
+      const printerName =
+        printers.find((p) => p.id === printerId)?.name || "a printer";
+      sendActivityPings({
+        activityType: "jobStarted",
+        preview: `${job.title} started printing on ${printerName}`,
+        jobName: job.title,
+        userIds: [job.createdById, ...(job.notifyPeople || []).map((p) => p.id)],
+      });
+    }
     const assigned = subs.reduce((n, s) => n + (Number(s.quantity) || 0), 0);
     /* fully-assigned jobs can still take another run (a failed print needs a
        reprint before anything completes) — default that run to 1, not 0 */
@@ -1143,6 +1156,15 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       { id: uid(), printerId, status: "Not started", ...fields, createdAt: nowIso() },
     ]);
     setAddingTaskIn(null);
+    /* new job in staging → ping the operator role (item 12). Empty list
+       today, so this is a no-op until OPERATOR_NOTIFY_IDS is filled. */
+    if (printerId === STAGING && OPERATOR_NOTIFY_IDS.length)
+      sendActivityPings({
+        activityType: "jobQueued",
+        preview: `New job in staging: ${fields.title || "untitled"}`,
+        jobName: fields.title || "untitled",
+        userIds: OPERATOR_NOTIFY_IDS,
+      });
   };
 
   const toggleGroup = (id) =>
@@ -4959,6 +4981,10 @@ const SCOPES = [
   "Sites.ReadWrite.All",
   "User.ReadBasic.All",
   "GroupMember.Read.All",
+  /* activity-feed pings (item 12). Until this consent is granted in Entra,
+     token requests fail silent and fall back to interactive, where the
+     person is asked once — the board still loads either way. */
+  "TeamsActivity.Send",
 ];
 const configured = () => Boolean(SP.clientId && SP.tenantId);
 
@@ -5211,6 +5237,52 @@ async function graph(path, init = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+/* ---- activity notifications (item 12) ----
+   Teams activity-feed pings, sent from the acting user's session with the
+   delegated TeamsActivity.Send scope — no server (decisions.md). Best
+   effort by design: a failed send is logged and swallowed, never blocks
+   the board. Every activityType used here must also be declared in the
+   Teams app manifest ("activities" section) and the app package
+   republished, or Graph rejects the send. */
+
+/* Operator is a role, not a per-job field: the Entra user ids pinged when
+   a new job lands in staging. Empty until the shop hires a dedicated
+   operator — a designer is acting operator and raises the jobs anyway. */
+const OPERATOR_NOTIFY_IDS = [];
+
+async function sendActivityPings({ activityType, preview, jobName, userIds }) {
+  try {
+    if (!configured() || !(await inTeams())) return;
+    const ctx = await window.microsoftTeams.app.getContext();
+    const teamId = ctx?.team?.groupId;
+    if (!teamId) return; // not in a team channel — nowhere to send from
+    /* the person performing the action never needs to be told about it */
+    const actor = (ctx?.user?.id || "").toLowerCase();
+    const targets = [
+      ...new Set(userIds.filter(Boolean).map((s) => s.toLowerCase())),
+    ].filter((id) => id !== actor);
+    await Promise.all(
+      targets.map((userId) =>
+        graph(`/teams/${teamId}/sendActivityNotification`, {
+          method: "POST",
+          body: JSON.stringify({
+            topic: { source: "entityUrl", value: `${GRAPH}/teams/${teamId}` },
+            activityType,
+            previewText: { content: preview },
+            recipient: {
+              "@odata.type": "microsoft.graph.aadUserNotificationRecipient",
+              userId,
+            },
+            templateParameters: [{ name: "jobName", value: jobName }],
+          }),
+        })
+      )
+    );
+  } catch (e) {
+    console.warn("Activity notification not sent", e);
+  }
+}
+
 let siteIdCache = null;
 async function siteId() {
   if (!siteIdCache) {
@@ -5326,7 +5398,14 @@ const parsePeople = (s) => {
   }
 };
 
-const taskFromRow = (f) => ({
+/* The second argument is the whole Graph list item, not fields — createdBy
+   lives on the row root. The creator's Entra id feeds the job-start ping
+   (item 12) and is deliberately not stored in any app column: SharePoint's
+   own author record is the source of truth. Rows created locally this
+   session have no createdById, which is fine — their creator is this
+   signed-in user, who as the acting party is skipped anyway. */
+const taskFromRow = (f, row) => ({
+  createdById: str(row?.createdBy?.user?.id),
   id: str(f[COLS.tasks.uuid]) || uid(),
   printerId: str(f[COLS.tasks.printerId]) || STAGING,
   parentId: str(f[COLS.tasks.parentId]),
@@ -5501,7 +5580,7 @@ async function loadEverything(itemIds) {
   const collect = (rows, spec, kind) =>
     hydrate(
       rows.map((row) => {
-        const rec = spec.fromRow(row.fields || {});
+        const rec = spec.fromRow(row.fields || {}, row);
         itemIds.set(`${kind}:${rec.id}`, row.id);
         return rec;
       })

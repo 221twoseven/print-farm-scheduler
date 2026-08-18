@@ -158,6 +158,43 @@ The tab's content URL is set by `config.html` when someone adds the tab —
 `entityId: "printFarmScheduler"`, suggested name "Print Farm". There is nothing to
 configure, so Save is enabled immediately.
 
+### Enabling the activity notifications (item 12)
+
+The sends are in the code and fail silently until both of these are done, in
+either order:
+
+1. **Admin consent for `TeamsActivity.Send`** (delegated) on the app
+   registration in Entra — same procedure as the two 2026-08-17 scopes.
+   Until granted, each person gets one interactive consent prompt at next
+   sign-in; the board loads either way.
+2. **Declare the activity types in the manifest** and republish (bump the
+   version). In the Developer Portal this is **Activity feed notifications**;
+   the manifest JSON is:
+
+   ```json
+   "activities": {
+     "activityTypes": [
+       { "type": "jobStarted",
+         "description": "A job started printing",
+         "templateText": "{jobName} started printing" },
+       { "type": "jobQueued",
+         "description": "A new job was added to staging",
+         "templateText": "New job in staging: {jobName}" }
+     ]
+   }
+   ```
+
+   Graph rejects a send whose `activityType` isn't declared, so notifications
+   simply stay off until the republished package rolls out.
+
+Who gets pinged: on a job's **first run** (it starts printing), the job's
+creator — read from the SharePoint row's author, so jobs created before this
+feature still resolve — plus everyone in its Notify list, minus whoever did
+the assigning. On a **new staging job**, the ids in `OPERATOR_NOTIFY_IDS`
+(a code constant, empty until the shop hires a dedicated operator). Sends
+fire from the acting user's session, best effort: a failure is logged to the
+console and never blocks the board.
+
 ## Changing the SharePoint schema
 
 Adding a column the app should store means, in order:

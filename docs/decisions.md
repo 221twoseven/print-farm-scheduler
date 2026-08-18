@@ -225,8 +225,10 @@ republished package. Recipients: the job's creator comes from the row's
 SharePoint author (deliberately not stored in any app column), extras from
 `NotifyPeople` (plain text, not a Person column — see
 [data-model.md](data-model.md)); the actor is skipped. The groundwork shipped
-2026-08-17 (PRs #41–#45); the sends themselves are still to build — see
-item 12 in [todo.md](todo.md).
+2026-08-17 (PRs #41–#45); the sends shipped 2026-08-18. They stay silent
+until the `TeamsActivity.Send` consent is granted and the manifest declares
+the activity types — the one-time steps are in
+[operations.md](operations.md#enabling-the-activity-notifications-item-12).
 
 ## Open items
 
