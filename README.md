@@ -5,16 +5,11 @@ print jobs are queued onto printers, tracked through their lifecycle, and staged
 before assignment. Roughly 10–15 designers and operators inside one company.
 Internal tool, built to stay usable at several hundred queued jobs.
 
-The app is built, connected to SharePoint, published to Teams, and live in the
-Ticketing channel. The shop has not cut over from its previous ticketing system
-yet, so the lists currently hold test data.
-
-**That is not licence to treat this as a toy.** It has to be usable the day the
-shop switches, which could be any day, and a schema or save-layer mistake
-discovered then is far more expensive than one caught now. Work to production
-standard: verify the deploy, check the column's internal name, keep the
-identity invariant. The instructions in `CLAUDE.md` assume live data on
-purpose.
+**The app is live and in use**: connected to SharePoint, published to Teams,
+pinned in the Ticketing channel, and holding the shop's real work. Every
+change is a production change — a schema or save-layer mistake loses real
+jobs. Verify the deploy, check the column's internal name, keep the identity
+invariant. The working agreement in `CLAUDE.md` spells out the rules.
 
 ## Where everything lives
 
@@ -47,6 +42,7 @@ and nothing to compile:
 ```bash
 python3 -m http.server 8080
 # then open http://localhost:8080/
+# (no Python on the machine? any static server works — e.g. npx serve .)
 ```
 
 Sign-in will fail against `localhost` unless that origin is added as an SPA
