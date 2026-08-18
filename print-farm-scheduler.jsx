@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.23";
+const BUILD = "2026-08-18.24";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -5271,11 +5271,15 @@ async function sendActivityPings({ activityType, preview, jobName, userIds }) {
     const ctx = await window.microsoftTeams.app.getContext();
     const teamId = ctx?.team?.groupId;
     if (!teamId) return; // not in a team channel — nowhere to send from
-    /* the person performing the action never needs to be told about it */
+    /* Self-pings are deliberate: the shop runs effectively solo
+       (2026-08-18), and excluding the actor made every one-person action a
+       silent no-op. A falsy id means a job created this session — its
+       createdById only comes back from SharePoint's author on reload — and
+       that creator is this user, so substitute the actor. */
     const actor = (ctx?.user?.id || "").toLowerCase();
     const targets = [
-      ...new Set(userIds.filter(Boolean).map((s) => s.toLowerCase())),
-    ].filter((id) => id !== actor);
+      ...new Set(userIds.map((s) => (s || actor).toLowerCase())),
+    ].filter(Boolean);
     await Promise.all(
       targets.map((userId) =>
         graph(`/teams/${teamId}/sendActivityNotification`, {

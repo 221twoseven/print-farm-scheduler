@@ -223,8 +223,11 @@ for the next manifest change:
 
 Who gets pinged: on a job's **first run** (it starts printing), the job's
 creator — read from the SharePoint row's author, so jobs created before this
-feature still resolve — plus everyone in its Notify list, minus whoever did
-the assigning. On a **new staging job**, the ids in `OPERATOR_NOTIFY_IDS`
+feature still resolve; a job created this session has no author yet and falls
+back to the acting user — plus everyone in its Notify list. The actor is
+**not** excluded: the shop runs effectively solo (2026-08-18), and filtering
+out the actor made every one-person action a silent no-op. On a **new staging
+job**, the ids in `OPERATOR_NOTIFY_IDS`
 (a code constant, empty until the shop hires a dedicated operator). Sends
 fire from the acting user's session, best effort: a failure is logged to the
 console and never blocks the board.
