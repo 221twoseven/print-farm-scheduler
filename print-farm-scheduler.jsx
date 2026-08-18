@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.9";
+const BUILD = "2026-08-18.10";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -560,6 +560,35 @@ function isOverdue(task) {
     : new Date(y, m - 1, d, 23, 59, 59);
   return due.getTime() < Date.now();
 }
+
+/* One-click ETA presets. Operator feedback: typing a date and a time per
+   run doesn't scale to hundreds of runs, and the distinction that actually
+   matters is done-today vs tomorrow-morning vs tomorrow-EOD. So: now plus
+   the bucket's upper bound, rounded up to a half-day — by noon (12:00) or
+   by end of day (17:00) — with after-hours and weekend landings rolled
+   forward to the next workday morning. */
+function quickEta(hours) {
+  const t = new Date(Date.now() + hours * 3600 * 1000);
+  if (t.getHours() >= 17) {
+    t.setDate(t.getDate() + 1);
+    t.setHours(9, 0, 0, 0);
+  }
+  /* lands on a weekend → really "ready when the shop reopens" */
+  if (t.getDay() === 0 || t.getDay() === 6) t.setHours(9, 0, 0, 0);
+  while (t.getDay() === 0 || t.getDay() === 6) t.setDate(t.getDate() + 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    etaDate: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`,
+    etaTime: t.getHours() < 12 ? "12:00" : "17:00",
+  };
+}
+
+const ETA_PRESETS = [
+  ["~3 hrs", 3],
+  ["~6 hrs", 6],
+  ["~24 hrs", 24],
+  ["2–3 days", 72],
+];
 
 /* CreatedAt/CompletedAt stamp. A real instant, not a date-input string —
    see the note by taskFromRow/taskToRow before touching either field. */
@@ -4274,6 +4303,22 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
                   style={MODAL_STYLE}
                   aria-label="ETA time"
                 />
+              </div>
+              {/* one click instead of two pickers: now + duration bucket.
+                  "Now" is when the operator is at this modal flipping the
+                  run to In progress, which is the timestamp that matters. */}
+              <div className="flex gap-2 mt-2">
+                {ETA_PRESETS.map(([label, hours]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => commit(quickEta(hours))}
+                    className="flex-1 text-xs px-2 py-1.5 rounded border bg-white hover:bg-gray-50"
+                    style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </Field>
           )}
