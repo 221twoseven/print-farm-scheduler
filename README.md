@@ -64,12 +64,10 @@ work on interface changes. See [docs/operations.md](docs/operations.md#working-l
 | [docs/operations.md](docs/operations.md) | Deploying a change, the two caches, the Teams package, troubleshooting |
 | [docs/ui-reference.md](docs/ui-reference.md) | What the board does, feature by feature — the behaviour spec |
 | [docs/decisions.md](docs/decisions.md) | Settled decisions that should not be relitigated, plus open items |
-| [docs/todo.md](docs/todo.md) | Open bugs and feature requests, ordered simplest first, with the SharePoint work each needs |
-| [docs/handoff-2026-08-17-model.md](docs/handoff-2026-08-17-model.md) | Session handoff: the job/subtask model session (items 31–34), the concurrent-session hazard, verification ceiling, traps |
-| [docs/handoff-2026-08-17-notify.md](docs/handoff-2026-08-17-notify.md) | Session handoff: the notify-people picker session (item 12 groundwork), and the notification design still to build |
+| [docs/todo.md](docs/todo.md) | The session-facing doc: what's left, the closed-item ledger, traps, operational notes, verification state |
 
-Only the most recent session handoffs are kept; superseded ones (the original
-August 2026 seed document, 2026-08-08, 2026-08-12) live in git history.
+Session handoffs were folded into `docs/todo.md` on 2026-08-18; the individual
+handoff documents live in git history.
 
 `CLAUDE.md` at the repo root is the working agreement for Claude Code sessions.
 
