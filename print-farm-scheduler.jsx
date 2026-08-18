@@ -118,9 +118,9 @@ const DEFAULT_CHOICES = {
   nozzleMaterial: ["Standard", "Hardened", "Tungsten"],
   bedType: ["Smooth", "Textured"],
   printMaterial: ["ABS", "Other"],
-  /* Tasks carry their own material column. Same idea, different wording and a
-     different list, so it needs its own key — see loadChoices. */
-  taskPrintMaterial: ["ABS", "Other (Discuss with Operator)"],
+  /* Tasks carry their own material column — a different list, so it needs
+     its own key even though the wording now matches; see loadChoices. */
+  taskPrintMaterial: ["ABS", "Other"],
   printQuality: ["Draft", "Medium", "High"],
   printStrength: ["Structural", "Standard", "Aesthetic"],
 };
@@ -156,10 +156,10 @@ const specExceptions = (settings) => {
   });
 };
 
-/* The printer's list says "Other"; the task's says "Other (Discuss with
-   Operator)" — the longer wording is a message to the designer choosing it,
-   not to the operator. Both lists live in SharePoint and the shop can reword
-   either, so match on the stem rather than on an exact string. */
+/* Both lists say plain "Other" since 2026-08-18 (the task list used to say
+   "Other (Discuss with Operator)"). Rows written before the rewording still
+   hold the long value, and the shop can reword either column again, so
+   match on the stem rather than on an exact string. */
 const isOtherMaterial = (v) => /^\s*other\b/i.test(v || "");
 
 const defaultPrinterFields = () => ({
@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.7";
+const BUILD = "2026-08-18.8";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
