@@ -18,12 +18,12 @@ work or take the board down.
 
 ---
 
-## Verified state (2026-08-18)
+## Verified state (2026-08-18, ship-day sprint)
 
-- `main` head `19568dc` (PR #57); PRs #54–#57 all merged 2026-08-18. Live
-  site last *verified* serving BUILD `2026-08-18.3` — the `.4`–`.8` builds
-  have not been eyeballed in a browser or Teams yet (the verification
-  ceiling below).
+- `main` head `2c6599b` (PR #58); PRs #54–#58 all merged 2026-08-18. Live
+  site last *verified* serving BUILD `2026-08-18.3`; builds `.4`–`.9` were
+  render-verified locally in a real browser (see the verification ceiling —
+  now partially lifted) but not yet eyeballed on the live site or in Teams.
 - All SharePoint columns every shipped item needed exist and are confirmed by
   internal name — the full column inventory is in
   [data-model.md](data-model.md). No SharePoint work is pending: item 6's
@@ -35,23 +35,13 @@ work or take the board down.
 
 ## What's left, sorted by lowest-hanging fruit
 
-### 1. Item 35's UI-copy half — job/run label pass
+### 1. Item 35's UI-copy half — DONE 2026-08-18
 
-**Risk: Low.** Words only.
-
-The terminology is settled and documented
-([ui-reference.md](ui-reference.md#terminology)): **jobcode** = the project
-(`XX000`), **job** = all of one part for a project, raised by a designer,
-**run** (subtask) = one print of part of a job on one printer, created at
-assignment. The In Progress panel and reprint actions already speak job/run;
-what remains is the older copy — "New task", "Add task", card tooltips.
-
-- Do **not** rename the SharePoint list, columns, or `COLS` internal names
-  (CLAUDE.md rule 3) — UI copy only.
-- No jobcode format enforcement — decided 2026-08-17; the field stays free
-  text, the glossary documents the `XX000` convention.
-- The add-task form and modal changed under this item on 2026-08-17 (people
-  pickers, item 12) — pass over the code as it is now, not as remembered.
+The sweep found the 2026-08-17 rework had already converted almost all of
+it ("New job", "Add job", noun-aware menus and modal labels). The one
+survivor was the printer-card count chip ("N tasks" → "N runs") — changed
+and *render-verified* in a browser on seed data. UI copy only; no
+SharePoint or `COLS` names touched.
 
 ### 2. Item 6's tail — DONE 2026-08-18
 
@@ -93,29 +83,21 @@ ceiling applies — transpile + function tests only): edit in tab A, watch tab
 B pick it up within a minute with no PATCH storm in the network panel and no
 "Saving…" flicker when nothing changed.
 
-### 5. Item 24 — light mode / dark mode
+### 5. Item 24 — light mode / dark mode — SHELVED
 
-**Risk: High** — not dangerous per change, but it touches nearly the whole
-file. Treat as "propose an approach and get it signed off", not "implement".
-
-Every colour is a hardcoded hex in an inline `style={{...}}`; there is no
-theme layer. Open questions before any code:
-
-- **What "system settings" means inside Teams** — the Teams SDK context theme
-  (Light / Dark / High contrast) can differ from `prefers-color-scheme`;
-  outside Teams only the media query exists. Which source wins, and is High
-  contrast in scope?
-- **How the indirection gets introduced without a build step** — CSS custom
-  properties on a root element, or a theme object threaded through the tree.
-  Either is structural, not a styling pass.
-- **Full repaint or palette swap** — today's palette was chosen for light
-  mode; dark needs its own contrast pass (status colours, priority colours,
-  the overdue red), not a mechanical inversion.
+*Shelved 2026-08-18 at Robert's direction (ship-day sprint).* The open
+design questions recorded before shelving, for whenever it reopens: which
+theme source wins (Teams SDK context theme vs `prefers-color-scheme`, and
+whether High contrast is in scope); how the indirection lands without a
+build step (CSS custom properties vs a threaded theme object — every colour
+today is a hardcoded hex in inline styles); and dark needs its own contrast
+pass, not a mechanical inversion.
 
 ### 6. Item 28 — Mac Teams blank screen — SHELVED
 
-*Shelved indefinitely 2026-08-17 at Robert's direction; reopens only at his
-say-so, and then only with console output from an affected Mac in hand*
+*Shelved indefinitely 2026-08-17 at Robert's direction; reaffirmed
+2026-08-18 (browser access is enough). Reopens only at his say-so, and then
+only with console output from an affected Mac in hand*
 (right-click the tab → Inspect, captured across the whole load). The three
 suspects, in checking order — do not rewrite auth on guesses:
 
@@ -205,8 +187,8 @@ history and [decisions.md](decisions.md).
 - **34** In Progress panel below staging — staging's sort, designers click
   in, operators drag out. Always visible since PR #48 (hide-when-empty
   caused a false alarm); empty state reads "Nothing in progress".
-- **35 (docs half)** Terminology glossary in ui-reference.md; UI-copy half
-  open — see above.
+- **35** Terminology glossary in ui-reference.md (2026-08-17); UI-copy half
+  closed 2026-08-18 — one string remained (printer-card count chip).
 - **Item 12 groundwork** (PRs #41–#45): `NotifyPeople` column (JSON
   `[{id, name}]`, deliberately not a Person column), `PeoplePicker` off the
   Teams roster (tenant fallback; filters guests and `[ARCHIVE]` names),
@@ -261,13 +243,23 @@ history and [decisions.md](decisions.md).
   here-strings with embedded quotes broke a commit once — use
   `git commit -F -` from bash.
 
-## The verification ceiling
+## The verification ceiling — partially lifted 2026-08-18
 
-Everything from item 23 through the model, picker, and 2026-08-18 work was
-verified by Babel transpile plus extracted-function tests only — never in a
-live browser or Teams from a Claude session (sandbox egress has blocked the
-CDN hosts; the 2026-08-18 session had node but still ran nothing in a
-browser). "Transpiles" ≠ "renders".
+The old ceiling ("transpiles ≠ renders": sandbox egress blocked the CDN
+hosts, so nothing since item 23 had run in a browser) was broken on the
+ship-day sprint: a Claude session served the repo locally (node static
+server — **no python on Robert's machine**, use node) and loaded it in a
+real browser. Verified at BUILD `2026-08-18.9`: CDN hosts load, in-browser
+Babel transpiles with no errors, the sign-in screen renders with production
+config, and the **full board renders on seed data** (SP IDs blanked in a
+scratch copy only, per CLAUDE.md rule 6) with zero console errors —
+including item 32's runs, the In Progress-era card copy, and item 35's
+count chip.
+
+Still never verified live from a session, because they need a signed-in
+SharePoint/Teams context Claude cannot enter: the Graph read/write paths,
+the people picker against the real roster, notifications, and item 11's
+two-browser refresh pass.
 
 **The manual pass worth doing on test data before cutover:** assign a
 staging job to a printer → `-A` run appears and In Progress fills →

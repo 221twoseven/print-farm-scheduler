@@ -286,7 +286,7 @@ anyone else's board.
 
 ## Printer cards
 
-Each card shows the printer name, a task count, and a status control. Its top
+Each card shows the printer name, a run count, and a status control. Its top
 edge is coloured by **state** — green means "this machine will print". The card
 carries no group marker at all: neither the name nor a colour. Which group a
 printer belongs to is answered by the group it is sitting in.
