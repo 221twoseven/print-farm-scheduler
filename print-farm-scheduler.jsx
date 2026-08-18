@@ -248,11 +248,11 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.22";
+const BUILD = "2026-08-18.23";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 

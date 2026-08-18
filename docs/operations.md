@@ -160,8 +160,8 @@ configure, so Save is enabled immediately.
 
 ### Enabling the activity notifications (item 12)
 
-The sends are in the code and fail silently until both of these are done, in
-either order:
+The sends are in the code and fail silently until all three of these are done,
+in either order:
 
 1. **Admin consent for `TeamsActivity.Send`** (delegated) on the app
    registration in Entra — same procedure as the two 2026-08-17 scopes.
@@ -187,7 +187,25 @@ either order:
    Graph rejects a send whose `activityType` isn't declared, so notifications
    simply stay off until the republished package rolls out.
 
-Both steps were **done 2026-08-18** (manifest 1.0.1). Lessons from doing it,
+3. **Link the Teams app to the Entra app registration** via
+   `webApplicationInfo` in the manifest — Graph maps the caller's token to a
+   Teams app through it, and without it rejects every
+   `sendActivityNotification`, activities declaration or not. In the
+   Developer Portal this is **Single sign-on → Application ID URI**; set it to
+
+   ```
+   api://221twoseven.github.io/948b6982-588a-4a0f-a109-169675cb4fd9
+   ```
+
+   (the GUID is the Entra **client ID** — the portal writes it into
+   `webApplicationInfo.id`, which is the part Graph checks; the URI itself is
+   only used by Teams SSO, which this app doesn't use, so it never has to
+   match an "Expose an API" URI in Entra). Republish after setting it.
+
+Steps 1 and 2 were **done 2026-08-18** (manifest 1.0.1); step 3 was the one
+the 2026-08-18 debugging session found missing — the two-step checklist above
+was incomplete, and notifications stayed silently off with everything else
+correct. Lessons from doing it,
 for the next manifest change:
 
 - The app registration was orphaned — visible in no one's Developer Portal.
