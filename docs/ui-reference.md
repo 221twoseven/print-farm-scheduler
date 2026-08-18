@@ -22,6 +22,12 @@ explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
   Distinct rows since item 32; rows that predate the model still play both
   roles and behave as they always did.
 
+The board keeps itself current: other people's changes appear within about a
+minute (a hidden tab catches up the moment it is brought back). The row you
+have open in the detail modal and a card you are dragging are never changed
+under you — see
+[decisions.md](decisions.md#live-refresh-polls-merges-per-row-and-only-writes-what-a-person-did).
+
 ## The board, top to bottom
 
 1. **Header** — purple bar, app name, live count of printers and jobs (rows
