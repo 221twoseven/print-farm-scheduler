@@ -246,7 +246,11 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.14";
+const BUILD = "2026-08-18.15";
+/* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
+   runtime, so this is hand-maintained: bump it in the same change that
+   republishes the package from the Developer Portal, and nowhere else. */
+const APP_VERSION = "1.0.1";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1423,8 +1427,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           <div className="text-xs opacity-80 leading-tight">
             Team tab · {printers.length} printers ·{" "}
             {tasks.filter((t) => !t.parentId).length} jobs ·{" "}
-            <span title="Code version this tab is running. If this doesn't match the latest build, you're on a cached copy — hard-refresh, or fully quit and reopen Teams.">
-              build {BUILD}
+            <span title={`Teams app package version ${APP_VERSION}. Code version this tab is running follows — if it doesn't match the latest build, you're on a cached copy: hard-refresh, or fully quit and reopen Teams.`}>
+              v{APP_VERSION} · build {BUILD}
             </span>
           </div>
         </div>
@@ -6079,7 +6083,7 @@ function AppShell() {
           {/* also stamped here: a tab that never gets past sign-in still needs
               to be able to say which code it is running */}
           <span className="block mt-1 text-xs" style={{ color: "#8A8886" }}>
-            build {BUILD}
+            v{APP_VERSION} · build {BUILD}
           </span>
         </p>
         <button
