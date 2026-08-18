@@ -24,7 +24,8 @@ explicitly warned against (CLAUDE.md rule 3, [data-model.md](data-model.md)).
 
 ## The board, top to bottom
 
-1. **Header** — purple bar, app name, live count of printers and tasks, the
+1. **Header** — purple bar, app name, live count of printers and jobs (rows
+   without a parent — runs are part of a job, not counted twice), the
    **build stamp**, the **view toggle**, and a gear opening **Shop layout**
    (operator view only).
 
@@ -52,10 +53,10 @@ view** hides everything that configures the shop or assigns work:
 
 | Hidden in designer view | Still available |
 | --- | --- |
-| Shop layout gear | Staging area, in full — search, filters, **New task** |
+| Shop layout gear | Staging area, in full — search, filters, **New job** |
 | Printer settings button and right-click menu | The whole board, readable throughout |
 | Printer status control — shown as a plain pill, not a menu | Printer status is still *legible*: a machine in maintenance looks it |
-| **Add task** on a printer | Jobcode filter |
+| **Add job** on a printer | Jobcode filter |
 | Specs summary | Task detail modal **for staging jobs**, fully editable |
 | Add / Remove group, Edit printers mode (add/remove printers), group rename, **printer rename** | Context menu on staging jobs — slicing, duplicate, delete (priority and everything else is set in the detail modal, via Edit details) |
 | Dragging a task onto a printer, and **Move to** in the context menu | — (dragging *within* staging no longer reorders anything, in either view: staging order is computed) |
@@ -146,8 +147,9 @@ staging carries `printerId === "staging"`.
   not one per scroll event. Chosen over virtualization so drag-and-drop and
   browser find-in-page keep working.
 - **Collapse** — a chevron folds the whole panel.
-- **Add task** — inline form. Jobcode, task name, sent by, give to and filepath
-  are all required; **Add task** stays disabled until every one is filled in.
+- **Add job** — inline form (the button reads **New job** in staging, **Add
+  job** on a printer). Jobcode, job name, sent by, give to and filepath are
+  all required; **Add job** stays disabled until every one is filled in.
   **Sent by** and **Give to** are single-select people pickers over the same
   directory as Notify (below) — they still store a plain display name in the
   same text columns, and fall back to free-text inputs if the directory can't
@@ -313,7 +315,7 @@ printer belongs to is answered by the group it is sitting in.
   history button (both removed by item 31 — the table is the only history,
   and nothing purges it from the UI).
 - **Empty state** — reads "No active jobs", "Reserved — no new jobs", "Out for
-  maintenance", or "Drop task here" while dragging.
+  maintenance", or "Drop job here" while dragging.
 - Deleting a printer sends its legacy tasks to staging; **its runs are
   deleted** (a run cannot live in staging), and their quantity returns to
   their job's remaining. The confirmation dialog states both counts.
@@ -409,7 +411,8 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
 - Slicing (Sliced / Not Sliced / Needs Nesting).
 - Move to — staging, or any **Ready** printer, labelled with its group. Reserved
   and Maintenance printers are not offered; if none are Ready it says so.
-- Edit details, Duplicate task, Delete task. Duplicating a **run** gives the
+- Edit details, Duplicate, Delete — both labelled with the row's own word
+  (**run** when the row has a parent, **job** otherwise). Duplicating a **run** gives the
   next suffix letter, not "(copy)" — it is a real new run, counted against
   its job.
 

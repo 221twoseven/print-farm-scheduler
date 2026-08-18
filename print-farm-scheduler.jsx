@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.3";
+const BUILD = "2026-08-18.4";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1202,11 +1202,11 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     const runs = affected.filter((t) => t.parentId).length;
     const legacy = affected.length - runs;
     if (!affected.length)
-      return `No tasks are assigned to ${plural ? "its printers" : "it"}.`;
+      return `Nothing is assigned to ${plural ? "its printers" : "it"}.`;
     const parts = [];
     if (legacy)
       parts.push(
-        `${legacy} task${legacy !== 1 ? "s" : ""} move${legacy === 1 ? "s" : ""} back to the staging area`
+        `${legacy} job${legacy !== 1 ? "s" : ""} move${legacy === 1 ? "s" : ""} back to the staging area`
       );
     if (runs)
       parts.push(
@@ -1311,7 +1311,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         <div>
           <div className="font-semibold leading-tight">Print Farm Scheduler</div>
           <div className="text-xs opacity-80 leading-tight">
-            Team tab · {printers.length} printers · {tasks.length} tasks ·{" "}
+            Team tab · {printers.length} printers ·{" "}
+            {tasks.filter((t) => !t.parentId).length} jobs ·{" "}
             <span title="Code version this tab is running. If this doesn't match the latest build, you're on a cached copy — hard-refresh, or fully quit and reopen Teams.">
               build {BUILD}
             </span>
@@ -1976,6 +1977,8 @@ function ContextMenu({
   if (menu.type === "task") {
     const task = tasks.find((t) => t.id === menu.id);
     if (!task) return null;
+    /* item 35 vocabulary: a row with a parent is a run, anything else a job */
+    const noun = task.parentId ? "run" : "job";
     /* only Ready printers can take work */
     const destinations = printers.filter(
       (p) => acceptsTasks(p.id) && p.id !== task.printerId
@@ -2025,7 +2028,7 @@ function ContextMenu({
               disabled={task.status === "Complete"}
               title={
                 task.status === "Complete"
-                  ? "Already complete — use Duplicate task instead"
+                  ? `Already complete — use Duplicate ${noun} instead`
                   : "Complete this run and queue a reprint; the editor opens to set its quantity"
               }
               label="Complete & reprint"
@@ -2093,12 +2096,12 @@ function ContextMenu({
         />
         <Item
           icon={<Copy size={14} style={{ color: "#605E5C" }} />}
-          label="Duplicate task"
+          label={`Duplicate ${noun}`}
           onClick={() => onCopyTask(task.id)}
         />
         <Item
           icon={<Trash2 size={14} />}
-          label="Delete task"
+          label={`Delete ${noun}`}
           danger
           onClick={() => onDeleteTask(task.id)}
         />
@@ -2154,7 +2157,7 @@ function ContextMenu({
         <Divider />
         <Item
           icon={<Trash2 size={14} />}
-          label="Delete printer (tasks go to staging)"
+          label="Delete printer (work returns to staging)"
           danger
           onClick={() => onDeletePrinter(printer.id)}
         />
@@ -2423,7 +2426,7 @@ function StagingArea({
           className="ml-auto flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg text-white flex-shrink-0"
           style={{ background: "#5B5FC7" }}
         >
-          <Plus size={14} /> New task
+          <Plus size={14} /> New job
         </button>
       </div>
 
@@ -3327,7 +3330,7 @@ function PrinterColumn({
   const showDrop = dragOver && !!draggingTaskId && accepts;
 
   const emptyLabel = showDrop
-    ? "Drop task here"
+    ? "Drop job here"
     : printer.status === "Maintenance"
     ? "Out for maintenance"
     : printer.status === "Reserved"
@@ -3420,7 +3423,7 @@ function PrinterColumn({
             onClick={() => onDeletePrinter(printer.id)}
             className="p-1 rounded hover:bg-red-50 flex-shrink-0"
             aria-label={`Delete printer ${printer.name}`}
-            title="Delete printer (tasks go to staging)"
+            title="Delete printer (work returns to staging)"
           >
             <Trash2 size={15} style={{ color: "#D13438" }} />
           </button>
@@ -3522,7 +3525,7 @@ function PrinterColumn({
               <button
                 onClick={() => onDeletePrinter(printer.id)}
                 className="p-1 rounded hover:bg-red-50 normal-case"
-                title="Delete printer (tasks go to staging)"
+                title="Delete printer (work returns to staging)"
                 aria-label="Delete printer"
               >
                 <Trash2 size={14} style={{ color: "#D13438" }} />
@@ -3672,11 +3675,11 @@ function PrinterColumn({
               }}
               title={
                 accepts
-                  ? "Add a task to this printer"
+                  ? "Add a job to this printer"
                   : "Only a Ready printer can take new work"
               }
             >
-              <Plus size={15} /> Add task
+              <Plus size={15} /> Add job
             </button>
           )}
         </div>
@@ -3900,6 +3903,8 @@ function TaskCard({
    rather than one per letter. Discrete controls (selects, dates, steppers)
    commit immediately, folding in any pending text edit. */
 function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, onDelete, onCompleteReprint, onClose }) {
+  /* item 35 vocabulary: a row with a parent is a run, anything else a job */
+  const noun = task.parentId ? "run" : "job";
   const [draft, setDraft] = useState({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -3973,7 +3978,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
             style={{ color: "#242424" }}
             title={val("title")}
           >
-            {val("title") || "Untitled task"}
+            {val("title") || `Untitled ${noun}`}
           </h2>
           {priority !== "Normal" && (
             <span
@@ -3999,14 +4004,14 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
 
         {/* modal body — scrolls if tall */}
         <div className="px-4 py-3 space-y-3 overflow-y-auto">
-          <Field label="Task name">
+          <Field label={task.parentId ? "Run name" : "Job name"}>
             <input
               value={val("title")}
               onChange={(e) => edit("title", e.target.value)}
               onBlur={flush}
               className={MODAL_INPUT}
               style={MODAL_STYLE}
-              aria-label="Task title"
+              aria-label={task.parentId ? "Run name" : "Job name"}
             />
           </Field>
 
@@ -4298,7 +4303,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, onUpdate, on
             onClick={() => onDelete(task.id)}
             className="flex items-center gap-1.5 text-sm font-medium px-2 py-1.5 rounded hover:bg-red-50"
             style={{ color: "#D13438" }}
-            title="Delete task"
+            title={`Delete ${noun}`}
           >
             <Trash2 size={15} /> Delete
           </button>
@@ -4682,10 +4687,10 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="Task name *"
+        placeholder="Job name *"
         className="w-full text-sm px-2 py-1.5 rounded border outline-none"
         style={{ borderColor: "#C8C6C4" }}
-        aria-label="Task name (required)"
+        aria-label="Job name (required)"
       />
       <input
         value={jobcode}
@@ -4862,7 +4867,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           className="flex-1 text-sm font-medium text-white py-1.5 rounded disabled:cursor-not-allowed"
           style={{ background: ACCENT, opacity: canSubmit ? 1 : 0.5 }}
         >
-          Add task
+          Add job
         </button>
         <button
           onClick={onCancel}
