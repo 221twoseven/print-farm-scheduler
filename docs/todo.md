@@ -57,30 +57,18 @@ No code. Reword the Printers `PrintMaterial` choices from
 Robert's two minutes, optional — `isOtherMaterial` matches on the stem, so
 nothing breaks either way.
 
-### 3. Item 12's remainder — the notifications themselves
+### 3. Item 12's remainder — Robert's two enablement steps
 
-**Risk: Medium** — client-side sends plus a Teams manifest republish; no
-save-layer or schema change. Groundwork (the `NotifyPeople` column, the
-people picker, Sent by / Give to fronted by it, the `User.ReadBasic.All` and
-`GroupMember.Read.All` consents) shipped 2026-08-17, PRs #41–#45.
-
-The design, agreed with Robert (also recorded in
-[decisions.md](decisions.md#notifications-fire-client-side--no-server-needed)):
-
-1. **Job starts printing** (first run created — "in progress" is derived from
-   runs) → ping the job's creator plus everyone in `NotifyPeople`, skipping
-   whoever performed the action. Fires from the acting operator's open
-   session — no server, no background layer; both trigger moments are user
-   actions inside the app, which is why the settled no-server decision holds.
-2. **New job added to staging** → ping the operator(s). Operator is a *role*,
-   not a per-job field: a recipient-list config, empty today (a designer is
-   acting operator until the shop hires), likely a code constant first.
-3. Mechanics: Graph `sendActivityNotification`, which needs the
-   `TeamsActivity.Send` delegated scope (another admin consent), activity
-   types declared in the **Teams app manifest**, and a re-published app
-   package. The creator's Entra id comes from the row's `createdBy` — note
-   `taskFromRow` receives only `row.fields`, so plumbing `createdBy` through
-   the load path is part of the job.
+**Code shipped 2026-08-18** per the agreed design
+([decisions.md](decisions.md#notifications-fire-client-side--no-server-needed)):
+first-run assignment pings the job's creator (from the row's SharePoint
+author, plumbed through the load path) plus `NotifyPeople`, minus the actor;
+a new staging job pings `OPERATOR_NOTIFY_IDS` (code constant, empty until
+the shop hires an operator). Sends are best-effort from the acting session
+and fail silent until Robert does the two one-time steps in
+[operations.md](operations.md#enabling-the-activity-notifications-item-12):
+grant `TeamsActivity.Send` admin consent, and declare the `jobStarted` /
+`jobQueued` activity types in the Teams manifest + republish.
 
 ### 4. Item 11 — live auto-refresh across users
 
