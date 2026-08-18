@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.12";
+const BUILD = "2026-08-18.13";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -4900,34 +4900,32 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         }}
         aria-label="Filepath (required)"
       />
-      <div className="flex gap-2 items-end">
-        <div className="text-xs" style={{ color: "#605E5C" }}>
-          <span className="block">Quantity</span>
-          <div className="mt-0.5">
-            <NumberStepper
-              value={quantity}
-              min={1}
-              max={9999}
-              height={38}
-              editable
-              onChange={(v) => setQuantity(v)}
-            />
-          </div>
+      <div className="text-xs" style={{ color: "#605E5C" }}>
+        <span className="block">Quantity</span>
+        <div className="mt-0.5">
+          <NumberStepper
+            value={quantity}
+            min={1}
+            max={9999}
+            height={38}
+            editable
+            onChange={(v) => setQuantity(v)}
+          />
         </div>
-        <label className="flex-1 min-w-0 text-xs" style={{ color: "#605E5C" }}>
-          Priority
-          <select
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-            style={{ borderColor: "#C8C6C4" }}
-          >
-            {PRIORITIES.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
-        </label>
       </div>
+      <label className="block text-xs" style={{ color: "#605E5C" }}>
+        Priority
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
+          style={{ borderColor: "#C8C6C4" }}
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p}>{p}</option>
+          ))}
+        </select>
+      </label>
       {/* Two dates, so each has to say which it is — a bare pair of pickers
           was survivable with one and is not with two. Need by is a deadline
           and applies from the moment the job exists; ETA is a prediction and
