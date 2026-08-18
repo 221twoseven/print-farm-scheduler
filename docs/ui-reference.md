@@ -165,7 +165,10 @@ staging carries `printerId === "staging"`.
   **Sent by** and **Give to** are single-select people pickers over the same
   directory as Notify (below) — they still store a plain display name in the
   same text columns, and fall back to free-text inputs if the directory can't
-  be read, since a required field must never dead-end. Sent by prefills with
+  be read, since a required field must never dead-end. When the directory *is*
+  readable but nobody matches what was typed, the list offers one **Add
+  "&lt;typed text&gt;"** row (Enter also takes it) — same escape hatch, for
+  names outside the roster. Sent by prefills with
   the signed-in user; remove the chip to submit on someone else's behalf.
   **Notify when print starts** is an optional multi-select of people (chips
   plus a type-ahead, fetched once per session). Inside Teams the list is the
@@ -441,11 +444,14 @@ anyone edits. Completed disappears again if the job leaves `Complete`.
   legacy task it duplicates "(copy)"-style instead of lettering.
 - Slicing (Sliced / Not Sliced / Needs Nesting).
 - Move to — staging, or any **Ready** printer, labelled with its group. Reserved
-  and Maintenance printers are not offered; if none are Ready it says so.
+  and Maintenance printers are not offered; if none are Ready it says so. The
+  staging entry is only offered on jobs — a run never sits in staging, so runs
+  see printers only.
 - Edit details, Duplicate, Delete — both labelled with the row's own word
   (**run** when the row has a parent, **job** otherwise). Duplicating a **run** gives the
   next suffix letter, not "(copy)" — it is a real new run, counted against
-  its job.
+  its job, starting fresh (Not started, its own ETA and operator notes).
+  Deleting a **job** deletes its runs with it.
 
 **On a printer:** the three statuses with their explanations, and Delete printer
 (legacy tasks go to staging; runs are deleted, their quantity returning to
