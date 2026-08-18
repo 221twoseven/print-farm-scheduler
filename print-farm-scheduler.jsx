@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.6";
+const BUILD = "2026-08-18.7";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -579,7 +579,7 @@ function formatTimestamp(iso) {
 /* `initial` and `onPersist` are supplied by AppShell when SharePoint is
    configured. With neither, the board runs on sample data exactly as it
    did before Phase 2. */
-export default function PrintFarmScheduler({ initial = null, onPersist = null }) {
+export default function PrintFarmScheduler({ initial = null, onPersist = null, liveApi = null }) {
   /* hydrate() is the entry point storage rows will use too.
      Group collapse is remembered per browser like the view toggle — never
      SharePoint (see the note by groupFromRow). The overlay makes fresh
@@ -664,6 +664,42 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
       /* not remembering the choice is survivable; failing to render is not */
     }
   }, [designerView]);
+
+  /* ---- live refresh (item 11) ----
+     AppShell polls SharePoint and hands the fresh lists here; the merge
+     rules live in mergeList. Registered every render (no dep array) so the
+     closure always sees current state. onBaseline must run before the
+     setters: by the time the persist effect diffs the merged state, the
+     save layer has to already regard every adopted row as stored. */
+  useEffect(() => {
+    if (!liveApi) return;
+    liveApi.current = {
+      applyRemote(remote, onBaseline) {
+        /* rows that must not change under the person using them */
+        const hold = new Set(
+          [expandedTaskId, draggingTaskId].filter(Boolean)
+        );
+        const none = new Set();
+        const g = mergeList(
+          groups, remote.groups, none, LISTS.groups.toRow,
+          /* collapse is per-person view state — never let a remote edit
+             unfold someone's board */
+          (lr, rr) => ({ ...rr, collapsed: lr.collapsed })
+        );
+        const p = mergeList(printers, remote.printers, none, LISTS.printers.toRow);
+        const t = mergeList(tasks, remote.tasks, hold, LISTS.tasks.toRow);
+        onBaseline({
+          groups: g.saved,
+          printers: p.saved,
+          tasks: t.saved,
+          appSettings,
+        });
+        if (g.state !== groups) setGroups(g.state);
+        if (p.state !== printers) setPrinters(p.state);
+        if (t.state !== tasks) setTasks(t.state);
+      },
+    };
+  });
 
   /* declared here, not at the modal, because the modal renders conditionally
      and a hook cannot */
@@ -5569,8 +5605,11 @@ async function checkSchema() {
   }
 }
 
-async function loadEverything(itemIds) {
-  await checkSchema();
+/* The three data lists, mapped and registered in itemIds. Shared by the
+   initial load and the live-refresh poll (item 11) — the poll deliberately
+   skips checkSchema, choices and settings: the schema can't change
+   mid-session, and the other two are rare edits a reload picks up. */
+async function loadLists(itemIds) {
   const [groupRows, printerRows, taskRows] = await Promise.all([
     readList(LISTS.groups.name),
     readList(LISTS.printers.name),
@@ -5586,15 +5625,22 @@ async function loadEverything(itemIds) {
       })
     );
 
-  const groups = collect(groupRows, LISTS.groups, "groups");
-  const printers = collect(printerRows, LISTS.printers, "printers");
-  const tasks = collect(taskRows, LISTS.tasks, "tasks");
+  return {
+    groups: collect(groupRows, LISTS.groups, "groups"),
+    printers: collect(printerRows, LISTS.printers, "printers"),
+    tasks: collect(taskRows, LISTS.tasks, "tasks"),
+  };
+}
+
+async function loadEverything(itemIds) {
+  await checkSchema();
+  const lists = await loadLists(itemIds);
   const [choices, appSettings] = await Promise.all([
     loadChoices(),
     loadSettings(itemIds),
   ]);
 
-  return { groups, printers, tasks, choices, appSettings };
+  return { ...lists, choices, appSettings };
 }
 
 /* ------------------------------ saving -------------------------------- */
@@ -5606,6 +5652,57 @@ const sameRow = (a, b) => {
   for (const k of keys) if (String(a[k] ?? "") !== String(b[k] ?? "")) return false;
   return true;
 };
+
+/* ---- live refresh merge (item 11) ----
+   Fold a fresh read of a list into what's on screen. Only ever called when
+   the save layer is fully idle (nothing pending, nothing in flight), so
+   the local rows ARE the saved baseline; the poll in AppShell enforces
+   that. Returns {state, saved}:
+
+   - a row unchanged remotely keeps its LOCAL object, so identity-based
+     diffing and memoized components see nothing;
+   - a row changed remotely is adopted with the SAME object in both arrays,
+     so the follow-up persist pass diffs it as untouched — a poll must
+     never cause a write;
+   - a protected row (open in the modal, mid-drag) is left exactly as it
+     is locally, adopted on a later poll once the person lets go;
+   - a row deleted remotely goes — unless protected, in which case it stays
+     on screen and is left OUT of `saved`, so the next flush re-creates it:
+     the person actively working on a row wins over the person who deleted
+     it.
+
+   `carry` lets a caller keep a local-only field on adopted rows (group
+   collapse). If nothing changed, both returns are the original array, so
+   setState bails out and no persist pass runs at all. */
+function mergeList(local, remote, protectedIds, toRow, carry = null) {
+  const localById = new Map(local.map((r) => [r.id, r]));
+  const state = [];
+  const saved = [];
+  for (const rr of remote) {
+    const lr = localById.get(rr.id);
+    if (lr) localById.delete(rr.id);
+    let row;
+    if (!lr) row = rr;
+    else if (protectedIds.has(rr.id)) row = lr;
+    else if (sameRow(toRow(lr), toRow(rr))) row = lr;
+    else row = carry ? carry(lr, rr) : rr;
+    state.push(row);
+    saved.push(row);
+  }
+  for (const lr of localById.values())
+    if (protectedIds.has(lr.id)) state.push(lr);
+  /* state and saved can diverge independently: a protected row surviving a
+     remote deletion changes `saved` (it must leave the baseline so a later
+     flush re-creates it) while `state` stays identical. Judge each on its
+     own, or the stale baseline would keep the deleted row and no
+     re-creation would ever fire. */
+  const differs = (arr) =>
+    arr.length !== local.length || arr.some((r, i) => r !== local[i]);
+  return {
+    state: differs(state) ? state : local,
+    saved: differs(saved) ? saved : local,
+  };
+}
 
 function diffByIdentity(prev, next) {
   const before = new Map(prev.map((r) => [r.id, r]));
@@ -5677,6 +5774,10 @@ async function saveSettings(prev, next, itemIds) {
 
 const SAVE_DEBOUNCE_MS = 700;
 
+/* item 11. 60s balances freshness against Graph throttling with 10–15
+   tabs open: three list reads per tick per client. */
+const LIVE_POLL_MS = 60_000;
+
 /* Save status only — no identity, and nothing to action.
 
    The board cannot run outside a signed-in Teams session, and Teams logins
@@ -5736,6 +5837,7 @@ function AppShell() {
   const saved = useRef(null);               // last snapshot written
   const pending = useRef(null);             // newest snapshot awaiting write
   const writing = useRef(false);
+  const liveApi = useRef(null);             // the board's applyRemote (item 11)
 
   /* already signed in from an earlier tab? skip the button */
   useEffect(() => {
@@ -5837,6 +5939,51 @@ function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ---- live refresh (item 11) ----
+     Poll the lists and fold other people's changes into the board. Only
+     when this client is fully idle — nothing pending, nothing in flight —
+     which is what lets mergeList treat local state as the saved baseline.
+     The idle check runs again after the fetch, because a save can start
+     while the read is on the wire; a stale read is discarded, never
+     merged. A hidden tab doesn't poll (Teams keeps backgrounded tabs
+     alive for a long time), but coming back to the tab polls at once.
+     A failed poll is logged and skipped — the next tick retries, and
+     graph() already backs off on 429; the interval is sized for 10–15
+     clients sharing the tenant's throttling budget. */
+  useEffect(() => {
+    if (!configured() || phase !== "ready") return;
+    let stopped = false;
+    const tick = async () => {
+      if (
+        stopped ||
+        document.hidden ||
+        writing.current ||
+        pending.current ||
+        !liveApi.current
+      )
+        return;
+      try {
+        const remote = await loadLists(itemIds.current);
+        if (stopped || writing.current || pending.current) return;
+        liveApi.current.applyRemote(remote, (baseline) => {
+          saved.current = baseline;
+        });
+      } catch (err) {
+        console.warn("Live refresh skipped", err);
+      }
+    };
+    const iv = setInterval(tick, LIVE_POLL_MS);
+    const onVis = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stopped = true;
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [phase]);
+
   /* last-ditch warning if someone closes the tab mid-write */
   useEffect(() => {
     const warn = (e) => {
@@ -5915,7 +6062,7 @@ function AppShell() {
 
   return (
     <>
-      <PrintFarmScheduler initial={initial} onPersist={onPersist} />
+      <PrintFarmScheduler initial={initial} onPersist={onPersist} liveApi={liveApi} />
       {configured() && (
         <StatusPill
           state={saveState}

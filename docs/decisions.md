@@ -230,7 +230,30 @@ until the `TeamsActivity.Send` consent is granted and the manifest declares
 the activity types — the one-time steps are in
 [operations.md](operations.md#enabling-the-activity-notifications-item-12).
 
-## Open items
+### Live refresh polls, merges per row, and only writes what a person did
+
+*(2026-08-18, item 11.)* The board re-reads the three lists every 60 seconds
+(hidden tabs skip; returning to the tab reads at once) and folds the result
+into the screen. The alternatives — Graph change notifications need a
+webhook endpoint (a server), and SharePoint's socket API is not a public
+contract — lose to a poll under the no-server decision.
+
+The merge is per row, and its one hard rule is that **a poll must never
+cause a write**. It only runs when this client is fully idle (no pending or
+in-flight save), so local state *is* the saved baseline; adopted remote rows
+enter state and baseline as the same object, invisible to the identity diff.
+Rows unchanged remotely keep their local objects. The row open in the detail
+modal and a mid-drag card are never touched: a remote edit to them is
+adopted after the person lets go, and a remote *deletion* of them is undone —
+the row stays on screen, leaves the baseline, and the next flush re-creates
+it, because the person actively working on a row wins over the person who
+deleted it. Group fold state is carried across adopted group rows (it is
+per-person view state).
+
+Accepted costs: up to a minute of staleness; simultaneous same-row edits
+remain last-writer-wins whole-row; a hand-created SharePoint row with no
+TaskID gets a fresh local id each poll (harmless churn, no writes); choices
+and Settings are not polled — rare edits, picked up on reload.
 
 Nothing blocking.
 
@@ -244,10 +267,11 @@ Nothing blocking.
 - **Sample data still ships in the file** (`seedGroups`, `seedPrinters`,
   `seedTasks`). Unreachable while the `SP` block has IDs in it, and it is what
   makes the app demonstrable if they are ever removed.
-- **No conflict detection.** Two people editing the same row is last-writer-wins,
-  and the board does not poll for other people's changes — you see them on
-  reload. Acceptable at 10–15 users with distinct printers; it would not be at
-  ten times that.
+- **Conflict handling is last-writer-wins per row.** Since 2026-08-18 the
+  board polls for other people's changes (see the live-refresh section
+  above); simultaneous edits to the *same row* are still last-writer-wins,
+  whole-row. Acceptable at 10–15 users with distinct printers; it would not
+  be at ten times that.
 - **No native SharePoint view by time of day**, because `EtaTime` is a text
   column. Only matters if someone wants a list view like "due in the next four
   hours."

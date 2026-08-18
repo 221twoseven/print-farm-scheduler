@@ -20,13 +20,15 @@ work or take the board down.
 
 ## Verified state (2026-08-18)
 
-- `main` head `ee755b6` (PR #52); live site verified serving BUILD
-  `2026-08-18.3` — deployed and current.
+- `main` head `a2f8ac4` (PR #53) when this session branched; live site last
+  verified serving BUILD `2026-08-18.3`.
 - All SharePoint columns every shipped item needed exist and are confirmed by
   internal name — the full column inventory is in
   [data-model.md](data-model.md). No SharePoint work is pending except item
   6's optional wording tidy (below).
-- Nothing is mid-flight: no open PRs, no unmerged branches with work on them.
+- Mid-flight as of this commit: PRs #54 (job/run copy), #55 (sticky view),
+  #56 (item 12 sends), #57 (live refresh) — stacked in that order, each
+  containing its predecessors until merged. BUILDs `.4`–`.7`.
 
 ---
 
@@ -70,28 +72,22 @@ and fail silent until Robert does the two one-time steps in
 grant `TeamsActivity.Send` admin consent, and declare the `jobStarted` /
 `jobQueued` activity types in the Teams manifest + republish.
 
-### 4. Item 11 — live auto-refresh across users
+### 4. Item 11 — live auto-refresh — SHIPPED 2026-08-18, needs the manual pass
 
-**Risk: High.** The single biggest change on this list. Needs a design
-discussion first, and its own branch with nothing else on it.
+Code shipped: a 60-second poll (hidden tabs skip, returning polls at once)
+with a per-row merge whose rules are recorded in
+[decisions.md](decisions.md#live-refresh-polls-merges-per-row-and-only-writes-what-a-person-did).
+Every constraint from the design discussion is honoured: the poll runs only
+when the save layer is idle so identity baselines survive; adopted rows
+enter state and baseline as the same object (a poll can never cause a
+write — `mergeList` has extracted-function tests for this); the open-modal
+row and a mid-drag card are never touched, and a remote deletion of them is
+undone rather than yanking the row.
 
-The board loads once at sign-in and never looks again; two people editing the
-same row is last-writer-wins and neither sees the other's change until reload
-(recorded in [decisions.md](decisions.md#open-items)). Its old blocker is
-resolved — assignment is one new row and block membership is derived, so the
-model change didn't complicate the diff — but the hard half stands: what
-happens to someone mid-edit when new data arrives.
-
-- The save layer diffs against `saved.current` **by object identity**.
-  Replacing state wholesale from a poll resets that baseline and can either
-  resurrect deleted rows or fire a storm of pointless PATCHes.
-- Someone with a detail modal open, or a card half-dragged, cannot have the
-  row yanked out from under them.
-- Merging has to be per-row: take remote changes for rows this person has not
-  touched, keep local for rows they have.
-- Graph throttling (HTTP 429) becomes live with 10–15 clients polling; the
-  retry logic already handles it, but the interval needs choosing with that
-  in mind.
+**Still worth a two-browser manual pass on test data** (the verification
+ceiling applies — transpile + function tests only): edit in tab A, watch tab
+B pick it up within a minute with no PATCH storm in the network panel and no
+"Saving…" flicker when nothing changed.
 
 ### 5. Item 24 — light mode / dark mode
 
