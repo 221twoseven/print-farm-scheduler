@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-17.9";
+const BUILD = "2026-08-18.1";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -1098,6 +1098,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
      back as standalone jobs (parentId stripped): their old job is finished,
      and a run must never sit in staging (item 32). */
   const reprintTask = (taskId) => {
+    const id = uid();
     setTasksOrdered((ts) => {
       const row = ts.find((t) => t.id === taskId);
       if (!row) return ts;
@@ -1105,7 +1106,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         ...ts,
         {
           ...row,
-          id: uid(),
+          id,
           parentId: "",
           printerId: STAGING,
           status: "Not started",
@@ -1119,6 +1120,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
         },
       ];
     });
+    /* open the editor on the recall, same reason Complete & reprint does:
+       the copied quantity is a guess until someone confirms it */
+    setExpandedTaskId(id);
   };
 
   const addTask = (printerId, fields) => {
