@@ -187,6 +187,22 @@ either order:
    Graph rejects a send whose `activityType` isn't declared, so notifications
    simply stay off until the republished package rolls out.
 
+Both steps were **done 2026-08-18** (manifest 1.0.1). Lessons from doing it,
+for the next manifest change:
+
+- The app registration was orphaned — visible in no one's Developer Portal.
+  Recovery is **Take ownership** on dev.teams.microsoft.com, which wants the
+  Teams app's **manifest GUID** (admin center → Manage apps → the app →
+  "External app ID"), *not* the Entra client ID — those are two different
+  registrations with two different GUIDs, and the wrong one fails silently.
+- Admin center's **Upload new app** is create-only here: it rejects a package
+  whose app ID already exists. Updates go through the Developer Portal's
+  **Submit app update** button on the Publish page (publish-to-org from the
+  same page had already failed silently once — the catalog stayed at 1.0.0
+  until Submit app update pushed 1.0.1 through).
+- Verify by the **version on the app's admin-center detail page**, not the
+  approvals queue — an admin's own update can land with nothing pending.
+
 Who gets pinged: on a job's **first run** (it starts printing), the job's
 creator — read from the SharePoint row's author, so jobs created before this
 feature still resolve — plus everyone in its Notify list, minus whoever did

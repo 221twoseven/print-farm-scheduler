@@ -53,18 +53,20 @@ settings and verified there; the `DEFAULT_CHOICES` fallback and the
 rewording still store `Other (Discuss with Operator)` — `isOtherMaterial`
 matches on the stem, so they behave identically.
 
-### 3. Item 12's remainder — Robert's two enablement steps
+### 3. Item 12's remainder — ENABLED 2026-08-18
 
-**Code shipped 2026-08-18** per the agreed design
-([decisions.md](decisions.md#notifications-fire-client-side--no-server-needed)):
-first-run assignment pings the job's creator (from the row's SharePoint
-author, plumbed through the load path) plus `NotifyPeople`, minus the actor;
-a new staging job pings `OPERATOR_NOTIFY_IDS` (code constant, empty until
-the shop hires an operator). Sends are best-effort from the acting session
-and fail silent until Robert does the two one-time steps in
-[operations.md](operations.md#enabling-the-activity-notifications-item-12):
-grant `TeamsActivity.Send` admin consent, and declare the `jobStarted` /
-`jobQueued` activity types in the Teams manifest + republish.
+Both one-time steps were completed by Robert on ship day: `TeamsActivity.Send`
+admin consent granted in Entra, and manifest **1.0.1** with the `jobStarted` /
+`jobQueued` activity types published to the org catalog (verified: the
+catalog entry reads 1.0.1). Design and behaviour are in
+[decisions.md](decisions.md#notifications-fire-client-side--no-server-needed);
+the recovery lessons from the republish are recorded in
+[operations.md](operations.md#enabling-the-activity-notifications-item-12).
+
+Remaining: rollout latency (Teams clients pick up the new manifest on their
+own schedule, up to a day) and a live end-to-end ping has not yet been
+observed — first assignment after rollout should ping the job's creator.
+`OPERATOR_NOTIFY_IDS` stays empty until the shop hires an operator.
 
 ### 4. Item 11 — live auto-refresh — SHIPPED 2026-08-18, needs the manual pass
 
