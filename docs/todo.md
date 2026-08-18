@@ -20,15 +20,16 @@ work or take the board down.
 
 ## Verified state (2026-08-18)
 
-- `main` head `a2f8ac4` (PR #53) when this session branched; live site last
-  verified serving BUILD `2026-08-18.3`.
+- `main` head `19568dc` (PR #57); PRs #54–#57 all merged 2026-08-18. Live
+  site last *verified* serving BUILD `2026-08-18.3` — the `.4`–`.8` builds
+  have not been eyeballed in a browser or Teams yet (the verification
+  ceiling below).
 - All SharePoint columns every shipped item needed exist and are confirmed by
   internal name — the full column inventory is in
-  [data-model.md](data-model.md). No SharePoint work is pending except item
-  6's optional wording tidy (below).
-- Mid-flight as of this commit: PRs #54 (job/run copy), #55 (sticky view),
-  #56 (item 12 sends), #57 (live refresh) — stacked in that order, each
-  containing its predecessors until merged. BUILDs `.4`–`.7`.
+  [data-model.md](data-model.md). No SharePoint work is pending: item 6's
+  wording tidy was done 2026-08-18 (both PrintMaterial columns now read
+  `ABS` / `Other`; verified in list settings).
+- Nothing is mid-flight beyond this commit's PR.
 
 ---
 
@@ -52,12 +53,15 @@ what remains is the older copy — "New task", "Add task", card tooltips.
 - The add-task form and modal changed under this item on 2026-08-17 (people
   pickers, item 12) — pass over the code as it is now, not as remembered.
 
-### 2. Item 6's tail — SharePoint wording tidy
+### 2. Item 6's tail — DONE 2026-08-18
 
-No code. Reword the Printers `PrintMaterial` choices from
-`ABS` / `Other (Discuss with Operator)` to `ABS` / `Other` in list settings.
-Robert's two minutes, optional — `isOtherMaterial` matches on the stem, so
-nothing breaks either way.
+The long wording lived on the **Tasks** list, not Printers as this item
+originally said (the Printers column already read `ABS` / `Other`). The
+Tasks `PrintMaterial` choices were reworded to `ABS` / `Other` in list
+settings and verified there; the `DEFAULT_CHOICES` fallback and the
+`isOtherMaterial` comment were updated to match. Rows written before the
+rewording still store `Other (Discuss with Operator)` — `isOtherMaterial`
+matches on the stem, so they behave identically.
 
 ### 3. Item 12's remainder — Robert's two enablement steps
 

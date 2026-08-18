@@ -262,9 +262,9 @@ they stay in code.
 - **Printers** — what the machine is currently loaded with. Choices `ABS` /
   `Other`. Picking an "Other" reveals a free-text box stored in
   `PrintMaterialOther`, because "Other" is not an answer on its own.
-- **Tasks** — what the job is asking for. Choices `ABS` /
-  `Other (Discuss with Operator)`; the longer wording is a message to the
-  designer choosing it, not to the operator.
+- **Tasks** — what the job is asking for. Choices `ABS` / `Other` (reworded
+  2026-08-18 from `Other (Discuss with Operator)`; rows written before then
+  still store the long value, which `isOtherMaterial`'s stem match absorbs).
 
 `loadChoices()` keys its results **by list**, not by column name. A flat map
 would let whichever list was read last silently overwrite the other — a real
