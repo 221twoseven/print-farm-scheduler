@@ -246,7 +246,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.2";
+const BUILD = "2026-08-18.3";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -734,19 +734,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
     () => tasks.filter((t) => t.status === "Complete"),
     [tasks]
   );
-
-  /* printers with in-progress tasks, for the status bar */
-  const inProgressPrinters = useMemo(() => {
-    const counts = {};
-    tasks.forEach((t) => {
-      if (t.status === "In progress" && t.printerId !== STAGING) {
-        counts[t.printerId] = (counts[t.printerId] || 0) + 1;
-      }
-    });
-    return printers
-      .filter((p) => counts[p.id])
-      .map((p) => ({ ...p, count: counts[p.id] }));
-  }, [tasks, printers]);
 
   /* Jobcodes worth filtering by: live work sitting on a printer. Staging is
      excluded because the filter dims printers, and a job with no printer
@@ -1463,45 +1450,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null })
           </div>
         </div>
       )}
-
-      {/* ---------------- status bar: in-progress printers ---------------- */}
-      <div
-        className="px-5 py-2 flex items-center gap-2 flex-wrap border-b"
-        style={{ background: "white", borderColor: "#E1DFDD" }}
-      >
-        <span
-          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "#605E5C" }}
-        >
-          <Activity size={14} style={{ color: "#0F6CBD" }} />
-          In progress
-        </span>
-        {inProgressPrinters.length === 0 ? (
-          <span className="text-xs" style={{ color: "#8A8886" }}>
-            No printers have tasks in progress
-          </span>
-        ) : (
-          inProgressPrinters.map((p) => (
-            <span
-              key={p.id}
-              className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-              style={{
-                background: STATUS_STYLE["In progress"].bg,
-                color: STATUS_STYLE["In progress"].text,
-                border: `1px solid ${STATUS_STYLE["In progress"].dot}40`,
-              }}
-            >
-              {p.name}
-              <span
-                className="px-1.5 rounded-full text-white"
-                style={{ background: STATUS_STYLE["In progress"].dot, fontSize: 10 }}
-              >
-                {p.count}
-              </span>
-            </span>
-          ))
-        )}
-      </div>
 
       {/* ---------------- staging area ---------------- */}
       <StagingArea
