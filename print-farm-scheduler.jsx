@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.21";
+const BUILD = "2026-08-18.22";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -1486,11 +1486,10 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                     <span className="text-sm font-medium" style={{ color: "#242424" }}>
                       {label}
                     </span>
-                    <NumberStepper
+                    <QuantityInput
                       value={appSettings[key]}
                       min={1}
                       max={max}
-                      height={30}
                       onChange={(v) => setAppSettings((s) => ({ ...s, [key]: v }))}
                     />
                   </div>
@@ -2256,6 +2255,30 @@ function ContextMenu({
 const PRIORITY_RANK = { Urgent: 0, High: 1, Normal: 2, Low: 3 };
 const STAGING_PAGE = 60; // cap initial render; more loads as you scroll
 
+/* Scroll paging shared by staging and the history table: render `limit`
+   rows; nearing the bottom loads one batch per wheel flick — loadingRef
+   re-arms only after the new batch has rendered, so a long scroll event
+   stream can't burn through the whole list in one gesture. */
+function usePaged(pageSize) {
+  const [limit, setLimit] = useState(pageSize);
+  const scrollRef = useRef(null);
+  const loadingRef = useRef(false);
+  useEffect(() => {
+    loadingRef.current = false;
+  }, [limit]);
+  const loadMore = () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLimit((l) => l + pageSize);
+  };
+  const onScrollFor = (hidden) => () => {
+    const el = scrollRef.current;
+    if (!el || hidden <= 0) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
+  };
+  return { limit, setLimit, scrollRef, loadMore, onScrollFor };
+}
+
 /* Staging's 2nd/3rd sort keys, both ascending with undated/unstamped last —
    a job with no deadline or no recorded creation time shouldn't jump ahead
    of one that has either. Infinity sorts after any real timestamp, and an
@@ -2312,9 +2335,7 @@ function StagingArea({
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("All");
-  const [limit, setLimit] = useState(STAGING_PAGE);
-  const scrollRef = useRef(null);
-  const loadingRef = useRef(false);
+  const { limit, scrollRef, loadMore, onScrollFor } = usePaged(STAGING_PAGE);
   const showDrop = dragOver && !!draggingTaskId;
 
   /* filter → then sort: priority tier, then need-by, then created-at */
@@ -2350,24 +2371,7 @@ function StagingArea({
 
   const visible = sorted.slice(0, limit);
   const hidden = sorted.length - visible.length;
-
-  /* re-arm once the new batch has rendered, so one flick of the wheel
-     loads one batch rather than firing on every scroll event */
-  useEffect(() => {
-    loadingRef.current = false;
-  }, [limit]);
-
-  const loadMore = () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLimit((l) => l + STAGING_PAGE);
-  };
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el || hidden <= 0) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
-  };
+  const onScroll = onScrollFor(hidden);
 
   /* tier boundaries: show a small header the first time each tier appears */
   let lastTier = null;
@@ -2841,11 +2845,9 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
     }
   }, [collapsed]);
   const [expanded, setExpanded] = useState({}); // jobId → its runs shown
-  const [limit, setLimit] = useState(COMPLETED_PAGE);
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
   const [printerFilter, setPrinterFilter] = useState(""); // "" = every printer
-  const scrollRef = useRef(null);
-  const loadingRef = useRef(false);
+  const { limit, setLimit, scrollRef, loadMore, onScrollFor } = usePaged(COMPLETED_PAGE);
 
   const printerName = useMemo(() => printerNamesOf(printers), [printers]);
 
@@ -2931,28 +2933,13 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
 
   const visible = filtered.slice(0, limit);
   const hidden = filtered.length - visible.length;
+  const onScroll = onScrollFor(hidden);
 
   // A filter change resets paging: otherwise a deep scroll into one code leaves
   // a short match list scrolled past its own end.
   useEffect(() => {
     setLimit(COMPLETED_PAGE);
   }, [jobcodeFilter, printerFilter]);
-
-  useEffect(() => {
-    loadingRef.current = false;
-  }, [limit]);
-
-  const loadMore = () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLimit((l) => l + COMPLETED_PAGE);
-  };
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el || hidden <= 0) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) loadMore();
-  };
 
   /* One renderer for both row kinds. A primary row with runs toggles them on
      click; a child row indents its printer cell to sit under the chevron.
@@ -3955,8 +3942,6 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
   /* item 35 vocabulary: a row with a parent is a run, anything else a job */
   const noun = task.parentId ? "run" : "job";
   const [draft, setDraft] = useState({});
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
 
   useEffect(() => {
     setDraft({});
@@ -3966,18 +3951,17 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
     draft[k] !== undefined ? draft[k] : task[k] ?? fallback;
   const edit = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const flush = () => {
-    const pending = draftRef.current;
+  /* these are re-created each render, so they close over the current draft;
+     the Escape listener stays current through closeRef below */
+  const commit = (patch = {}) => {
+    const pending = { ...draft, ...patch };
     if (Object.keys(pending).length) {
       onUpdate(task.id, pending);
       setDraft({});
     }
   };
-
-  const commit = (patch) => {
-    onUpdate(task.id, { ...draftRef.current, ...patch });
-    setDraft({});
-  };
+  /* named wrapper so onBlur={flush} can't spread the blur event into the patch */
+  const flush = () => commit();
 
   const close = () => {
     flush();
@@ -4172,16 +4156,13 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Quantity">
-              <NumberStepper
+              <QuantityInput
                 value={val("quantity", 1) || 1}
                 min={1}
                 max={9999}
                 height={38}
-                editable
                 onBlur={flush}
-                onChange={(v, immediate) =>
-                  immediate ? commit({ quantity: v }) : edit("quantity", v)
-                }
+                onChange={(v) => edit("quantity", v)}
               />
             </Field>
             <Field label="Priority">
@@ -4377,13 +4358,12 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
    the number. */
 const MODAL_INPUT =
   "w-full text-sm px-2.5 rounded border outline-none focus:ring-1";
-const MODAL_SELECT =
-  "w-full text-sm px-2.5 rounded border bg-white outline-none focus:ring-1";
+const MODAL_SELECT = `${MODAL_INPUT} bg-white`;
 const MODAL_STYLE = { borderColor: "#C8C6C4", height: 38 };
 
 function Field({ label, children }) {
   return (
-    <div className="block">
+    <div>
       <span
         className="block mb-0.5 font-semibold uppercase tracking-wide"
         style={{ color: "#8A8886", fontSize: 9, letterSpacing: "0.04em" }}
@@ -4445,74 +4425,36 @@ function EtaQuickPick({ etaDate, etaTime, onPick, stack }) {
   );
 }
 
-/* ---------------------------- number stepper --------------------------- */
+/* ---------------------------- number input ----------------------------- */
 
-/* One control at two sizes: the shop-layout rows (30px, buttons only) and
-   the task quantity field (38px, typeable). onChange's second argument marks
-   a discrete press, which callers can treat as "save now". */
-function NumberStepper({
-  value,
-  min = 1,
-  max = 99,
-  height = 30,
-  editable = false,
-  onChange,
-  onBlur,
-}) {
-  const step = (v) => onChange(Math.min(max, Math.max(min, v)), true);
-  const big = height >= 38;
+/* Native number input (this replaced a hand-drawn ± stepper: the browser's
+   spinners and ↑/↓ keys do the same job). The raw string rides local state
+   while typing so the field can be emptied mid-edit — clamping on every
+   keystroke made clear-then-type impossible and turned "0" into 1 under the
+   typist's fingers. Every parseable value is pushed upstream immediately, so
+   nothing is lost if the surrounding form closes without a blur. */
+function QuantityInput({ value, min = 1, max = 9999, height = 30, onChange, onBlur }) {
+  const [draft, setDraft] = useState(null); // null = not mid-edit
   return (
-    <div
-      className={`flex items-center rounded border bg-white overflow-hidden ${
-        editable ? "" : "flex-shrink-0"
-      }`}
-      style={{ borderColor: "#C8C6C4", height }}
-    >
-      <button
-        type="button"
-        onClick={() => step(value - 1)}
-        disabled={value <= min}
-        className={`${big ? "px-3 text-base" : "px-2.5 text-sm"} h-full font-semibold hover:bg-gray-100 disabled:opacity-30`}
-        style={{ color: "#605E5C" }}
-        aria-label="Decrease"
-      >
-        −
-      </button>
-      {editable ? (
-        <input
-          type="number"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) =>
-            onChange(
-              Math.min(max, Math.max(min, parseInt(e.target.value, 10) || min)),
-              false
-            )
-          }
-          onBlur={onBlur}
-          className="w-full min-w-0 text-center text-sm outline-none"
-          aria-label="Quantity"
-        />
-      ) : (
-        <span
-          className="w-8 text-center text-sm font-medium tabular-nums"
-          style={{ color: "#242424" }}
-        >
-          {value}
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => step(value + 1)}
-        disabled={value >= max}
-        className={`${big ? "px-3 text-base" : "px-2.5 text-sm"} h-full font-semibold hover:bg-gray-100 disabled:opacity-30`}
-        style={{ color: "#605E5C" }}
-        aria-label="Increase"
-      >
-        +
-      </button>
-    </div>
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={draft ?? value}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+      }}
+      onBlur={() => {
+        setDraft(null);
+        onBlur?.();
+      }}
+      className="rounded border bg-white text-sm text-center outline-none w-full min-w-0"
+      style={{ borderColor: "#C8C6C4", height, maxWidth: 96 }}
+      aria-label="Quantity"
+    />
   );
 }
 
@@ -4873,12 +4815,11 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       <div className="text-xs" style={{ color: "#605E5C" }}>
         <span className="block">Quantity</span>
         <div className="mt-0.5">
-          <NumberStepper
+          <QuantityInput
             value={quantity}
             min={1}
             max={9999}
             height={38}
-            editable
             onChange={(v) => setQuantity(v)}
           />
         </div>
