@@ -247,8 +247,10 @@ space; the header expands it.
   "—" in the Printer column).
 - **Read-only except for one action**: right-click a row → **Reprint job**,
   in both views — it queues a fresh copy of that row in staging (status Not
-  started, fresh creation stamp, blank ETA/operator notes/completion) and
-  changes nothing in the record. The original is deliberately never
+  started, fresh creation stamp, blank ETA/operator notes/completion), opens
+  the detail editor on the copy (the copied quantity is a guess until someone
+  confirms it — same reason Complete & reprint opens one), and changes
+  nothing in the record. The original is deliberately never
   un-completed: the table is a record, not a queue, and a job whose runs
   still cover its quantity would just auto-complete itself again. A recalled
   **run** comes back as a standalone job (parent link stripped) — staging
