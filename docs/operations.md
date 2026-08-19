@@ -179,7 +179,10 @@ in either order:
          "templateText": "{jobName} started printing" },
        { "type": "jobQueued",
          "description": "A new job was added to staging",
-         "templateText": "New job in staging: {jobName}" }
+         "templateText": "New job in staging: {jobName}" },
+       { "type": "jobCompleted",
+         "description": "A job finished printing",
+         "templateText": "{jobName} finished printing" }
      ]
    }
    ```
@@ -226,7 +229,10 @@ creator — read from the SharePoint row's author, so jobs created before this
 feature still resolve; a job created this session has no author yet and falls
 back to the acting user — plus everyone in its Notify list. The actor is
 **not** excluded: the shop runs effectively solo (2026-08-18), and filtering
-out the actor made every one-person action a silent no-op. On a **new staging
+out the actor made every one-person action a silent no-op. On a job
+**completing** (its runs fully assigned and all Complete — the auto-complete
+stamp), the same audience as first-run: creator plus Notify list. A staging
+row completed by hand never had runs, so it never pings. On a **new staging
 job**, the ids in `OPERATOR_NOTIFY_IDS`
 (a code constant, empty until the shop hires a dedicated operator). Sends
 fire from the acting user's session, best effort: a failure is logged to the

@@ -248,11 +248,11 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-18.24";
+const BUILD = "2026-08-19.1";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -936,37 +936,54 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
      runs are ever touched — a plain staging row someone completes by hand is
      their business. Same identity discipline as the Busy effect: untouched
      rows keep their reference, and the same array returns when nothing
-     changed, or the save layer would PATCH every task each time one moved. */
+     changed, or the save layer would PATCH every task each time one moved.
+
+     Computed from `tasks` directly (not inside the updater) so the
+     jobCompleted ping can fire exactly once per completion — React is free
+     to invoke an updater twice, which would double-send. The identity guard
+     in setTasks keeps the race safety the functional form had: if state
+     moved on since this ran, skip — the effect re-runs on the newer array. */
   useEffect(() => {
-    setTasks((ts) => {
-      const byParent = {};
-      ts.forEach((t) => {
-        if (t.parentId) (byParent[t.parentId] ||= []).push(t);
-      });
-      let changed = false;
-      const next = ts.map((t) => {
-        if (t.parentId || t.printerId !== STAGING) return t;
-        const subs = byParent[t.id];
-        if (!subs || subs.length === 0) return t;
-        const assigned = subs.reduce((n, s) => n + (Number(s.quantity) || 0), 0);
-        const done =
-          assigned >= (Number(t.quantity) || 1) &&
-          subs.every((s) => s.status === "Complete");
-        const want = done
-          ? "Complete"
-          : t.status === "Complete"
-          ? "In progress"
-          : t.status;
-        if (want === t.status) return t;
-        changed = true;
-        return {
-          ...t,
-          status: want,
-          completedAt: want === "Complete" ? nowIso() : "",
-        };
-      });
-      return changed ? next : ts;
+    const byParent = {};
+    tasks.forEach((t) => {
+      if (t.parentId) (byParent[t.parentId] ||= []).push(t);
     });
+    let changed = false;
+    const finished = [];
+    const next = tasks.map((t) => {
+      if (t.parentId || t.printerId !== STAGING) return t;
+      const subs = byParent[t.id];
+      if (!subs || subs.length === 0) return t;
+      const assigned = subs.reduce((n, s) => n + (Number(s.quantity) || 0), 0);
+      const done =
+        assigned >= (Number(t.quantity) || 1) &&
+        subs.every((s) => s.status === "Complete");
+      const want = done
+        ? "Complete"
+        : t.status === "Complete"
+        ? "In progress"
+        : t.status;
+      if (want === t.status) return t;
+      changed = true;
+      if (want === "Complete") finished.push(t);
+      return {
+        ...t,
+        status: want,
+        completedAt: want === "Complete" ? nowIso() : "",
+      };
+    });
+    if (!changed) return;
+    setTasks((ts) => (ts === tasks ? next : ts));
+    /* the job finished (item 12): same audience as jobStarted — creator plus
+       Notify list, actor substituted for fresh rows by sendActivityPings */
+    finished.forEach((job) =>
+      sendActivityPings({
+        activityType: "jobCompleted",
+        preview: `${job.title} finished printing`,
+        jobName: job.title,
+        userIds: [job.createdById, ...(job.notifyPeople || []).map((p) => p.id)],
+      })
+    );
   }, [tasks]);
 
   /* only a Ready printer takes new work */
