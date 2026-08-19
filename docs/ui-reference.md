@@ -182,8 +182,10 @@ staging carries `printerId === "staging"`.
   works. When the job's **first run** is created (it starts printing), the
   creator and everyone in this list get a Teams activity-feed ping —
   including whoever did the assigning, kept in deliberately so a solo
-  operator's actions still produce a visible ping; the send fires from that
-  person's session, best effort, and needs the one-time setup in
+  operator's actions still produce a visible ping. The same audience is
+  pinged again when the job **completes** (all runs Complete and the total
+  fully assigned). Sends fire from the acting person's session, best
+  effort, and need the one-time setup in
   [operations.md](operations.md#enabling-the-activity-notifications-item-12).
 - Drop a card anywhere on the panel to send it back to staging.
 - Staging cards use the same three-row layout as assigned cards (title + status,
