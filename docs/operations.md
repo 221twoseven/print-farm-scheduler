@@ -46,12 +46,29 @@ on a branch. Nothing client-side can fix a file the server was never given. The
 build stamp was added the same day so the question is answerable from the
 screen.
 
+### The dev preview at /dev/
+
+The site is published by `.github/workflows/pages.yml` (Pages source is set to
+GitHub Actions, not branch deploy): `main` at the root — the live app, same URL
+as always — and the **`dev` branch at
+`https://221twoseven.github.io/print-farm-scheduler/dev/`**. The preview runs in
+a plain browser (MSAL popup sign-in, no Teams) against the **same live lists**,
+so it shows real data and **its saves are real saves**. Use it to look at UX
+changes before opening a PR; for destructive poking, blank `SP.clientId`
+locally and use seed data instead.
+
+To preview work: push it to `dev` (force-push is fine — `dev` is a throwaway
+pointer, never merged from), wait for the `pages` run, hard-refresh `/dev/`.
+A push to either branch redeploys both at their current tips. The `/dev/` URL
+is a registered redirect URI in the Entra app registration; if sign-in there
+ever fails with a redirect-URI error, check that registration first.
+
 ### When the deploy hangs
 
-"pages build and deployment" is two jobs, **build** then **deploy**, and the
-Actions list shows one line for both. The build stage compiles the site; the
-deploy stage just polls GitHub's Pages backend until it reports done. They fail
-for completely different reasons:
+The `pages` workflow run has two stages, the artifact upload and the
+**deploy** step. The upload stage packages the site; the deploy step just
+polls GitHub's Pages backend until it reports done. They fail for completely
+different reasons:
 
 - **Build fails** — something about the files. Read the log; it will name the
   offending file.
