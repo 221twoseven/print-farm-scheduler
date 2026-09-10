@@ -223,12 +223,17 @@ its runs, not stored.
   Busy/Ready on printers.
 - **Interaction mirrors staging's view split**: designers click into the job
   (it is still their job data — total, need-by, priority) and get its context
-  menu; operators drag it to a printer to assign another run.
+  menu; operators drag it to a printer to assign another run. Operators also
+  get one control on the card, a **trash icon** on the runs row: it deletes
+  the job **and every run on the printers**, behind a confirmation that
+  counts them. It exists because a test or dead job with runs had no
+  operator-side exit — the card face is locked for them and staging's menu
+  never applied.
 - **A run never returns to staging** — staging holds jobs, not runs. Dropping
   one there is refused; deleting the run (context menu) is the deliberate way
   to un-assign it, and its quantity flows back into the job's remaining.
-- Deleting a job with live runs orphans them: they keep printing and complete
-  to the table as themselves. Nothing cascades.
+- Deleting a job (either view) takes its runs with it — a run whose parent
+  is gone would be invisible to both panels and could never auto-complete.
 
 ## Completed jobs panel (both views)
 
@@ -237,8 +242,8 @@ completion, and since item 31 the **only** job history: the per-printer
 Completed sections are gone, and a job marked Complete leaves its printer card
 immediately and appears here. Shown in **both views**: an operator and a
 designer have equal reason to look up what shipped, and the panel carries no
-control either shouldn't have (it has no purge button in either view — see
-decisions.md).
+control either shouldn't have: no purge button in either view (see
+decisions.md), and the per-row delete below is operator only.
 
 It is an **ordinary block in the page flow**, the last one on the board, and
 carries the same chrome as the staging panel, the jobcode filter and the group
@@ -268,6 +273,11 @@ anyone else's board.
 - **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
   Notes (an icon, hover reads the operator's note — same convention as the
   card). Blank where a task has no value for that column, not omitted.
+- **Delete (operator view)** — a red trash icon at the end of each primary
+  row, behind a confirmation. It removes the job **and its runs** from the
+  record; run rows have no icon of their own, since deleting one alone would
+  un-complete its job. Added to clear the test and demo jobs that
+  accumulated before launch; there is deliberately no bulk purge.
 - **Jobcode and Printer filters** — dropdowns above the table, same pattern as
   the board's main jobcode filter, and they compose (both set means both must
   match). Built from **the record itself**, not the live board — this is the
