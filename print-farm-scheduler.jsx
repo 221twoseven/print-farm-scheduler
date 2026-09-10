@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-09-10.1";
+const BUILD = "2026-09-10.2";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -1359,17 +1359,21 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     });
   };
 
-  /* Deleting an in-progress job takes its runs off the printers too, so it
-     gets a confirmation like the other board-clearing actions. Operator
-     only — the card face is the only place operators can reach it. */
+  /* Deleting a job takes its runs with it — off the printers for an
+     in-progress job, out of the record for a finished one — so it gets a
+     confirmation like the other board-clearing actions. Operator only, on
+     the in-progress card and the history row. */
   const askDeleteJob = (job, runCount) => {
     setConfirm({
       title: `Delete “${job.title}”?`,
       confirmLabel: "Delete job",
       body: (
         <p className="text-sm" style={{ color: "#605E5C" }}>
-          This permanently deletes the job and its {runCount} run
-          {runCount !== 1 ? "s" : ""} on the printers.
+          This permanently deletes the job
+          {runCount > 0
+            ? ` and its ${runCount} run${runCount !== 1 ? "s" : ""}`
+            : ""}
+          . It cannot be undone.
         </p>
       ),
       onConfirm: () => deleteTask(job.id),
@@ -1894,7 +1898,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       <CompletedJobsPanel
         tasks={completedTasks}
         printers={printers}
+        operator={operator}
         onContextMenu={openHistoryMenu}
+        onDeleteJob={askDeleteJob}
       />
 
       {/* ---------------- task detail modal (single instance, app level) ----
@@ -2880,7 +2886,7 @@ const completedAtKey = (t) => {
   return v === Infinity ? null : v;
 };
 
-function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
+function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDeleteJob }) {
   /* fold state is per browser like the view toggle; collapsed by default */
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -3071,6 +3077,25 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
             </span>
           )}
         </td>
+        {/* Operator only (decisions.md: designer view never gets a permanent
+            delete). Primary rows only — a run goes with its job, and deleting
+            one alone would un-complete a finished job. stopPropagation keeps
+            the click from also toggling the row's runs. */}
+        <td className="px-2 py-1.5 text-right">
+          {operator && !child && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteJob(task, runCount || 0);
+              }}
+              className="p-1 rounded hover:bg-red-50"
+              title="Delete from history"
+              aria-label="Delete job"
+            >
+              <Trash2 size={12} style={{ color: "#D13438" }} />
+            </button>
+          )}
+        </td>
       </tr>
     );
   };
@@ -3204,7 +3229,7 @@ function CompletedJobsPanel({ tasks, printers, onContextMenu }) {
                     color: "#605E5C",
                   }}
                 >
-                  {["Printer", "Jobcode", "Job", "Qty", "Priority", "Need by", "Completed", "Notes"].map(
+                  {["Printer", "Jobcode", "Job", "Qty", "Priority", "Need by", "Completed", "Notes", ""].map(
                     (h) => (
                       <th
                         key={h}

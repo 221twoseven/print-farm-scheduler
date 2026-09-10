@@ -242,8 +242,8 @@ completion, and since item 31 the **only** job history: the per-printer
 Completed sections are gone, and a job marked Complete leaves its printer card
 immediately and appears here. Shown in **both views**: an operator and a
 designer have equal reason to look up what shipped, and the panel carries no
-control either shouldn't have (it has no purge button in either view — see
-decisions.md).
+control either shouldn't have: no purge button in either view (see
+decisions.md), and the per-row delete below is operator only.
 
 It is an **ordinary block in the page flow**, the last one on the board, and
 carries the same chrome as the staging panel, the jobcode filter and the group
@@ -273,6 +273,11 @@ anyone else's board.
 - **Columns**: Printer, Jobcode, Job, Qty, Priority, Need by, Completed,
   Notes (an icon, hover reads the operator's note — same convention as the
   card). Blank where a task has no value for that column, not omitted.
+- **Delete (operator view)** — a red trash icon at the end of each primary
+  row, behind a confirmation. It removes the job **and its runs** from the
+  record; run rows have no icon of their own, since deleting one alone would
+  un-complete its job. Added to clear the test and demo jobs that
+  accumulated before launch; there is deliberately no bulk purge.
 - **Jobcode and Printer filters** — dropdowns above the table, same pattern as
   the board's main jobcode filter, and they compose (both set means both must
   match). Built from **the record itself**, not the live board — this is the
