@@ -223,12 +223,17 @@ its runs, not stored.
   Busy/Ready on printers.
 - **Interaction mirrors staging's view split**: designers click into the job
   (it is still their job data — total, need-by, priority) and get its context
-  menu; operators drag it to a printer to assign another run.
+  menu; operators drag it to a printer to assign another run. Operators also
+  get one control on the card, a **trash icon** on the runs row: it deletes
+  the job **and every run on the printers**, behind a confirmation that
+  counts them. It exists because a test or dead job with runs had no
+  operator-side exit — the card face is locked for them and staging's menu
+  never applied.
 - **A run never returns to staging** — staging holds jobs, not runs. Dropping
   one there is refused; deleting the run (context menu) is the deliberate way
   to un-assign it, and its quantity flows back into the job's remaining.
-- Deleting a job with live runs orphans them: they keep printing and complete
-  to the table as themselves. Nothing cascades.
+- Deleting a job (either view) takes its runs with it — a run whose parent
+  is gone would be invisible to both panels and could never auto-complete.
 
 ## Completed jobs panel (both views)
 

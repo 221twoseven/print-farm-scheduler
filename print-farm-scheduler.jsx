@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-08-19.1";
+const BUILD = "2026-09-10.1";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -1359,6 +1359,23 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
     });
   };
 
+  /* Deleting an in-progress job takes its runs off the printers too, so it
+     gets a confirmation like the other board-clearing actions. Operator
+     only — the card face is the only place operators can reach it. */
+  const askDeleteJob = (job, runCount) => {
+    setConfirm({
+      title: `Delete “${job.title}”?`,
+      confirmLabel: "Delete job",
+      body: (
+        <p className="text-sm" style={{ color: "#605E5C" }}>
+          This permanently deletes the job and its {runCount} run
+          {runCount !== 1 ? "s" : ""} on the printers.
+        </p>
+      ),
+      onConfirm: () => deleteTask(job.id),
+    });
+  };
+
   const askDeletePrinter = (printerId) => {
     const p = printers.find((x) => x.id === printerId);
     setConfirm({
@@ -1579,6 +1596,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
         draggingTaskId={draggingTaskId}
         onExpandTask={toggleExpand}
         onContextMenu={openTaskMenu}
+        onDeleteJob={askDeleteJob}
         {...dragProps}
       />
 
@@ -2636,6 +2654,7 @@ function InProgressPanel({
   draggingTaskId,
   onExpandTask,
   onContextMenu,
+  onDeleteJob,
   onDragStart,
   onDragEnd,
 }) {
@@ -2770,17 +2789,33 @@ function InProgressPanel({
                 </button>
 
                 {/* the job's runs, one line each */}
-                <button
-                  onClick={() =>
-                    setOpenJobs((s) => ({ ...s, [job.id]: !s[job.id] }))
-                  }
-                  className="w-full flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-gray-50"
-                  style={{ color: "#8A8886" }}
-                  aria-expanded={open}
-                >
-                  {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  {subs.length} run{subs.length !== 1 ? "s" : ""}
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() =>
+                      setOpenJobs((s) => ({ ...s, [job.id]: !s[job.id] }))
+                    }
+                    className="flex-1 flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-gray-50"
+                    style={{ color: "#8A8886" }}
+                    aria-expanded={open}
+                  >
+                    {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    {subs.length} run{subs.length !== 1 ? "s" : ""}
+                  </button>
+                  {/* Operators get no menu on this card (it's the designer's
+                      job data) and the card face is a disabled button for
+                      them, so the one board action they need — clearing a
+                      job and its runs — sits here, outside that button. */}
+                  {operator && (
+                    <button
+                      onClick={() => onDeleteJob(job, subs.length)}
+                      className="p-1 mr-1.5 rounded hover:bg-red-50 flex-shrink-0"
+                      title="Delete job and its runs"
+                      aria-label="Delete job"
+                    >
+                      <Trash2 size={12} style={{ color: "#D13438" }} />
+                    </button>
+                  )}
+                </div>
                 {open && (
                   <div
                     className="px-2.5 pb-2 space-y-1"
