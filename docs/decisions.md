@@ -211,9 +211,9 @@ can edit them freely. Task `Status`, `Priority`, `SliceStatus` and printer
 *(2026-08-17, item 12.)* Push notifications looked blocked by the no-server
 decision: Teams activity feed notifications were assumed to need app-only
 credentials, meaning a secret, meaning a server. They don't, because of a fact
-about this app: **both notification triggers are user actions inside the app**
-— a job starting to print (an operator drag) and a job being added to staging
-(a designer submit). Whoever triggers the moment has an open, signed-in
+about this app: **every notification trigger is a user action inside the app**
+— a job starting to print (an operator drag) or its last run being marked
+Complete. Whoever triggers the moment has an open, signed-in
 session, so Graph `sendActivityNotification` can fire from there with the
 delegated `TeamsActivity.Send` scope. No background layer, no secret, no
 server; the settled no-server decision holds unchanged.

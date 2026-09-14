@@ -249,10 +249,10 @@ back to the acting user — plus everyone in its Notify list. The actor is
 out the actor made every one-person action a silent no-op. On a job
 **completing** (its runs fully assigned and all Complete — the auto-complete
 stamp), the same audience as first-run: creator plus Notify list. A staging
-row completed by hand never had runs, so it never pings. On a **new staging
-job**, the ids in `OPERATOR_NOTIFY_IDS`
-(a code constant, empty until the shop hires a dedicated operator). Sends
-fire from the acting user's session, best effort: a failure is logged to the
+row completed by hand never had runs, so it never pings. Nothing pings on a
+**new staging job**: the shop has no dedicated operator, so the `jobQueued`
+activity type stays declared in the manifest but unused — add a send in
+`addTask` if one is hired. Sends fire from the acting user's session, best effort: a failure is logged to the
 console and never blocks the board.
 
 ## Changing the SharePoint schema

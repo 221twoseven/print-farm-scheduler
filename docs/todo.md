@@ -66,7 +66,8 @@ the recovery lessons from the republish are recorded in
 Remaining: rollout latency (Teams clients pick up the new manifest on their
 own schedule, up to a day) and a live end-to-end ping has not yet been
 observed — first assignment after rollout should ping the job's creator.
-`OPERATOR_NOTIFY_IDS` stays empty until the shop hires an operator.
+The `jobQueued` send was removed 2026-09-14 (it guarded on an operator list
+nobody ever filled); the manifest type stays declared for when one is hired.
 
 ### 4. Item 11 — live auto-refresh — SHIPPED 2026-08-18, needs the manual pass
 
