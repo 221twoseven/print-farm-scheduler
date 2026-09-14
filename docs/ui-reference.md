@@ -266,6 +266,10 @@ anyone else's board.
   stays when any of its runs matches (a job carries no printer of its own,
   so the printer filter would otherwise never show finished jobs), and an
   expanded job shows all its runs, not just the matches.
+  A job's Printer cell is derived from its runs: the printer's name when
+  every run was on the same one, otherwise "N printers" — expand the row to
+  see which. "—" only appears for a row whose printer is unrecognisable
+  (deleted printer, or a legacy task back in staging).
 - **Sort: most recently completed first.** A job with no completion stamp (or
   an unparseable one) sorts last regardless — same "missing sorts last"
   principle staging's need-by/created-at tiebreakers use, just applied to a
