@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-09-14.1";
+const BUILD = "2026-09-14.2";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -3001,12 +3001,22 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
 
   /* One renderer for both row kinds. A primary row with runs toggles them on
      click; a child row indents its printer cell to sit under the chevron.
-     Rows without runs get a chevron-width spacer so the columns line up. */
-  const renderRow = (task, { child, runCount, open } = {}) => {
+     Rows without runs get a chevron-width spacer so the columns line up.
+     A job carries no printer of its own, so its cell is derived from its
+     runs — otherwise a one-run job showed "—" while a legacy single task
+     next to it showed its printer, and the difference read as a bug. */
+  const renderRow = (task, { child, runs = [], open } = {}) => {
     const needBy = formatEta(task.needByDate, "");
     const completed = formatTimestamp(task.completedAt);
     const operatorNote = (task.operatorNotes || "").trim();
+    const runCount = runs.length;
     const expandable = !child && runCount > 0;
+    const runPrinters = [...new Set(runs.map((r) => printerName[r.printerId] || "—"))];
+    const printerLabel = !runCount
+      ? printerName[task.printerId] || "—"
+      : runPrinters.length === 1
+      ? runPrinters[0]
+      : `${runPrinters.length} printers`;
     return (
       <tr
         key={task.id}
@@ -3044,7 +3054,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
               ) : (
                 <span className="flex-shrink-0" style={{ width: 12 }} />
               ))}
-            {printerName[task.printerId] || "—"}
+            {printerLabel}
           </span>
         </td>
         <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
@@ -3248,7 +3258,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
                   const open = !!expanded[job.id];
                   return (
                     <React.Fragment key={job.id}>
-                      {renderRow(job, { runCount: runs.length, open })}
+                      {renderRow(job, { runs, open })}
                       {open && runs.map((r) => renderRow(r, { child: true }))}
                     </React.Fragment>
                   );
