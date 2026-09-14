@@ -11,6 +11,16 @@
 
 <!-- Tailwind, compiled in the browser. No build step. -->
 <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script>
+  /* The Fluent greys the board uses everywhere. text-ink / text-muted /
+     text-faint / border-line replace the inline hex that used to repeat on
+     every element; anything not in this list is still an inline style. */
+  tailwind.config = {
+    theme: { extend: { colors: {
+      ink: "#242424", muted: "#605E5C", faint: "#8A8886", line: "#C8C6C4",
+    } } },
+  };
+</script>
 
 <!-- Where bare imports like "react" resolve to. -->
 <script type="importmap">

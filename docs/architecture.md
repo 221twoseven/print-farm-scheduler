@@ -17,7 +17,7 @@ comments `/* ---- name ---- */` are the reliable landmarks):
 | Constants | 46–303 | `GROUP_COLORS`, `PRINTER_FIELDS`, `DEFAULT_CHOICES`, `TASK_TAGS`, `PRINTER_STATUSES`, `PRINTER_STATUS`, `STATUSES`, `canStartWork()`, `PRIORITIES`, `STAGING`, layout dimensions, `DEFAULT_APP_SETTINGS`, `uid()` |
 | Order helpers | 304–362 | `bySortOrder`, `hydrate()`, `reindex()` |
 | Seed demo data | 363–519 | `seedGroups`, `seedPrinters`, `buildSeedTasks()`, `seedTasks` — unreachable when SharePoint is configured |
-| Helpers | 520–576 | `formatEta()`, `useBackdropClose()`, `isOverdue()`, `nowIso()`, `formatTimestamp()` |
+| Helpers | 520–620 | `fmtDate()`, `formatEta()`, `useBackdropClose()`, `useDismiss()` (menus close on click/Escape/scroll/resize), `readStored()`/`useStored()` (per-browser localStorage prefs), `isOverdue()`, `nowIso()`, `formatTimestamp()` |
 | `PrintFarmScheduler` | 577–1858 | The board: all state, every mutation handler, the header, shop settings modal, in-progress bar, group grid, `CompletedJobsPanel` mount |
 | `ConfirmDialog` | 1859–1906 | Destructive-action confirmation |
 | `ContextMenu` | 1907–2165 | Right-click menu for tasks and printers |

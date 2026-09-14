@@ -248,11 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-09-14.2";
-/* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
-   runtime, so this is hand-maintained: bump it in the same change that
-   republishes the package from the Developer Portal, and nowhere else. */
-const APP_VERSION = "1.0.3";
+const BUILD = "2026-09-14.3";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -537,14 +533,16 @@ const seedTasks = reindex(buildSeedTasks(), (t) => t.printerId);
 
 /* ----------------------------- helpers -------------------------------- */
 
+/* "YYYY-MM-DD" → "MM/DD/YYYY"; empty stays empty */
+const fmtDate = (ymd) => {
+  if (!ymd) return "";
+  const [y, m, d] = ymd.split("-");
+  return `${m}/${d}/${y}`;
+};
+
 function formatEta(etaDate, etaTime) {
   if (!etaDate && !etaTime) return null;
-  let datePart = "";
-  if (etaDate) {
-    const [y, m, d] = etaDate.split("-");
-    datePart = `${m}/${d}/${y}`;
-  }
-  return { date: datePart, time: etaTime || "" };
+  return { date: fmtDate(etaDate), time: etaTime || "" };
 }
 
 /* Dismiss-on-backdrop handlers for a modal.
@@ -565,6 +563,53 @@ function useBackdropClose(onClose) {
       pressedBackdrop.current = false;
     },
   };
+}
+
+/* Dismiss wiring shared by the transient menus and the detail modal. Escape
+   always closes; with `outside` set, so does any click, scroll or resize — a
+   fixed-position menu that stays put while the page moves under it is wrong.
+   onClose rides a ref so the listeners register once per open, not on every
+   keystroke of whatever the menu's owner is editing. */
+function useDismiss(active, onClose, outside = true) {
+  const ref = useRef(onClose);
+  ref.current = onClose;
+  useEffect(() => {
+    if (!active) return;
+    const close = () => ref.current();
+    const onKey = (e) => e.key === "Escape" && close();
+    window.addEventListener("keydown", onKey);
+    if (outside) {
+      window.addEventListener("click", close);
+      window.addEventListener("scroll", close, true);
+      window.addEventListener("resize", close);
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [active, outside]);
+}
+
+/* Per-browser preferences (view toggle, folds). Storage can be blocked in
+   private mode: not remembering is survivable, failing to render is not, so
+   both directions swallow the error. */
+const readStored = (key, parse = (v) => v) => {
+  try {
+    return parse(localStorage.getItem(key));
+  } catch {
+    return parse(null);
+  }
+};
+function useStored(key, value) {
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* see above */
+    }
+  }, [key, value]);
 }
 
 /* Past-due test. A date with no time is due at end of that day, so a job
@@ -624,26 +669,15 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
      objects only at init, so the save layer's identity baseline is intact;
      a flagged group still costs nothing because toRow drops `collapsed`. */
   const [groups, setGroups] = useState(() => {
-    let folded;
-    try {
-      folded = new Set(JSON.parse(localStorage.getItem("pfs.collapsedGroups")) || []);
-    } catch {
-      folded = new Set();
-    }
+    const folded = readStored("pfs.collapsedGroups", (v) => new Set(JSON.parse(v) || []));
     return hydrate(initial?.groups ?? seedGroups).map((g) =>
       folded.has(g.id) ? { ...g, collapsed: true } : g
     );
   });
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "pfs.collapsedGroups",
-        JSON.stringify(groups.filter((g) => g.collapsed).map((g) => g.id))
-      );
-    } catch {
-      /* not remembering the fold is survivable */
-    }
-  }, [groups]);
+  useStored(
+    "pfs.collapsedGroups",
+    JSON.stringify(groups.filter((g) => g.collapsed).map((g) => g.id))
+  );
   const [printers, setPrinters] = useState(() => hydrate(initial?.printers ?? seedPrinters));
   const [tasks, setTasks] = useState(() => hydrate(initial?.tasks ?? seedTasks));
   const [appSettings, setAppSettings] = useState(initial?.appSettings ?? DEFAULT_APP_SETTINGS);
@@ -687,21 +721,11 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
 
      Remembered per browser, like group collapse and the history panel's
      fold. Still per-person, and still nothing SharePoint knows about. */
-  const [designerView, setDesignerView] = useState(() => {
-    try {
-      return localStorage.getItem("pfs.view") === "designer";
-    } catch {
-      return false; // private mode, blocked storage — default to operator
-    }
-  });
+  const [designerView, setDesignerView] = useState(
+    () => readStored("pfs.view") === "designer"
+  );
   const operator = !designerView;
-  useEffect(() => {
-    try {
-      localStorage.setItem("pfs.view", designerView ? "designer" : "operator");
-    } catch {
-      /* not remembering the choice is survivable; failing to render is not */
-    }
-  }, [designerView]);
+  useStored("pfs.view", designerView ? "designer" : "operator");
 
   /* ---- live refresh (item 11) ----
      AppShell polls SharePoint and hands the fresh lists here; the merge
@@ -743,20 +767,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
      and a hook cannot */
   const shopSettingsBackdrop = useBackdropClose(() => setShowShopSettings(false));
 
-  /* close context menu on any click / escape / scroll */
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    const onKey = (e) => e.key === "Escape" && close();
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [contextMenu]);
+  useDismiss(!!contextMenu, () => setContextMenu(null));
 
   /* global drag cleanup: dragend can be missed when the dragged card
      unmounts mid-drop, which left cards greyed out — always clear here */
@@ -1231,15 +1242,6 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       { id: uid(), printerId, status: "Not started", ...fields, createdAt: nowIso() },
     ]);
     setAddingTaskIn(null);
-    /* new job in staging → ping the operator role (item 12). Empty list
-       today, so this is a no-op until OPERATOR_NOTIFY_IDS is filled. */
-    if (printerId === STAGING && OPERATOR_NOTIFY_IDS.length)
-      sendActivityPings({
-        activityType: "jobQueued",
-        preview: `New job in staging: ${fields.title || "untitled"}`,
-        jobName: fields.title || "untitled",
-        userIds: OPERATOR_NOTIFY_IDS,
-      });
   };
 
   const toggleGroup = (id) =>
@@ -1340,14 +1342,14 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       confirmLabel: "Delete group",
       body: (
         <>
-          <p className="text-sm mb-1" style={{ color: "#605E5C" }}>
+          <p className="text-sm mb-1 text-muted">
             This permanently deletes the group and its{" "}
             <strong>
               {gp.length} printer{gp.length !== 1 ? "s" : ""}
             </strong>
             .
           </p>
-          <p className="text-sm" style={{ color: "#605E5C" }}>
+          <p className="text-sm text-muted">
             {evictionSummary(gp.map((p) => p.id), true)}
           </p>
         </>
@@ -1368,7 +1370,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       title: `Delete “${job.title}”?`,
       confirmLabel: "Delete job",
       body: (
-        <p className="text-sm" style={{ color: "#605E5C" }}>
+        <p className="text-sm text-muted">
           This permanently deletes the job
           {runCount > 0
             ? ` and its ${runCount} run${runCount !== 1 ? "s" : ""}`
@@ -1386,7 +1388,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
       title: `Delete “${p?.name}”?`,
       confirmLabel: "Delete printer",
       body: (
-        <p className="text-sm" style={{ color: "#605E5C" }}>
+        <p className="text-sm text-muted">
           This permanently deletes the printer.{" "}
           {evictionSummary([printerId], false)}
         </p>
@@ -1454,8 +1456,8 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           <div className="text-xs opacity-80 leading-tight">
             Team tab · {printers.length} printers ·{" "}
             {tasks.filter((t) => !t.parentId).length} jobs ·{" "}
-            <span title={`Teams app package version ${APP_VERSION}. Code version this tab is running follows — if it doesn't match the latest build, you're on a cached copy: hard-refresh, or fully quit and reopen Teams.`}>
-              v{APP_VERSION} · build {BUILD}
+            <span title="Code version this tab is running — if it doesn't match the latest build, you're on a cached copy: hard-refresh, or fully quit and reopen Teams.">
+              build {BUILD}
             </span>
           </div>
         </div>
@@ -1503,11 +1505,11 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           >
             <div className="flex items-center gap-2 mb-1">
               <Settings size={16} style={{ color: "#5B5FC7" }} />
-              <h2 className="text-base font-semibold" style={{ color: "#242424" }}>
+              <h2 className="text-base font-semibold text-ink">
                 Shop layout
               </h2>
             </div>
-            <p className="text-sm mb-4" style={{ color: "#605E5C" }}>
+            <p className="text-sm mb-4 text-muted">
               Match the board to how your printers are physically arranged. This is
               usually set once when you configure the shop.
             </p>
@@ -1521,7 +1523,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
               ].map(([key, label, max, hint]) => (
                 <div key={key}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium" style={{ color: "#242424" }}>
+                    <span className="text-sm font-medium text-ink">
                       {label}
                     </span>
                     <QuantityInput
@@ -1531,7 +1533,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                       onChange={(v) => setAppSettings((s) => ({ ...s, [key]: v }))}
                     />
                   </div>
-                  <p className="text-xs mt-1" style={{ color: "#8A8886" }}>
+                  <p className="text-xs mt-1 text-faint">
                     {hint}
                   </p>
                 </div>
@@ -1547,8 +1549,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                     groupsPerRow: DEFAULT_APP_SETTINGS.groupsPerRow,
                   }))
                 }
-                className="text-xs font-medium px-2 py-1.5 rounded hover:bg-gray-100"
-                style={{ color: "#605E5C" }}
+                className="text-xs font-medium px-2 py-1.5 rounded hover:bg-gray-100 text-muted"
               >
                 Reset to default
               </button>
@@ -1615,10 +1616,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           style={{ background: "white", border: "1px solid #E1DFDD" }}
         >
           <span
-            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "#605E5C" }}
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"
           >
-            <Search size={14} style={{ color: "#605E5C" }} />
+            <Search size={14} className="text-muted" />
             Jobcode
           </span>
           <select
@@ -1637,7 +1637,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
           </select>
           {jobcodeFilter && (
             <>
-              <span className="text-xs" style={{ color: "#605E5C" }}>
+              <span className="text-xs text-muted">
                 {jobcodeMatches.size} printer{jobcodeMatches.size !== 1 && "s"}
               </span>
               <button
@@ -1686,9 +1686,9 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                   onClick={() => !isEditing && toggleGroup(group.id)}
                 >
                   {group.collapsed ? (
-                    <ChevronRight size={16} style={{ color: "#605E5C" }} />
+                    <ChevronRight size={16} className="text-muted" />
                   ) : (
-                    <ChevronDown size={16} style={{ color: "#605E5C" }} />
+                    <ChevronDown size={16} className="text-muted" />
                   )}
                   {isEditing ? (
                     <input
@@ -1700,12 +1700,12 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                         if (e.key === "Enter") e.target.blur();
                         if (e.key === "Escape") setEditingGroupId(null);
                       }}
-                      className="text-sm font-semibold px-2 py-0.5 rounded border outline-none"
-                      style={{ borderColor: ACCENT, color: "#242424" }}
+                      className="text-sm font-semibold px-2 py-0.5 rounded border outline-none text-ink"
+                      style={{ borderColor: ACCENT }}
                       aria-label="Group name"
                     />
                   ) : (
-                    <span className="font-semibold text-sm" style={{ color: "#242424" }}>
+                    <span className="font-semibold text-sm text-ink">
                       {group.name}
                     </span>
                   )}
@@ -1719,7 +1719,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                       title="Rename group"
                       aria-label={`Rename group ${group.name}`}
                     >
-                      <Pencil size={12} style={{ color: "#8A8886" }} />
+                      <Pencil size={12} className="text-faint" />
                     </button>
                   )}
                   {removeGroupMode && !isEditing && (
@@ -1735,7 +1735,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                       <Trash2 size={12} /> Delete
                     </button>
                   )}
-                  <span className="text-xs" style={{ color: "#8A8886" }}>
+                  <span className="text-xs text-faint">
                     {groupPrinters.length} printer{groupPrinters.length !== 1 && "s"}
                   </span>
                   {group.collapsed && (
@@ -1805,8 +1805,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
                     {operator && editPrintersMode && (
                     <button
                       onClick={() => addPrinter(group.id)}
-                      className="w-full mt-2 rounded-lg border-2 border-dashed flex items-center justify-center gap-1.5 py-3 text-xs font-medium hover:bg-white"
-                      style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
+                      className="w-full mt-2 rounded-lg border-2 border-dashed flex items-center justify-center gap-1.5 py-3 text-xs font-medium hover:bg-white text-muted border-line"
                       title={`Add printer to ${group.name}`}
                       aria-label={`Add printer to ${group.name}`}
                     >
@@ -1835,8 +1834,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
               onChange={(e) => setNewGroupName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addGroup()}
               placeholder="Group name"
-              className="flex-1 text-sm px-3 py-1.5 rounded border outline-none focus:ring-2"
-              style={{ borderColor: "#C8C6C4" }}
+              className="flex-1 text-sm px-3 py-1.5 rounded border outline-none focus:ring-2 border-line"
             />
             <button
               onClick={addGroup}
@@ -1850,7 +1848,7 @@ export default function PrintFarmScheduler({ initial = null, onPersist = null, l
               className="p-1.5 rounded hover:bg-gray-100"
               aria-label="Cancel"
             >
-              <X size={16} style={{ color: "#605E5C" }} />
+              <X size={16} className="text-muted" />
             </button>
           </div>
         ) : (
@@ -1982,7 +1980,7 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }) {
           >
             <Trash2 size={16} style={{ color: "#D13438" }} />
           </span>
-          <h2 className="text-base font-semibold" style={{ color: "#242424" }}>
+          <h2 className="text-base font-semibold text-ink">
             {title}
           </h2>
         </div>
@@ -1990,8 +1988,7 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }) {
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="text-sm font-medium px-3 py-1.5 rounded border hover:bg-gray-50"
-            style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
+            className="text-sm font-medium px-3 py-1.5 rounded border hover:bg-gray-50 text-muted border-line"
           >
             Cancel
           </button>
@@ -2072,8 +2069,7 @@ function ContextMenu({
 
   const Header = ({ children }) => (
     <div
-      className="px-3 pt-1.5 pb-0.5 text-xs font-semibold uppercase tracking-wide"
-      style={{ color: "#8A8886" }}
+      className="px-3 pt-1.5 pb-0.5 text-xs font-semibold uppercase tracking-wide text-faint"
     >
       {children}
     </div>
@@ -2131,7 +2127,7 @@ function ContextMenu({
                 Greyed once Complete — there is nothing left to complete, and
                 plain Duplicate below covers the copy. */}
             <Item
-              icon={<Copy size={14} style={{ color: "#605E5C" }} />}
+              icon={<Copy size={14} className="text-muted" />}
               disabled={task.status === "Complete"}
               title={
                 task.status === "Complete"
@@ -2168,7 +2164,7 @@ function ContextMenu({
             item would be a click that does nothing */}
         {task.printerId !== STAGING && !task.parentId && (
           <Item
-            icon={<Inbox size={14} style={{ color: "#605E5C" }} />}
+            icon={<Inbox size={14} className="text-muted" />}
             label={stagingName || "Staging area"}
             onClick={() => onMoveTask(task.id, STAGING)}
           />
@@ -2181,7 +2177,7 @@ function ContextMenu({
               label={
                 <span className="flex-1">
                   {p.name}
-                  <span className="text-xs ml-1" style={{ color: "#8A8886" }}>
+                  <span className="text-xs ml-1 text-faint">
                     · {g?.name}
                   </span>
                 </span>
@@ -2191,7 +2187,7 @@ function ContextMenu({
           );
         })}
             {destinations.length === 0 && task.printerId === STAGING && (
-              <div className="px-3 py-1 text-xs italic" style={{ color: "#8A8886" }}>
+              <div className="px-3 py-1 text-xs italic text-faint">
                 No printers are Ready
               </div>
             )}
@@ -2199,12 +2195,12 @@ function ContextMenu({
         )}
         <Divider />
         <Item
-          icon={<Pencil size={14} style={{ color: "#605E5C" }} />}
+          icon={<Pencil size={14} className="text-muted" />}
           label="Edit details"
           onClick={() => onExpandTask(task.id)}
         />
         <Item
-          icon={<Copy size={14} style={{ color: "#605E5C" }} />}
+          icon={<Copy size={14} className="text-muted" />}
           label={`Duplicate ${noun}`}
           onClick={() => onCopyTask(task.id)}
         />
@@ -2228,7 +2224,7 @@ function ContextMenu({
       <>
         <Header>{task.title}</Header>
         <Item
-          icon={<Copy size={14} style={{ color: "#605E5C" }} />}
+          icon={<Copy size={14} className="text-muted" />}
           label="Reprint job"
           title="Queue a fresh copy of this job in the staging area"
           onClick={() => onReprintTask(task.id)}
@@ -2255,7 +2251,7 @@ function ContextMenu({
                     <Check size={13} style={{ color: "#5B5FC7" }} />
                   )}
                 </span>
-                <span className="block text-xs" style={{ color: "#8A8886" }}>
+                <span className="block text-xs text-faint">
                   {PRINTER_STATUS[s].blurb}
                 </span>
               </span>
@@ -2447,9 +2443,9 @@ function StagingArea({
           aria-label={collapsed ? "Expand staging" : "Collapse staging"}
         >
           {collapsed ? (
-            <ChevronRight size={15} style={{ color: "#605E5C" }} />
+            <ChevronRight size={15} className="text-muted" />
           ) : (
-            <ChevronDown size={15} style={{ color: "#605E5C" }} />
+            <ChevronDown size={15} className="text-muted" />
           )}
         </button>
         <Inbox size={16} style={{ color: "#5B5FC7" }} />
@@ -2465,13 +2461,13 @@ function StagingArea({
               if (e.key === "Enter") e.target.blur();
               if (e.key === "Escape") setEditingName(false);
             }}
-            className="text-sm font-semibold px-2 py-0.5 rounded border outline-none"
-            style={{ borderColor: "#5B5FC7", color: "#242424" }}
+            className="text-sm font-semibold px-2 py-0.5 rounded border outline-none text-ink"
+            style={{ borderColor: ACCENT }}
             aria-label="Staging area name"
           />
         ) : (
           <>
-            <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+            <span className="text-sm font-semibold text-ink">
               {name}
             </span>
             {/* Operator only. The staging name is shared shop configuration —
@@ -2485,7 +2481,7 @@ function StagingArea({
                 title="Rename staging area"
                 aria-label="Rename staging area"
               >
-                <Pencil size={12} style={{ color: "#8A8886" }} />
+                <Pencil size={12} className="text-faint" />
               </button>
             )}
           </>
@@ -2503,7 +2499,8 @@ function StagingArea({
             <div className="relative">
               <Search
                 size={12}
-                style={{ color: "#8A8886", position: "absolute", left: 7, top: 8 }}
+                className="text-faint"
+                style={{ position: "absolute", left: 7, top: 8 }}
               />
               <input
                 value={query}
@@ -2512,8 +2509,8 @@ function StagingArea({
                   setLimit(STAGING_PAGE);
                 }}
                 placeholder="Search parts…"
-                className="text-xs rounded border outline-none focus:ring-1"
-                style={{ borderColor: "#C8C6C4", height: 26, paddingLeft: 22, paddingRight: 8, width: 150 }}
+                className="text-xs rounded border outline-none focus:ring-1 border-line"
+                style={{ height: 26, paddingLeft: 22, paddingRight: 8, width: 150 }}
                 aria-label="Search staging"
               />
             </div>
@@ -2523,8 +2520,8 @@ function StagingArea({
                 setPriorityFilter(e.target.value);
                 setLimit(STAGING_PAGE);
               }}
-              className="text-xs rounded border bg-white outline-none"
-              style={{ borderColor: "#C8C6C4", height: 26 }}
+              className="text-xs rounded border bg-white outline-none border-line"
+              style={{ height: 26 }}
               aria-label="Filter by priority"
             >
               <option>All</option>
@@ -2564,8 +2561,7 @@ function StagingArea({
 
           {sorted.length === 0 ? (
             <div
-              className="text-xs italic py-6 text-center"
-              style={{ color: "#8A8886" }}
+              className="text-xs italic py-6 text-center text-faint"
             >
               {query || priorityFilter !== "All"
                 ? "No parts match your search."
@@ -2625,8 +2621,8 @@ function StagingArea({
               {hidden > 0 && (
                 <button
                   onClick={loadMore}
-                  className="flex items-center justify-center gap-1.5 text-xs py-2 rounded hover:bg-gray-50"
-                  style={{ gridColumn: "1 / -1", color: "#8A8886" }}
+                  className="flex items-center justify-center gap-1.5 text-xs py-2 rounded hover:bg-gray-50 text-faint"
+                  style={{ gridColumn: "1 / -1" }}
                   title="Loads automatically as you scroll — click to load now"
                 >
                   <ChevronDown size={12} />
@@ -2677,7 +2673,7 @@ function InProgressPanel({
     >
       <div className="px-4 py-2 flex items-center gap-2">
         <Activity size={16} style={{ color: ACCENT }} />
-        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+        <span className="text-sm font-semibold text-ink">
           In progress
         </span>
         <span
@@ -2692,7 +2688,7 @@ function InProgressPanel({
         {jobs.length === 0 ? (
           /* the block used to hide when empty, which read as the feature
              being missing — it stays put now, stating its own empty case */
-          <div className="text-xs italic" style={{ color: "#8A8886" }}>
+          <div className="text-xs italic text-faint">
             Nothing in progress — assign a staging job to a printer.
           </div>
         ) : (
@@ -2708,7 +2704,7 @@ function InProgressPanel({
               0
             );
             const remaining = Math.max(total - assigned, 0);
-            const needBy = formatEta(job.needByDate, "");
+            const needBy = fmtDate(job.needByDate);
             const open = !!openJobs[job.id];
             return (
               <div
@@ -2746,9 +2742,8 @@ function InProgressPanel({
                       reason to exist — what is left to put on a printer. */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span
-                      className="flex-1 min-w-0 text-sm leading-snug truncate"
+                      className="flex-1 min-w-0 text-sm leading-snug truncate text-ink"
                       title={job.title}
-                      style={{ color: "#242424" }}
                     >
                       {job.title}
                     </span>
@@ -2777,8 +2772,8 @@ function InProgressPanel({
                   {/* Row 2: jobcode, indented — same reading as TaskCard's */}
                   {job.jobcode && (
                     <div
-                      className="mt-0.5 tabular-nums truncate"
-                      style={{ paddingLeft: 12, color: "#605E5C", fontSize: 10 }}
+                      className="mt-0.5 tabular-nums truncate text-muted"
+                      style={{ paddingLeft: 12, fontSize: 10 }}
                       title={`Jobcode: ${job.jobcode}`}
                     >
                       {job.jobcode}
@@ -2788,8 +2783,8 @@ function InProgressPanel({
                   {/* Row 3: need-by. Back on this card type deliberately —
                       the deadline is what drives assigning the rest. */}
                   {needBy && (
-                    <div className="mt-1" style={{ fontSize: 10, color: "#605E5C" }}>
-                      Need by {needBy.date}
+                    <div className="mt-1 text-muted" style={{ fontSize: 10 }}>
+                      Need by {needBy}
                     </div>
                   )}
                 </button>
@@ -2800,8 +2795,7 @@ function InProgressPanel({
                     onClick={() =>
                       setOpenJobs((s) => ({ ...s, [job.id]: !s[job.id] }))
                     }
-                    className="flex-1 flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-gray-50"
-                    style={{ color: "#8A8886" }}
+                    className="flex-1 flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-gray-50 text-faint"
                     aria-expanded={open}
                   >
                     {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -2836,15 +2830,14 @@ function InProgressPanel({
                           style={{ fontSize: 11 }}
                         >
                           <span
-                            className="flex-1 min-w-0 truncate"
-                            style={{ color: "#605E5C" }}
+                            className="flex-1 min-w-0 truncate text-muted"
                             title={`${s.title} on ${printerName[s.printerId] || "—"}`}
                           >
                             {s.title} · {printerName[s.printerId] || "—"}
                           </span>
                           <span
-                            className="tabular-nums flex-shrink-0"
-                            style={{ color: "#8A8886", fontSize: 10 }}
+                            className="tabular-nums flex-shrink-0 text-faint"
+                            style={{ fontSize: 10 }}
                           >
                             Qty {Number(s.quantity) || 1}
                           </span>
@@ -2888,20 +2881,10 @@ const completedAtKey = (t) => {
 
 function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDeleteJob }) {
   /* fold state is per browser like the view toggle; collapsed by default */
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("pfs.historyCollapsed") !== "expanded";
-    } catch {
-      return true;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem("pfs.historyCollapsed", collapsed ? "collapsed" : "expanded");
-    } catch {
-      /* not remembering the fold is survivable */
-    }
-  }, [collapsed]);
+  const [collapsed, setCollapsed] = useState(
+    () => readStored("pfs.historyCollapsed") !== "expanded"
+  );
+  useStored("pfs.historyCollapsed", collapsed ? "collapsed" : "expanded");
   const [expanded, setExpanded] = useState({}); // jobId → its runs shown
   const [jobcodeFilter, setJobcodeFilter] = useState(""); // "" = show everything
   const [printerFilter, setPrinterFilter] = useState(""); // "" = every printer
@@ -3006,7 +2989,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
      runs — otherwise a one-run job showed "—" while a legacy single task
      next to it showed its printer, and the difference read as a bug. */
   const renderRow = (task, { child, runs = [], open } = {}) => {
-    const needBy = formatEta(task.needByDate, "");
+    const needBy = fmtDate(task.needByDate);
     const completed = formatTimestamp(task.completedAt);
     const operatorNote = (task.operatorNotes || "").trim();
     const runCount = runs.length;
@@ -3040,8 +3023,8 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
         }}
       >
         <td
-          className="px-3 py-1.5"
-          style={{ color: "#605E5C", paddingLeft: child ? 28 : undefined }}
+          className="px-3 py-1.5 text-muted"
+          style={{ paddingLeft: child ? 28 : undefined }}
         >
           <span className="inline-flex items-center gap-1">
             {!child &&
@@ -3057,16 +3040,16 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
             {printerLabel}
           </span>
         </td>
-        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+        <td className="px-3 py-1.5 tabular-nums text-muted">
           {task.jobcode || ""}
         </td>
         <td
-          className="px-3 py-1.5"
-          style={{ color: "#242424", textDecoration: "line-through" }}
+          className="px-3 py-1.5 text-ink"
+          style={{ textDecoration: "line-through" }}
         >
           {task.title}
         </td>
-        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+        <td className="px-3 py-1.5 tabular-nums text-muted">
           {task.quantity || 1}
         </td>
         <td className="px-3 py-1.5">
@@ -3074,16 +3057,16 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
             {task.priority || "Normal"}
           </span>
         </td>
-        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
-          {needBy ? needBy.date : ""}
+        <td className="px-3 py-1.5 tabular-nums text-muted">
+          {needBy}
         </td>
-        <td className="px-3 py-1.5 tabular-nums" style={{ color: "#605E5C" }}>
+        <td className="px-3 py-1.5 tabular-nums text-muted">
           {completed || ""}
         </td>
         <td className="px-3 py-1.5">
           {operatorNote && (
             <span title={`Operator notes: ${operatorNote}`}>
-              <StickyNote size={11} style={{ color: "#8A8886" }} />
+              <StickyNote size={11} className="text-faint" />
             </span>
           )}
         </td>
@@ -3127,12 +3110,12 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
         aria-label={collapsed ? "Expand completed jobs" : "Collapse completed jobs"}
       >
         {collapsed ? (
-          <ChevronRight size={15} style={{ color: "#605E5C" }} />
+          <ChevronRight size={15} className="text-muted" />
         ) : (
-          <ChevronDown size={15} style={{ color: "#605E5C" }} />
+          <ChevronDown size={15} className="text-muted" />
         )}
         <CheckCircle2 size={15} style={{ color: "#498205" }} />
-        <span className="text-sm font-semibold" style={{ color: "#242424" }}>
+        <span className="text-sm font-semibold text-ink">
           Completed jobs
         </span>
         <span
@@ -3154,10 +3137,9 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
           style={{ background: "#FAFAF9", borderTop: "1px solid #EDEBE9" }}
         >
           <span
-            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "#605E5C" }}
+            className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted"
           >
-            <Search size={14} style={{ color: "#605E5C" }} />
+            <Search size={14} className="text-muted" />
             Filter
           </span>
           {jobcodes.length > 0 && (
@@ -3194,7 +3176,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
           )}
           {(jobcodeFilter || printerFilter) && (
             <>
-              <span className="text-xs" style={{ color: "#605E5C" }}>
+              <span className="text-xs text-muted">
                 {filtered.length} job{filtered.length !== 1 && "s"}
               </span>
               <button
@@ -3221,8 +3203,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
         >
           {filtered.length === 0 ? (
             <div
-              className="text-xs italic py-6 text-center"
-              style={{ color: "#8A8886" }}
+              className="text-xs italic py-6 text-center text-faint"
             >
               {jobcodeFilter || printerFilter
                 ? "No completed jobs match the filter."
@@ -3232,11 +3213,11 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
             <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr
+                  className="text-muted"
                   style={{
                     position: "sticky",
                     top: 0,
                     background: "#FAFAF9",
-                    color: "#605E5C",
                   }}
                 >
                   {["Printer", "Jobcode", "Job", "Qty", "Priority", "Need by", "Completed", "Notes", ""].map(
@@ -3269,8 +3250,7 @@ function CompletedJobsPanel({ tasks, printers, operator, onContextMenu, onDelete
           {hidden > 0 && (
             <button
               onClick={loadMore}
-              className="w-full flex items-center justify-center gap-1.5 text-xs py-2 hover:bg-gray-50"
-              style={{ color: "#8A8886" }}
+              className="w-full flex items-center justify-center gap-1.5 text-xs py-2 hover:bg-gray-50 text-faint"
               title="Loads automatically as you scroll — click to load now"
             >
               <ChevronDown size={12} />
@@ -3294,34 +3274,31 @@ function StatusPicker({ status, onSelect, readOnly }) {
   const state = PRINTER_STATUS[status] || PRINTER_STATUS.Ready;
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
+  const menuRef = useRef(null);
   const MENU_W = 232;
 
-  useEffect(() => {
-    if (!pos) return;
-    const close = () => setPos(null);
-    const onKey = (e) => e.key === "Escape" && close();
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [pos]);
+  useDismiss(!!pos, () => setPos(null));
 
   const open = (e) => {
     e.stopPropagation();
     const r = btnRef.current.getBoundingClientRect();
     setPos({
-      /* 176 ≈ rendered menu height for the current 3 statuses — recompute if
-         PRINTER_STATUSES grows or the menu silently clips off-screen */
-      top: Math.min(r.bottom + 4, window.innerHeight - 176),
+      top: r.bottom + 4,
       left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
     });
   };
+  /* Clamp to the viewport from the menu's rendered height, after it exists —
+     the same measure-then-move ContextMenu does, so adding a status never
+     needs a magic number recomputed. */
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!pos || !el) return;
+    const maxTop = window.innerHeight - el.getBoundingClientRect().height - 8;
+    /* floor first so a viewport shorter than the menu settles at 8 instead of
+       re-clamping forever */
+    const top = Math.max(8, Math.min(pos.top, maxTop));
+    if (top !== pos.top) setPos({ ...pos, top });
+  }, [pos]);
 
   return (
     <>
@@ -3347,6 +3324,7 @@ function StatusPicker({ status, onSelect, readOnly }) {
 
       {pos && (
         <div
+          ref={menuRef}
           role="menu"
           className="fixed z-50 py-1.5 rounded-lg shadow-xl"
           style={{
@@ -3375,15 +3353,14 @@ function StatusPicker({ status, onSelect, readOnly }) {
               />
               <span className="flex-1 min-w-0">
                 <span
-                  className="flex items-center justify-between text-sm"
-                  style={{ color: "#242424" }}
+                  className="flex items-center justify-between text-sm text-ink"
                 >
                   {s}
                   {status === s && (
                     <Check size={13} style={{ color: "#5B5FC7" }} />
                   )}
                 </span>
-                <span className="block text-xs" style={{ color: "#8A8886" }}>
+                <span className="block text-xs text-faint">
                   {PRINTER_STATUS[s].blurb}
                 </span>
               </span>
@@ -3529,8 +3506,8 @@ function PrinterColumn({
             <button
               onClick={() => operator && !inactive && setEditingName(true)}
               disabled={!operator}
-              className="flex-1 min-w-0 text-left text-sm font-semibold truncate"
-              style={{ color: "#242424", cursor: operator ? undefined : "default" }}
+              className="flex-1 min-w-0 text-left text-sm font-semibold truncate text-ink"
+              style={{ cursor: operator ? undefined : "default" }}
               title={
                 operator ? "Rename printer (or right-click for more)" : printer.name
               }
@@ -3590,12 +3567,12 @@ function PrinterColumn({
                 centred against a three-line block reads as unaligned. The 2px
                 nudge puts it on the first line's baseline. */}
             {specsOpen ? (
-              <ChevronDown size={11} style={{ color: "#8A8886", marginTop: 2 }} className="flex-shrink-0" />
+              <ChevronDown size={11} style={{ marginTop: 2 }} className="flex-shrink-0 text-faint" />
             ) : (
-              <ChevronRight size={11} style={{ color: "#8A8886", marginTop: 2 }} className="flex-shrink-0" />
+              <ChevronRight size={11} style={{ marginTop: 2 }} className="flex-shrink-0 text-faint" />
             )}
             {exceptions.length === 0 ? (
-              <span className="text-xs italic truncate" style={{ color: "#8A8886" }}>
+              <span className="text-xs italic truncate text-faint">
                 Standard setup
               </span>
             ) : (
@@ -3612,8 +3589,8 @@ function PrinterColumn({
                 {exceptions.map((e) => (
                   <span
                     key={e.key}
-                    className="text-xs italic truncate"
-                    style={{ color: "#8A8886", maxWidth: "100%" }}
+                    className="text-xs italic truncate text-faint"
+                    style={{ maxWidth: "100%" }}
                     title={`${e.label}: ${e.text}`}
                   >
                     {e.label}: {e.text}
@@ -3627,8 +3604,8 @@ function PrinterColumn({
               {PRINTER_FIELDS.map((field) => (
                 <div
                   key={field.key}
-                  className="italic truncate"
-                  style={{ color: "#8A8886", fontSize: 11, lineHeight: 1.5 }}
+                  className="italic truncate text-faint"
+                  style={{ fontSize: 11, lineHeight: 1.5 }}
                   title={`${field.label}: ${settings.fields[field.key]}`}
                 >
                   {field.label}: {settings.fields[field.key]}
@@ -3646,8 +3623,7 @@ function PrinterColumn({
             style={{ background: "#FAF9F8", border: "1px solid #EDEBE9" }}
           >
             <div
-              className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide"
-              style={{ color: "#605E5C" }}
+              className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted"
             >
               Printer settings
               <button
@@ -3663,7 +3639,7 @@ function PrinterColumn({
             {/* global printer tag fields */}
             {PRINTER_FIELDS.map((field) => (
               <label key={field.key} className="block">
-                <span className="text-xs" style={{ color: "#605E5C" }}>
+                <span className="text-xs text-muted">
                   {field.label}
                 </span>
                 <select
@@ -3671,8 +3647,7 @@ function PrinterColumn({
                   onChange={(e) =>
                     onUpdateField(printer.id, field.key, e.target.value)
                   }
-                  className="mt-1 w-full text-sm px-2 py-1.5 rounded border bg-white outline-none"
-                  style={{ borderColor: "#C8C6C4" }}
+                  className="mt-1 w-full text-sm px-2 py-1.5 rounded border bg-white outline-none border-line"
                 >
                   {optionsFor(choices[field.key], settings.fields[field.key]).map((c) => (
                     <option key={c} value={c}>
@@ -3694,8 +3669,7 @@ function PrinterColumn({
                         })
                       }
                       placeholder="Which material?"
-                      className="mt-1 w-full text-sm px-2 py-1.5 rounded border outline-none"
-                      style={{ borderColor: "#C8C6C4" }}
+                      className="mt-1 w-full text-sm px-2 py-1.5 rounded border outline-none border-line"
                       aria-label="Other print material"
                     />
                   )}
@@ -3704,7 +3678,7 @@ function PrinterColumn({
 
             {/* notes — 3 visible lines, scrolls beyond */}
             <label className="block">
-              <span className="text-xs" style={{ color: "#605E5C" }}>
+              <span className="text-xs text-muted">
                 Notes
               </span>
               <textarea
@@ -3714,9 +3688,8 @@ function PrinterColumn({
                   onUpdateSettings(printer.id, { notes: e.target.value })
                 }
                 placeholder="Printer notes…"
-                className="mt-1 w-full text-sm px-2 py-1.5 rounded border outline-none resize-none overflow-y-auto"
+                className="mt-1 w-full text-sm px-2 py-1.5 rounded border outline-none resize-none overflow-y-auto border-line"
                 style={{
-                  borderColor: "#C8C6C4",
                   maxHeight: "4.6em",
                   lineHeight: "1.35em",
                 }}
@@ -3922,10 +3895,9 @@ function TaskCard({
             asks for it on every card, where before it was assigned-only. */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span
-            className="flex-1 min-w-0 text-sm leading-snug truncate"
+            className="flex-1 min-w-0 text-sm leading-snug truncate text-ink"
             title={task.title}
             style={{
-              color: "#242424",
               textDecoration: task.status === "Complete" ? "line-through" : "none",
             }}
           >
@@ -3937,7 +3909,7 @@ function TaskCard({
               title={`Operator notes: ${operatorNote}`}
               aria-label={`Operator notes: ${operatorNote}`}
             >
-              <StickyNote size={11} style={{ color: "#8A8886" }} />
+              <StickyNote size={11} className="text-faint" />
             </span>
           )}
           {task.priority && task.priority !== "Normal" && (
@@ -3967,8 +3939,8 @@ function TaskCard({
             rule still exist and would otherwise leave a blank indented line. */}
         {task.jobcode && (
           <div
-            className="mt-0.5 tabular-nums truncate"
-            style={{ paddingLeft: 12, color: "#605E5C", fontSize: 10 }}
+            className="mt-0.5 tabular-nums truncate text-muted"
+            style={{ paddingLeft: 12, fontSize: 10 }}
             title={`Jobcode: ${task.jobcode}`}
           >
             {task.jobcode}
@@ -4002,8 +3974,7 @@ function TaskCard({
             )}
           </span>
           <span
-            className="tabular-nums flex-shrink-0"
-            style={{ color: "#605E5C" }}
+            className="tabular-nums flex-shrink-0 text-muted"
           >
             Qty {task.quantity || 1}
           </span>
@@ -4045,8 +4016,8 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
     draft[k] !== undefined ? draft[k] : task[k] ?? fallback;
   const edit = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
-  /* these are re-created each render, so they close over the current draft;
-     the Escape listener stays current through closeRef below */
+  /* re-created each render, so they close over the current draft; the
+     Escape listener in useDismiss reads them through a ref */
   const commit = (patch = {}) => {
     const pending = { ...draft, ...patch };
     if (Object.keys(pending).length) {
@@ -4064,17 +4035,10 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
 
   const backdrop = useBackdropClose(close);
 
-  /* Escape closes, committing any in-flight text edit first. closeRef keeps
-     the listener stable so it isn't torn down and rebuilt on every keystroke. */
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") closeRef.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  /* Escape closes, committing any in-flight text edit first. Escape only:
+     clicks are the backdrop's business, and scrolling the panel must not
+     close it. */
+  useDismiss(true, close, false);
 
   const needsSlicing =
     val("sliceStatus", "Not Sliced") === "Not Sliced" ||
@@ -4101,8 +4065,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
           style={{ borderColor: "#EDEBE9" }}
         >
           <h2
-            className="flex-1 min-w-0 text-base font-semibold truncate"
-            style={{ color: "#242424" }}
+            className="flex-1 min-w-0 text-base font-semibold truncate text-ink"
             title={val("title")}
           >
             {val("title") || `Untitled ${noun}`}
@@ -4125,7 +4088,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
             className="p-1 rounded hover:bg-gray-100 flex-shrink-0"
             aria-label="Close"
           >
-            <X size={18} style={{ color: "#605E5C" }} />
+            <X size={18} className="text-muted" />
           </button>
         </div>
 
@@ -4211,8 +4174,8 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
             val("notes") && (
               <Field label="Notes — from the requester">
                 <div
-                  className="whitespace-pre-wrap"
-                  style={{ color: "#8A8886", fontSize: 13, lineHeight: 1.45 }}
+                  className="whitespace-pre-wrap text-faint"
+                  style={{ fontSize: 13, lineHeight: 1.45 }}
                 >
                   {val("notes")}
                 </div>
@@ -4418,8 +4381,7 @@ function TaskDetailModal({ task, inStaging, printerStatus, choices, readOnly, on
           {readOnly ? (
             /* keeps Done pinned right under justify-between */
             <span
-              className="text-sm px-2 py-1.5"
-              style={{ color: "#8A8886" }}
+              className="text-sm px-2 py-1.5 text-faint"
             >
               Preview — assign to a printer to edit
             </span>
@@ -4459,8 +4421,8 @@ function Field({ label, children }) {
   return (
     <div>
       <span
-        className="block mb-0.5 font-semibold uppercase tracking-wide"
-        style={{ color: "#8A8886", fontSize: 9, letterSpacing: "0.04em" }}
+        className="block mb-0.5 font-semibold uppercase tracking-wide text-faint"
+        style={{ fontSize: 9, letterSpacing: "0.04em" }}
       >
         {label}
       </span>
@@ -4486,27 +4448,25 @@ function EtaQuickPick({ etaDate, etaTime, onPick, stack }) {
             key={label}
             type="button"
             onClick={() => onPick(quickEta(hours))}
-            className="flex-1 min-w-0 px-1 py-1.5 rounded border bg-white hover:bg-gray-50 text-center"
-            style={{ borderColor: "#C8C6C4" }}
+            className="flex-1 min-w-0 px-1 py-1.5 rounded border bg-white hover:bg-gray-50 text-center border-line"
           >
             <span className="block text-xs font-semibold" style={{ color: "#323130" }}>
               {label}
             </span>
-            <span className="block" style={{ fontSize: 9, color: "#8A8886" }}>
+            <span className="block text-faint" style={{ fontSize: 9 }}>
               {sub}
             </span>
           </button>
         ))}
       </div>
-      <div className="mt-1" style={{ fontSize: 11, color: "#605E5C" }}>
+      <div className="mt-1 text-muted" style={{ fontSize: 11 }}>
         {eta ? (
           <>
             {`${eta.date} ${eta.time}`.trim()}{" "}
             <button
               type="button"
               onClick={() => onPick({ etaDate: "", etaTime: "" })}
-              className="underline"
-              style={{ color: "#8A8886" }}
+              className="underline text-faint"
             >
               clear
             </button>
@@ -4545,8 +4505,8 @@ function QuantityInput({ value, min = 1, max = 9999, height = 30, onChange, onBl
         setDraft(null);
         onBlur?.();
       }}
-      className="rounded border bg-white text-sm text-center outline-none w-full min-w-0"
-      style={{ borderColor: "#C8C6C4", height, maxWidth: 96 }}
+      className="rounded border bg-white text-sm text-center outline-none w-full min-w-0 border-line"
+      style={{ height, maxWidth: 96 }}
       aria-label="Quantity"
     />
   );
@@ -4674,8 +4634,7 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full text-xs px-2 py-1.5 rounded border outline-none"
-        style={{ borderColor: "#C8C6C4" }}
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none border-line"
         aria-label={placeholder}
       />
     );
@@ -4703,14 +4662,14 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
   return (
     <div className="relative">
       <div
-        className="flex flex-wrap items-center gap-1 rounded border bg-white px-1.5 py-1"
-        style={{ borderColor: "#C8C6C4", minHeight: 34 }}
+        className="flex flex-wrap items-center gap-1 rounded border bg-white px-1.5 py-1 border-line"
+        style={{ minHeight: 34 }}
       >
         {pinnedName &&
           chip(`${pinnedName} · you`, null, "The job's creator is always notified")}
         {selected.map((p) => chip(p.name, () => remove(p.id)))}
         {people === null ? (
-          <span style={{ color: "#8A8886", fontSize: 11 }}>
+          <span className="text-faint" style={{ fontSize: 11 }}>
             Directory unavailable
           </span>
         ) : single && selected.length ? null : (
@@ -4745,16 +4704,16 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
                 : placeholder || "Add people…"
             }
             disabled={people === undefined}
-            className="flex-1 text-xs outline-none bg-transparent"
-            style={{ minWidth: 70, color: "#242424", padding: "2px" }}
+            className="flex-1 text-xs outline-none bg-transparent text-ink"
+            style={{ minWidth: 70, padding: "2px" }}
             aria-label={placeholder || "Search people to notify"}
           />
         )}
       </div>
       {open && (matches.length > 0 || q) && (
         <div
-          className="absolute left-0 right-0 z-10 rounded-b border bg-white shadow-lg overflow-y-auto"
-          style={{ borderColor: "#C8C6C4", maxHeight: 180 }}
+          className="absolute left-0 right-0 z-10 rounded-b border bg-white shadow-lg overflow-y-auto border-line"
+          style={{ maxHeight: 180 }}
           /* the list scrolls the whole directory now, so its scrollbar is a
              click target — preventDefault keeps that click from blurring the
              input and closing the list mid-scroll */
@@ -4769,8 +4728,7 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
                 e.preventDefault();
                 add(p);
               }}
-              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100"
-              style={{ color: "#242424" }}
+              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 text-ink"
             >
               {p.name}
             </button>
@@ -4783,8 +4741,7 @@ function PeoplePicker({ value, onChange, pinnedName, single, placeholder }) {
                 e.preventDefault();
                 add({ id: query.trim(), name: query.trim() });
               }}
-              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100"
-              style={{ color: "#242424" }}
+              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 text-ink"
             >
               Add “{query.trim()}”
             </button>
@@ -4855,8 +4812,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
         placeholder="Job name *"
-        className="w-full text-sm px-2 py-1.5 rounded border outline-none"
-        style={{ borderColor: "#C8C6C4" }}
+        className="w-full text-sm px-2 py-1.5 rounded border outline-none border-line"
         aria-label="Job name (required)"
       />
       <input
@@ -4864,8 +4820,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         onChange={(e) => setJobcode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
         placeholder="Jobcode *"
-        className="w-full text-xs px-2 py-1.5 rounded border outline-none"
-        style={{ borderColor: "#C8C6C4" }}
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none border-line"
         aria-label="Jobcode (required)"
       />
       <div className="flex gap-2">
@@ -4876,7 +4831,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           <PeoplePicker single value={giveTo} onChange={setGiveTo} placeholder="Give to *" />
         </div>
       </div>
-      <div className="text-xs" style={{ color: "#605E5C" }}>
+      <div className="text-xs text-muted">
         <span className="block">Notify when print starts</span>
         <div className="mt-0.5">
           <PeoplePicker
@@ -4891,22 +4846,20 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes — anything the operator should know"
-        className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
-        style={{ borderColor: "#C8C6C4" }}
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none border-line"
         aria-label="Notes"
       />
       <input
         value={filepath}
         onChange={(e) => setFilepath(e.target.value)}
         placeholder="Filepath, e.g. \\server\prints\part.3mf *"
-        className="w-full text-xs px-2 py-1.5 rounded border outline-none"
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none border-line"
         style={{
-          borderColor: "#C8C6C4",
           fontFamily: "Consolas, 'Courier New', monospace",
         }}
         aria-label="Filepath (required)"
       />
-      <div className="text-xs" style={{ color: "#605E5C" }}>
+      <div className="text-xs text-muted">
         <span className="block">Quantity</span>
         <div className="mt-0.5">
           <QuantityInput
@@ -4918,13 +4871,12 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           />
         </div>
       </div>
-      <label className="block text-xs" style={{ color: "#605E5C" }}>
+      <label className="block text-xs text-muted">
         Priority
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-          style={{ borderColor: "#C8C6C4" }}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none border-line"
         >
           {PRIORITIES.map((p) => (
             <option key={p}>{p}</option>
@@ -4935,19 +4887,18 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           was survivable with one and is not with two. Need by is a deadline
           and applies from the moment the job exists; ETA is a prediction and
           only means anything once the job has a printer. */}
-      <label className="block text-xs" style={{ color: "#605E5C" }}>
+      <label className="block text-xs text-muted">
         <span className="block">Need by</span>
         <input
           type="date"
           value={needByDate}
           onChange={(e) => setNeedByDate(e.target.value)}
-          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border outline-none"
-          style={{ borderColor: "#C8C6C4" }}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border outline-none border-line"
           aria-label="Need by date"
         />
       </label>
       {showEta && (
-        <div className="text-xs" style={{ color: "#605E5C" }}>
+        <div className="text-xs text-muted">
           <span className="block mb-0.5">ETA</span>
           <EtaQuickPick
             etaDate={etaDate}
@@ -4960,13 +4911,12 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
           />
         </div>
       )}
-      <label className="block text-xs" style={{ color: "#605E5C" }}>
+      <label className="block text-xs text-muted">
         <span className="block">Material</span>
         <select
           value={printMaterial}
           onChange={(e) => setPrintMaterial(e.target.value)}
-          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-          style={{ borderColor: "#C8C6C4" }}
+          className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none border-line"
           aria-label="Material"
         >
           {optionsFor(choices.taskPrintMaterial, printMaterial).map((c) => (
@@ -4977,8 +4927,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       <select
         value={sliceStatus}
         onChange={(e) => setSliceStatus(e.target.value)}
-        className="w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-        style={{ borderColor: "#C8C6C4" }}
+        className="w-full text-xs px-2 py-1.5 rounded border bg-white outline-none border-line"
         aria-label="Slicing status"
       >
         {TASK_TAGS.map((t) => (
@@ -4987,26 +4936,24 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
       </select>
       {needsSlicing && (
         <div className="flex gap-2">
-          <label className="flex-1 min-w-0 text-xs" style={{ color: "#605E5C" }}>
+          <label className="flex-1 min-w-0 text-xs text-muted">
             Print quality
             <select
               value={printQuality}
               onChange={(e) => setPrintQuality(e.target.value)}
-              className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-              style={{ borderColor: "#C8C6C4" }}
+              className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none border-line"
             >
               {optionsFor(choices.printQuality, printQuality).map((q) => (
                 <option key={q}>{q}</option>
               ))}
             </select>
           </label>
-          <label className="flex-1 min-w-0 text-xs" style={{ color: "#605E5C" }}>
+          <label className="flex-1 min-w-0 text-xs text-muted">
             Print strength
             <select
               value={printStrength}
               onChange={(e) => setPrintStrength(e.target.value)}
-              className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none"
-              style={{ borderColor: "#C8C6C4" }}
+              className="mt-0.5 w-full text-xs px-2 py-1.5 rounded border bg-white outline-none border-line"
             >
               {optionsFor(choices.printStrength, printStrength).map((s) => (
                 <option key={s}>{s}</option>
@@ -5026,8 +4973,7 @@ function AddTaskForm({ choices, showEta, onAdd, onCancel }) {
         </button>
         <button
           onClick={onCancel}
-          className="px-3 text-sm rounded border hover:bg-white"
-          style={{ borderColor: "#C8C6C4", color: "#605E5C" }}
+          className="px-3 text-sm rounded border hover:bg-white text-muted border-line"
         >
           Cancel
         </button>
@@ -5353,11 +5299,6 @@ async function graph(path, init = {}, tries = 0) {
    the board. Every activityType used here must also be declared in the
    Teams app manifest ("activities" section) and the app package
    republished, or Graph rejects the send. */
-
-/* Operator is a role, not a per-job field: the Entra user ids pinged when
-   a new job lands in staging. Empty until the shop hires a dedicated
-   operator — a designer is acting operator and raises the jobs anyway. */
-const OPERATOR_NOTIFY_IDS = [];
 
 async function sendActivityPings({ activityType, preview, jobName, userIds }) {
   try {
@@ -6102,12 +6043,12 @@ function AppShell() {
         <h1 className="text-lg font-semibold" style={{ color: "#201F1E" }}>
           Print Farm Scheduler
         </h1>
-        <p className="mt-1 mb-4 text-sm" style={{ color: "#605E5C" }}>
+        <p className="mt-1 mb-4 text-sm text-muted">
           Sign in with your work account to load the board.
           {/* also stamped here: a tab that never gets past sign-in still needs
               to be able to say which code it is running */}
-          <span className="block mt-1 text-xs" style={{ color: "#8A8886" }}>
-            v{APP_VERSION} · build {BUILD}
+          <span className="block mt-1 text-xs text-faint">
+            build {BUILD}
           </span>
         </p>
         <button
@@ -6123,7 +6064,7 @@ function AppShell() {
   if (phase === "checking")
     return (
       <Centered>
-        <p className="text-sm" style={{ color: "#605E5C" }}>
+        <p className="text-sm text-muted">
           Checking your sign-in…
         </p>
       </Centered>
@@ -6132,7 +6073,7 @@ function AppShell() {
   if (phase === "loading")
     return (
       <Centered>
-        <p className="text-sm" style={{ color: "#605E5C" }}>
+        <p className="text-sm text-muted">
           Loading the board…
         </p>
       </Centered>
@@ -6145,8 +6086,7 @@ function AppShell() {
           Could not load the board
         </h1>
         <p
-          className="mt-2 mb-4 text-xs whitespace-pre-wrap"
-          style={{ color: "#605E5C" }}
+          className="mt-2 mb-4 text-xs whitespace-pre-wrap text-muted"
         >
           {error}
         </p>
