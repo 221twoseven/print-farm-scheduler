@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-09-10.2";
+const BUILD = "2026-09-14.1";
 /* Teams app-package (manifest) version. Teams doesn't expose it to the tab at
    runtime, so this is hand-maintained: bump it in the same change that
    republishes the package from the Developer Portal, and nowhere else. */
@@ -3447,6 +3447,7 @@ function PrinterColumn({
   const visibleTasks = queueExpanded ? activeTasks : activeTasks.slice(0, 2);
   const hiddenCount = Math.max(0, activeTasks.length - 2);
   const showDrop = dragOver && !!draggingTaskId && accepts;
+  const edgeColor = showDrop ? stateColor : "#E1DFDD";
 
   const emptyLabel = showDrop
     ? "Drop job here"
@@ -3464,8 +3465,14 @@ function PrinterColumn({
         /* Filtered out by jobcode: faded, but still fully interactive. */
         opacity: filteredOut ? 0.35 : 1,
         background: showDrop ? `${stateColor}0D` : "white",
-        border: showDrop ? `1px solid ${stateColor}` : "1px solid #E1DFDD",
-        borderTop: `4px solid ${stateColor}`,
+        /* Longhands only. This used to be `border` (shorthand) plus
+           `borderTop`: React writes only the properties whose value changed
+           on re-render, so a drag-over that rewrote the shorthand reset the
+           top edge to 1px and the unchanged borderTop was never re-applied —
+           Busy cards lost their blue edge until the next reload. */
+        borderWidth: "4px 1px 1px",
+        borderStyle: "solid",
+        borderColor: `${stateColor} ${edgeColor} ${edgeColor} ${edgeColor}`,
         boxShadow: showDrop ? `0 0 0 2px ${stateColor}33` : "none",
       }}
       onDragOver={(e) => {
