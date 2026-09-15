@@ -96,6 +96,14 @@ build step (CSS custom properties vs a threaded theme object — every colour
 today is a hardcoded hex in inline styles); and dark needs its own contrast
 pass, not a mechanical inversion.
 
+### 7. Two front doors — VISION, not scheduled (stated 2026-09-15)
+
+Teams tab becomes designer-only; a separate `shop.html` on the shop PC becomes
+operator-only. Same JSX, same lists, toggle removed, no permissions. Design
+and rationale in
+[farm-integration-technical.md](farm-integration-technical.md#vision-two-front-doors).
+Do not build until asked.
+
 ### 6. Item 28 — Mac Teams blank screen — SHELVED
 
 *Shelved indefinitely 2026-08-17 at Robert's direction; reaffirmed

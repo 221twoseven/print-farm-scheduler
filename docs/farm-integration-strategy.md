@@ -7,7 +7,7 @@ in [farm-integration-technical.md](farm-integration-technical.md).*
 
 | Platform | What it is | Who uses it today |
 | --- | --- | --- |
-| **Print board** (Teams tab) | The shop's job list: who asked, what, when it's due, which printer it's planned for | Designers and operators |
+| **Print board** (Teams tab) | The shop's job list: who asked, what, when it's due, which printer it's planned for. One page with a designer/operator toggle today; two pages in the vision below | Designers and operators |
 | **Bambu Studio** (desktop) | Slices a model into a printable file and sends it to one printer | Operators, some designers |
 | **Bambu Handy** (phone) and the **printer screen** | Watch a print, pause it, clear the bed | Operators |
 | **Bambu Cloud** | Bambu's account service. Studio and Handy reach the printers through it | In the background |
@@ -90,6 +90,30 @@ point.
 | 3 | Start from the board. Staggered starts. In progress set automatically | Weeks 5 to 6 |
 | 4 | Auto-complete, error pings, optional auto-next | Week 7 |
 | 5 | Studio sending retired. One week running both, then cutover | Week 8 |
+
+## Vision: two front doors
+
+Stated 2026-09-15, not yet scheduled. The board becomes two pages on the same
+code and the same data:
+
+| | Teams board | Shop board |
+| --- | --- | --- |
+| Where | The Teams tab, as now | A page bookmarked on the shop PC, full screen |
+| Who | Designers, and anyone in the office | Whoever is in the shop |
+| Purpose | Ticketing: raise jobs, edit them while unassigned, watch progress | Operating: attach sliced files, assign, Start, printer settings |
+| Controls | Designer view only. The operator toggle is gone | Operator view only |
+
+Nobody in the office should be operating. Removing the operator controls from
+Teams makes bypassing the ticketing flow a deliberate act of going to the shop
+page rather than a toggle in the header. This is discouragement, not
+enforcement: no SharePoint permissions are planned, and anyone with the shop
+URL and a sign-in can open it. That trade is accepted.
+
+Everything in this design lands on the shop board: live badges, loaded
+filament, Attach, Start, error pings. The Teams board keeps the whole board
+visible read-only so a designer can see whether their part is printing.
+Neither the bridge nor SharePoint changes. The build is about a day and can
+happen before, during, or after the versions above.
 
 ## Cost
 
