@@ -1,79 +1,114 @@
 # Connecting the print board to the printers
 
-*One-page stakeholder brief, 2026-09-15. Technical detail is in
+*Stakeholder brief, 2026-09-15. Technical detail is in
 [farm-integration-technical.md](farm-integration-technical.md).*
 
-## The problem
+## The platforms involved
 
-The **print board** in Teams knows who wants what and when. **Farm Manager** on
-the shop PC knows what the printers are actually doing. Nothing connects them.
-A person carries status between the two, so the board says "In progress" when
-someone clicked, not when a nozzle is hot, and finished jobs sit unmarked until
-noticed.
+| Platform | What it is | Who uses it today |
+| --- | --- | --- |
+| **Print board** (Teams tab) | The shop's job list: who asked, what, when it's due, which printer it's planned for | Designers and operators |
+| **Bambu Studio** (desktop) | Slices a model into a printable file and sends it to one printer | Operators, some designers |
+| **Bambu Handy** (phone) and the **printer screen** | Watch a print, pause it, clear the bed | Operators |
+| **Bambu Cloud** | Bambu's account service. Studio and Handy reach the printers through it unless a printer is in LAN-only mode | In the background |
+| **Bambu Farm Manager** (Windows) | Bambu's free fleet dashboard: queue, batch controls, live video | **Not used** |
+| **Bambu Fleet Hub** (network box, about $600) | Bambu's only product that lets *our own* software read and drive the printers | **Not owned** |
 
-## The constraint
+## How work flows today
 
-Farm Manager is closed. Bambu offers no way for other software to read or
-drive it. The only supported route is Bambu's **Fleet Hub**, a $600 network
-box that exposes the printers to software we write. A printer belongs to Farm
-Manager *or* a hub, never both.
+| Step | Designer | Operator |
+| --- | --- | --- |
+| 1 | Saves the model file to the shared drive | |
+| 2 | Creates the job on the **board**: name, jobcode, file path, priority, need-by | |
+| 3 | | Drags the job onto a printer on the **board**, sets an ETA |
+| 4 | | Opens the file in **Studio**, slices, sends it to that printer |
+| 5 | | Goes back to the **board** and marks the run "In progress" |
+| 6 | | Watches progress on **Handy** or the printer screen |
+| 7 | | Clears the bed, marks the run "Complete" on the **board** |
+
+Steps 5 and 7 are the problem. The board only knows a print started or finished
+because a person came back and said so. When that is forgotten, the board shows
+a printer busy that is idle, or a job running that came off the bed hours ago.
+The board also guesses the ETA from a preset while Studio knows the real
+duration.
+
+## Why the board can't just ask the printers
+
+Bambu locks the printers to its own software. Studio and Handy are allowed to
+talk to them; anything we write is not, with one exception: the **Fleet Hub**.
+It sits on the shop network, takes ownership of the printers, and gives our
+software a secure way to read status and start prints.
+
+Farm Manager does not help here. It is a dashboard for humans with no way for
+other software to connect. Adopting it would give operators a nicer screen
+than Studio for running many printers, and nothing more. It also can't share a
+printer with a Fleet Hub, so adopting it now would have to be undone later.
+
+A printer belongs to one controller at a time: Bambu Cloud (Studio and Handy),
+Farm Manager, or a Fleet Hub. Moving a printer to the hub means Handy stops
+working for it. Studio keeps working, in its local-network mode.
+
+## How work would flow with a hub
 
 ```mermaid
 flowchart LR
-    B[Print board<br/>Teams] -->|operator reads queue| O[Operator]
-    O -->|starts print| H[Fleet Hub]
-    H <--> P[Printers]
-    H -->|bridge polls each minute| BR[Bridge<br/>small program on shop PC]
-    BR -->|live status| B
+    D[Designer] -->|creates job| B[Print board<br/>Teams]
+    B -->|drags job to printer| O[Operator]
+    O -->|slices and sends<br/>stages 1 to 3| S[Bambu Studio]
+    O -.->|clicks Start<br/>stage 4| B
+    S --> P[Printers]
+    B -.->|stage 4| BR
+    P <--> H[Fleet Hub]
+    H -->|status once a minute| BR[Bridge<br/>small program on shop PC]
+    BR -->|live status into the board| B
 ```
 
-The **bridge** is a small program that asks the hub what every printer is doing
-and writes the answer into the board's own data. The board then shows real
-state beside planned state.
+The **bridge** is a small program on the shop PC. It asks the hub what every
+printer is doing and writes the answer into the board's own data. The board
+then shows real state next to planned state.
 
-## What we would get, in stages
-
-| Stage | Outcome | Effort |
+| Stage | What changes for the operator | What changes for the designer |
 | --- | --- | --- |
-| 1. Live status | Each printer card shows idle, printing with % and time left, finished, error, offline | Hub + about a week |
-| 2. Nudges | Board flags jobs the printer says are done, and printers running unscheduled work | Days |
-| 3. Auto-complete | Board marks a job complete when the bed is cleared | A day, plus a policy call |
-| 4. Start from the board | Operator clicks Start on the board; the printer begins | Weeks; rebuilds Farm Manager's core |
+| **1. Live status** | Each printer card shows idle, printing with percent and time left, finished, error, offline. Step 6 above can happen on the board. | Sees whether their job is actually printing without asking |
+| **2. Nudges** | Board flags a run the printer says is finished, or a printer running something the board doesn't know about. Step 5 is prompted, not remembered. | Same |
+| **3. Auto-complete** | When the bed is cleared, the board marks the run complete. Step 7 becomes just clearing the bed. | Gets the "complete" notification without waiting on anyone |
+| **4. Start from the board** | Drags the job onto a printer and clicks Start. Studio drops out of the operator's day; step 4 and 5 vanish. | **Must attach a sliced file** when creating the job, so slicing moves to the designer or to a slicing step before the board |
 
-Stages 1 and 2 deliver most of the value. Each stage stands alone.
-
-## What we would give up
-
-Farm Manager's screen for hub-bound printers: its queue, batch controls, video,
-and voice alerts. Prints on those machines start from Bambu Studio or the hub's
-basic web page until stage 4 exists.
+Stages 1 to 3 change what the board *knows*. Only stage 4 changes what people
+*do*, and it moves slicing upstream, which is a workflow decision on its own.
 
 ## Cost and risk
 
 | | |
 | --- | --- |
-| Hub | about $600, one-time, up to 50 printers |
-| Developer access | free, online agreement on the shop's Bambu account |
+| Fleet Hub | about $600 one-time, up to 50 printers |
+| Bambu developer access | free, online agreement on the shop's Bambu account, business use |
 | Stage 1 build | about a week |
-| Ongoing | certificate renewal every six months; firmware updates |
-| Reversible | yes; a printer moves back to Farm Manager in minutes |
+| Stages 2 and 3 | days each |
+| Stage 4 | weeks |
+| Ongoing | certificate renewal every six months, hub and printer firmware |
+| Given up on hub-bound printers | Bambu Handy. Bambu Cloud features. Nothing else that is in use today |
+| Reversible | Yes. A printer moves back to Bambu Cloud in minutes; the hub can be reset |
 
-Stages 1 and 2 never change a task or start a print. Worst case is a wrong
-badge.
+Stages 1 to 3 never start or stop a print. The worst failure is a wrong badge
+or a wrong "complete" that an operator reopens.
 
 ## The decision
 
-1. **Do nothing.** Improve the handoff by convention, e.g. job code in the Farm
-   Manager task name.
+1. **Do nothing.** Keep board plus Studio. Accept that steps 5 and 7 depend on
+   people.
 2. **Pilot.** One hub, two printers, stage 1, judge after a month. About $600
    and a week.
-3. **Commit.** Move the fleet and plan through stage 3 or 4.
+3. **Commit.** All printers on the hub, plan through stage 3 or 4.
 
-**Recommendation: pilot.** It answers whether live status changes how the shop
-works, for one hub's price, and it can be undone.
+**Recommendation: pilot.** It answers whether live status on the board changes
+how the shop works, for one hub's price, and it can be undone.
 
 ## To settle first
 
-Which two printers pilot. Who owns the shop PC and the hub credentials. Whether
-operators accept starting pilot prints outside Farm Manager. Whether automation
-may ever mark a job complete, or only suggest it.
+- Which two printers pilot. Same model keeps it simple.
+- Who owns the shop PC the bridge runs on, and the hub credentials.
+- Whether operators accept losing Handy on the pilot printers.
+- At stage 3, whether the board may mark a run complete on its own or only
+  suggest it.
+- At stage 4, who slices.
