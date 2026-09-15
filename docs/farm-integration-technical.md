@@ -53,11 +53,36 @@ sequenceDiagram
     Note over UI: printer Ready; optional auto-next
 ```
 
+## Vision: two front doors
+
+Stated 2026-09-15, not scheduled. One JSX file, two HTML entry points:
+
+| | `index.html` | `shop.html` |
+| --- | --- | --- |
+| Served to | The Teams tab (manifest unchanged) | The shop PC, bookmarked, full screen in Edge |
+| Mode | Designer, fixed by a flag the page sets before the JSX loads | Operator, fixed the same way |
+| Sign-in | Teams paths, as now | Browser popup path, as now outside Teams |
+| Toggle | Removed | Removed |
+
+Implementation when approved: each page sets one global (for example
+`window.PFS_MODE`) that replaces the `localStorage` view preference; the
+toggle and its persistence go; `shop.html` is a copy of `index.html` with the
+flag flipped and the two kept in step like `index.html` and `auth.html` are
+today. `BUILD` bump, [ui-reference.md](ui-reference.md) and
+[decisions.md](decisions.md) updated. About a day.
+
+Not access control. The existing warning in ui-reference that the toggle is
+not a permission boundary carries over word for word. The Teams page keeps
+the whole board readable so designers can see live state on their jobs.
+
+Everything below that says "operator" on the board means the shop page once
+this exists; everything that says "designer" means the Teams page.
+
 ## Who touches which platform
 
 | Platform | Today | Target |
 | --- | --- | --- |
-| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Designer creates jobs, unchanged. Operator attaches the sliced file, assigns, clicks Start. Status is automatic |
+| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Designer creates jobs in Teams, unchanged. Operator attaches the sliced file, assigns, clicks Start on the shop page. Status is automatic |
 | Bambu Studio | Operator slices and sends | Operator slices only. Calibration and manual control by access code. No sending |
 | Bambu Handy | Operator monitors | Unavailable on hub printers |
 | Printer screen | Clear bed, pause | Same |
@@ -245,7 +270,8 @@ mechanism.
 ## Board behaviour
 
 - **Attach sliced file.** An **Attach** control on the job card and in the
-  detail modal, operator view only, accepting `.gcode.3mf`. The designer's
+  detail modal, operator view only (the shop page, once the two front doors
+  exist), accepting `.gcode.3mf`. The designer's
   New job form is unchanged and still takes the model file path. On attach:
   upload to PrintFiles via Graph, parse in the browser, fill the `Req*`
   columns, `EstMinutes`, and material. ETA on a run = start time plus
