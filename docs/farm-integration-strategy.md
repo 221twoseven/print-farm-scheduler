@@ -37,9 +37,9 @@ and the sliced file supplying what the job needs.
 
 ```mermaid
 flowchart LR
-    D[Designer] -->|attaches sliced file| B[Print board<br/>Teams]
+    D[Designer] -->|creates job, model file| B[Print board<br/>Teams]
+    O[Operator] -->|slices in Studio, attaches sliced file,<br/>drags to a compatible printer, clicks Start| B
     B -->|reads the file:<br/>material, nozzle, plate, duration| B
-    O[Operator] -->|drags job to a<br/>compatible printer, clicks Start| B
     B <-->|jobs, status| BR[Bridge<br/>program on shop PC]
     BR <-->|send print, read status| H[Fleet Hub]
     H <--> P[Printers]
@@ -47,14 +47,17 @@ flowchart LR
 
 | Step | Designer | Operator | Automatic |
 | --- | --- | --- | --- |
-| 1 | Slices in **Studio**, attaches the sliced file to a new job on the **board**, sets who and need-by | | Board reads the file: printer model, nozzle, filaments and colours, plate, print time. ETA comes from the file |
+| 1 | Creates the job on the **board** with the model file, who, need-by, priority. Same as today | | |
 | 2 | | | Board shows every printer's live state, loaded filament, and nozzle, fed from the hub once a minute |
-| 3 | | Drags the job onto a printer the board marks compatible, clicks **Start** | Bridge checks the circuit's heating limit, maps filaments to slots, sends the print. Run goes In progress on its own. Notifications fire |
-| 4 | | Watches progress on the **board** | Errors appear with Bambu's description and ping the operator |
-| 5 | | Clears the bed | Board marks the run Complete, frees the printer, and, if enabled, starts the next queued run |
+| 3 | | Slices in **Studio**, attaches the sliced file to the job on the **board** | Board reads the file: printer model, nozzle, filaments and colours, plate, print time. ETA comes from the file. Compatible printers light up |
+| 4 | | Drags the job onto a compatible printer, clicks **Start** | Bridge checks the circuit's heating limit, maps filaments to slots, sends the print. Run goes In progress on its own. Notifications fire |
+| 5 | | Watches progress on the **board** | Errors appear with Bambu's description and ping the operator |
+| 6 | | Clears the bed | Board marks the run Complete, frees the printer, and, if enabled, starts the next queued run |
 
-Studio is used for slicing and for calibration. Farm Manager is not used.
-Handy is not available on hub printers.
+The designer's job does not change. The operator's changes from "slice, send
+from Studio, come back and update the board" to "slice, attach, Start." Studio
+stays for slicing and calibration. Farm Manager is not used. Handy is not
+available on hub printers.
 
 ## What is certain and what is not
 
@@ -83,7 +86,7 @@ point.
 | Version | What the shop gets | When |
 | --- | --- | --- |
 | 1 | Hub installed and accepted. Printers show live state, loaded filament, nozzle on the board. Hand-typed printer fields retire | Weeks 1 to 3 |
-| 2 | Designers attach the sliced file. Material, nozzle, plate, and a real ETA fill in. Board flags compatible printers | Week 4 |
+| 2 | Operators attach the sliced file. Material, nozzle, plate, and a real ETA fill in. Board flags compatible printers | Week 4 |
 | 3 | Start from the board. Staggered starts. In progress set automatically | Weeks 5 to 6 |
 | 4 | Auto-complete, error pings, optional auto-next | Week 7 |
 | 5 | Studio sending retired. One week running both, then cutover | Week 8 |
@@ -102,7 +105,6 @@ point.
 ## Decisions needed
 
 - Approve the hub purchase and the developer agreement on the shop's account.
-- Who slices: the designer, or a slicing step before the board.
 - Who owns the shop PC the bridge runs on, and the hub credentials.
 - Whether the board may start the next queued run on its own, or always wait
   for a click.

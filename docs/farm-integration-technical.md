@@ -29,13 +29,15 @@ sequenceDiagram
     participant P as Printer
     participant Op as Operator
 
-    D->>UI: New job, attach .gcode.3mf, who, need-by
-    UI->>UI: read Metadata/slice_info.config and gcode header
-    UI->>SP: task + requirements + duration; file to PrintFiles library
+    D->>UI: New job: model file path, who, need-by, priority (unchanged)
     loop every 60 s
         B->>H: GET /v1/hub/devices
         B->>SP: live state, loaded filament, nozzle per printer
     end
+    Op->>Op: slice in Studio, export .gcode.3mf
+    Op->>UI: attach .gcode.3mf to the job
+    UI->>UI: read Metadata/slice_info.config and gcode header
+    UI->>SP: requirements + duration on task; file to PrintFiles library
     Op->>UI: drag job to a compatible printer, click Start
     UI->>SP: run In progress, DispatchState = Requested
     B->>SP: read Requested runs
@@ -55,8 +57,8 @@ sequenceDiagram
 
 | Platform | Today | Target |
 | --- | --- | --- |
-| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Designer attaches the sliced file. Operator assigns and clicks Start. Status is automatic |
-| Bambu Studio | Operator slices and sends | Whoever slices. Calibration and manual control by access code. No sending |
+| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Designer creates jobs, unchanged. Operator attaches the sliced file, assigns, clicks Start. Status is automatic |
+| Bambu Studio | Operator slices and sends | Operator slices only. Calibration and manual control by access code. No sending |
 | Bambu Handy | Operator monitors | Unavailable on hub printers |
 | Printer screen | Clear bed, pause | Same |
 | Bambu Cloud | Binds printers | Hub printers leave it |
@@ -242,11 +244,14 @@ mechanism.
 
 ## Board behaviour
 
-- **Attach on New job.** File input accepting `.gcode.3mf`. Upload to
-  PrintFiles via Graph; parse in the browser; fill the `Req*` columns,
-  `EstMinutes`, and material. ETA on a run = start time plus `EstMinutes`,
-  replacing the preset buttons when a file is present. Reject multi-plate
-  files with a message.
+- **Attach sliced file.** An **Attach** control on the job card and in the
+  detail modal, operator view only, accepting `.gcode.3mf`. The designer's
+  New job form is unchanged and still takes the model file path. On attach:
+  upload to PrintFiles via Graph, parse in the browser, fill the `Req*`
+  columns, `EstMinutes`, and material. ETA on a run = start time plus
+  `EstMinutes`, replacing the preset buttons when a file is present. Reject
+  multi-plate files with a message. Re-attaching replaces the file and
+  re-parses.
 - **Live badge** on each printer: state, percent, minutes, greyed past 3 min
   stale. Loaded filament as colour chips with type. Nozzle from live fields.
 - **Compatibility.** When dragging a job, highlight printers where model
@@ -274,7 +279,7 @@ owns them.
 | **1. Hub acceptance** | Wire hub. Read IP from USB `status.txt`. Run `hub/activate.py`, `user/add_web_user.py`. On each printer: log out of Bambu account, LAN-only off. Bind all via hub web UI. Re-add each in Studio by IP and access code. Run `printer_control/device_get_one.py` on every printer and `device_print.py` on one with a test plate | All printers `mqtt_status 2`; status fields present; one test print started from a script and completed; Studio still reaches each printer | 2 days |
 | **2. Schema** | Add the Printers, Tasks, Groups, Settings columns and the PrintFiles library. `COLS`, mappers, `checkSchema()`. Enter serials | Board loads clean with the new columns; docs updated | 2 days |
 | **3. Bridge read** | Poll loop, auth, diff cache, Graph writes, scheduled task. Board live badge, filament chips, live nozzle, spec fields read-only for hub printers | Every printer card shows live state within 60 s of a change; badge greys when the bridge is stopped | 4 days |
-| **4. File intake** | Attach on New job, browser parse, `Req*` and `EstMinutes`, ETA from duration, compatibility highlight | A designer attaches a file and the job shows model, nozzle, filaments, plate, time without typing | 4 days |
+| **4. File intake** | Attach control for operators, browser parse, `Req*` and `EstMinutes`, ETA from duration, compatibility highlight | An operator attaches a sliced file and the job shows model, nozzle, filaments, plate, time without typing | 4 days |
 | **5. Dispatch** | Bridge dispatch loop, filament mapping, heating limit, `FileHash` reuse, error write-back. Board Start, spinner, Failed with Retry. Confirm `taskToRow` completion columns | Operator drags and clicks Start; printer begins within 90 s; run is In progress; a deliberate colour mismatch fails with a clear message; two simultaneous starts in a group with limit 1 stagger | 6 days |
 | **6. Automation** | Auto-complete, auto-next, error text and pings, confirm-removal button | A finished print whose bed is cleared marks itself Complete and frees the printer; with `AutoNext` on the next run starts | 3 days |
 | **7. Cutover** | One week running the board path with Studio sending still allowed. Then retire Studio sending. Update [ui-reference.md](ui-reference.md), [data-model.md](data-model.md), [authentication.md](authentication.md), [operations.md](operations.md) | A week of shop use with no manual status edits needed | 1 week elapsed, 1 day work |
@@ -307,7 +312,6 @@ its own PR with a `BUILD` bump where code changes.
 
 ## Open decisions, not open questions
 
-- Who slices: designer, or a slicing step before the board.
 - `AutoNext` default on or off.
 - `HeatingLimit` per group, from the electrician's circuit map.
 - Whether to also send Bambu one email about the "Local Server SDK" on the
