@@ -61,6 +61,8 @@ work on interface changes. See [docs/operations.md](docs/operations.md#working-l
 | [docs/ui-reference.md](docs/ui-reference.md) | What the board does, feature by feature — the behaviour spec |
 | [docs/decisions.md](docs/decisions.md) | Settled decisions that should not be relitigated, plus open items |
 | [docs/todo.md](docs/todo.md) | The session-facing doc: what's left, the closed-item ledger, traps, operational notes, verification state |
+| [docs/farm-integration-strategy.md](docs/farm-integration-strategy.md) | Stakeholder-facing: who uses which platform today, why the board can't see the printers, the Fleet Hub path, stages, costs, the decision to make |
+| [docs/farm-integration-technical.md](docs/farm-integration-technical.md) | Developer-facing: target workflow, what the hub and the sliced file each provide, schema additions, bridge and board behaviour, the phased action plan |
 
 Session handoffs were folded into `docs/todo.md` on 2026-08-18; the individual
 handoff documents live in git history.
