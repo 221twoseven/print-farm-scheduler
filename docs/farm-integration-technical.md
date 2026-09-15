@@ -1,63 +1,130 @@
-# Printer integration: technical design
+# Printer integration: technical design and action plan
 
 *Developer version. The stakeholder version is
-[farm-integration-strategy.md](farm-integration-strategy.md). Read that first
-for the why; this file is the how.*
+[farm-integration-strategy.md](farm-integration-strategy.md).*
 
-Status: **design only, nothing built.** Written 2026-09-15 against Fleet Hub
-firmware 01.01.00.00 and *Bambu Fleet Hub HTTP API v1.0.0* (2026-05-20). The
-API PDF is behind Bambu developer authorization and is not checked in; the
-shop's copy is in the developer account.
+Status: **design and plan, nothing built.** Written 2026-09-15 against Fleet
+Hub firmware 01.01.00.00 and *Bambu Fleet Hub HTTP API v1.0.0* (2026-05-20).
+The API PDF is behind Bambu developer authorization and is not checked in; the
+shop's copy is in the developer account. Every hub call and field named below
+is taken from that document.
 
 ## Starting point
 
-The shop runs the **board** and **Bambu Studio**. Farm Manager is not in use.
-Printers are reached from Studio either through Bambu Cloud (bound to a Bambu
-account, visible in Handy) or in LAN-only mode with an access code. The board
-has no knowledge of printer state; operators set task status by hand after
-acting in Studio.
+The shop runs the **board** and **Bambu Studio**. Farm Manager is not in use
+and plays no part here: it has no API and cannot share a printer with a hub.
+Printers are reached from Studio through Bambu Cloud or in LAN-only mode.
+The board has no knowledge of printer state.
 
-## Who touches which platform, by stage
+## Target workflow
 
-| Platform | Today | Stages 1 to 3 | Stage 4 |
-| --- | --- | --- | --- |
-| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Same, plus live badges. Stage 3 sets Complete automatically | Designer attaches sliced file. Operator assigns and clicks Start. Studio leaves the operator's loop |
-| Bambu Studio | Operator slices and sends to printer | Operator slices and sends, in LAN mode with access code | Whoever slices; no longer sends |
-| Bambu Handy | Operator monitors | **Unavailable** on hub-bound printers | Unavailable |
-| Printer screen | Operator clears bed, pauses | Same | Same |
-| Bambu Cloud | Binds printers to the shop account | Hub-bound printers leave it | Same |
-| Farm Manager | Not used | Not used | Not used |
-| Fleet Hub | None | Owns the printers. Web UI for binding and firmware only | Same, plus receives print commands from the bridge |
-| Bridge | None | Polls hub, writes live columns | Also reads dispatch requests and sends prints |
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as Designer
+    participant UI as Board
+    participant SP as SharePoint
+    participant B as Bridge (shop PC)
+    participant H as Fleet Hub
+    participant P as Printer
+    participant Op as Operator
 
-## Constraints that shape everything
+    D->>UI: New job, attach .gcode.3mf, who, need-by
+    UI->>UI: read Metadata/slice_info.config and gcode header
+    UI->>SP: task + requirements + duration; file to PrintFiles library
+    loop every 60 s
+        B->>H: GET /v1/hub/devices
+        B->>SP: live state, loaded filament, nozzle per printer
+    end
+    Op->>UI: drag job to a compatible printer, click Start
+    UI->>SP: run In progress, DispatchState = Requested
+    B->>SP: read Requested runs
+    B->>B: circuit heating limit; filament slot mapping
+    B->>H: PUT /v1/hub/devices/print
+    H->>P: print
+    P->>H: RUNNING ... FINISH
+    B->>SP: DispatchState = Sent; live state
+    UI->>Op: progress, errors with text
+    Op->>P: clear bed
+    P->>H: IDLE
+    B->>SP: run Complete
+    Note over UI: printer Ready; optional auto-next
+```
 
-1. **Bambu's authorization-control firmware rejects print and control commands
-   from non-Bambu software.** Studio, Handy, Farm Manager, Bambu Connect, and
-   Fleet Hub are allowed. Nothing we write is, except through the hub's API.
-   Developer Mode on the printer would reopen the raw protocol but is
-   unsupported and LAN-only; not pursued.
-2. **Farm Manager has no API** and can't share a printer with a hub. It plays
-   no part in this design. If the shop later wants its dashboard for printers
-   *not* on the hub, that is independent of everything here.
-3. **A printer binds to exactly one controller**: Bambu Cloud, Farm Manager, or
-   a hub. The hub's `local_printers?only_can_bind=true` returns only printers
-   that are not bound to Handy, not in LAN-only mode, and not on another hub or
-   Farm Manager. A cloud-bound printer must be logged out on its screen before
-   binding; a LAN-only printer must have LAN-only switched off. After binding,
-   Studio still reaches the printer with the LAN-mode access code.
-4. **The hub requires mutual TLS with a Bambu-issued client certificate** on
-   TCP 8888, is LAN-only, and uses a self-signed server certificate. A browser
-   page cannot call it. Hence a bridge process on the shop LAN.
-5. **The board's save layer diffs by object identity** and derives printer
-   `Busy` from tasks (see
-   [data-model.md](data-model.md#busy-is-derived-and-automation-never-overrules-a-person)).
-   The bridge writes to SharePoint through Graph, never through the app, and
-   only to columns the app treats as read-only.
-6. **No build step, no server** is settled for the *app*
-   ([decisions.md](decisions.md)). The bridge is a separate on-prem process
-   that never serves the app and holds no secret the browser needs. The new
-   fact justifying it is constraint 4.
+## Who touches which platform
+
+| Platform | Today | Target |
+| --- | --- | --- |
+| Board | Designer creates jobs. Operator assigns, sets In progress and Complete by hand | Designer attaches the sliced file. Operator assigns and clicks Start. Status is automatic |
+| Bambu Studio | Operator slices and sends | Whoever slices. Calibration and manual control by access code. No sending |
+| Bambu Handy | Operator monitors | Unavailable on hub printers |
+| Printer screen | Clear bed, pause | Same |
+| Bambu Cloud | Binds printers | Hub printers leave it |
+| Farm Manager | Not used | Not used |
+| Fleet Hub | None | Owns the printers. Web UI for binding and firmware |
+| Bridge | None | Polls hub, writes to SharePoint, dispatches prints |
+
+## What the hub provides, mapped to the design
+
+| Need | Hub API | Field or call |
+| --- | --- | --- |
+| Printer state | yes | `report_status.gcode_state`: IDLE PREPARE RUNNING PAUSE FINISH FAILED; `online`; `mqtt_status` |
+| Progress, remaining | yes | `mc_percent`, `mc_remaining_time` (s), `layer_num`/`total_layer_num` |
+| Current job name | yes | `subtask_name` |
+| Loaded filament per slot | yes | `ams.ams[].tray[]`: `tray_type`, `tray_color` ARGB, `tray_info_idx`, `tag_uid` (RFID). External: `vt_tray` (P1/A1) or `vir_slot` (X/H/P2) |
+| Nozzle | yes | `nozzle_diameter`, `nozzle_type`; `device.nozzle.info[]` with `type` code `H[S|H|U][00|01|05]` and `diameter` |
+| Errors | yes | `hms[]`, `err`/`err2`; text via `GET /v1/hub/hms` and `/v1/hub/device_error` |
+| Start a print | yes | `PUT /v1/hub/devices/print`, multipart: `file` or `file_hash`, `print_cmd`, `dev_sns[]` |
+| Pause, resume, stop, confirm bed clear | yes | `POST /v1/hub/devices/{sn}/opt` with `opt` |
+| Set filament on a slot | yes | same endpoint, `ams_filament_setting` / `external_filament_setting` |
+| Snapshot | yes | `GET /v1/hub/file/info?file_path=liveview/{sn}/liveview.jpeg` |
+| Firmware | yes | upload and push; use the hub web UI instead |
+| **Installed bed plate** | **no** | Not in the payload. Plate the *file* wants comes from the file |
+| **Live video** | **no** | Snapshot only |
+| **Staggered starts** | **no** | Bridge logic on `gcode_state == PREPARE` counts |
+| Bambu Handy | lost | Hub printers leave Bambu Cloud |
+
+## What the sliced file provides
+
+`.gcode.3mf` is a zip. The board reads it in the browser at attach time; no
+hub involved.
+
+| Need | Where | Field |
+| --- | --- | --- |
+| Printer model | `Metadata/slice_info.config` | `<metadata key="printer_model_id">` |
+| Nozzle diameter and flow | same | `<filament nozzle_diameter volume_type>`; `<nozzle>` when present |
+| Filaments: type, colour, Bambu ID, grams | same | `<filament id type color tray_info_idx used_g>` |
+| Plate gcode path | same | `Metadata/plate_N.gcode`; single plate only, hub error 1004 otherwise |
+| Estimated time | `Metadata/plate_N.gcode` header | `; total estimated time:` |
+| Bed plate wanted | same header | `; curr_bed_type =` |
+
+Zip reading in the browser: `DecompressionStream("deflate-raw")` is native in
+current Chromium and Edge (Teams desktop is Edge WebView2), so a small inline
+zip walker needs no library. If that proves brittle, fflate from a CDN is
+consistent with the no-build decision.
+
+## Certainty
+
+Everything in the two tables above except the three "no" rows is documented
+behaviour. Bambu's demo code exercises every call used. The parts we build are
+ordinary software with no research component:
+
+- reading XML and a gcode header from a zip
+- a poll loop that diffs and PATCHes SharePoint rows
+- a filament matching rule: same `tray_type`, then nearest `tray_color`, fail
+  rather than guess
+- a counter of printers in `PREPARE` per group, compared to a per-group limit
+- the state machine `Requested → Sent → (RUNNING) → FINISH → IDLE → Complete`
+
+The unverifiable item is the hub itself on this network. Phase 1 below runs
+Bambu's scripts against it and signs off before any board change. That is
+acceptance, not experiment: pass criteria are written down, and failure means
+returning a $600 device with nothing else spent.
+
+Two internal checks are required early because they affect design, not
+feasibility: whether the board's refresh picks up rows written by another
+process (Phase 0), and the exact completion columns `taskToRow` writes so the
+bridge can set the same ones (Phase 5).
 
 ## Components
 
@@ -66,274 +133,201 @@ flowchart TB
     subgraph Microsoft 365
         Board[print-farm-scheduler.jsx<br/>GitHub Pages, in Teams tab]
         SP[(SharePoint lists<br/>Groups, Printers, Tasks, Settings)]
-        Lib[(SharePoint document library<br/>PrintFiles, stage 4 only)]
+        Lib[(PrintFiles document library)]
     end
     subgraph Shop LAN
         Bridge[bridge.py<br/>shop PC, scheduled task]
         Hub[Fleet Hub<br/>TCP 8888 mTLS HTTPS<br/>TCP 1883 MQTT to printers]
         P1[Printer]
         P2[Printer]
-        Studio[Bambu Studio<br/>slice; send in LAN mode]
+        Studio[Bambu Studio<br/>slice; calibrate by access code]
     end
     Board <-->|Graph, delegated token| SP
-    Bridge -->|Graph, app-only token<br/>Sites.Selected| SP
-    Bridge -->|Graph, stage 4| Lib
+    Board -->|Graph| Lib
+    Bridge <-->|Graph, app-only token<br/>Sites.Selected| SP
+    Bridge -->|Graph| Lib
     Bridge <-->|client cert + JWT| Hub
     Hub <-->|MQTT / HTTPS| P1
     Hub <-->|MQTT / HTTPS| P2
     Studio -.->|access code| P1
 ```
 
-- **Bridge**: one Python script, `requests` only, built from Bambu's demo code
-  (`base_lib`, `hub`, `printer_control`). Windows scheduled task every 60 s.
-  Holds the client cert, hub API account, and a Graph app registration
-  credential. Lives in `bridge/` here or its own repo; not part of the Pages
-  deploy either way.
-- **Hub**: bought, activated once, bound to the pilot printers. Web UI enabled
-  for binding and firmware.
-- **Board**: reads new live columns and renders them. Never calls the hub.
+- **Bridge**: one Python script, `requests` only, built from Bambu's demo code.
+  Windows scheduled task every 60 s. Holds the client cert, hub API account,
+  and a Graph app credential in Windows Credential Manager. Lives in `bridge/`
+  here; not part of the Pages deploy.
+- **Hub**: activated once, owns the printers. Web UI for binding and firmware.
+- **Board**: reads live columns, parses attached files, sets `DispatchState`.
+  Never calls the hub.
 
-## Stage 1: live status, read-only
+## Schema additions
 
-### Data flow
+All follow the rule in [CLAUDE.md](../CLAUDE.md): SharePoint column, `COLS`
+entry, both mappers, `checkSchema()` passes.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Op as Operator
-    participant S as Bambu Studio
-    participant P as Printers
-    participant H as Fleet Hub
-    participant B as Bridge
-    participant SP as SharePoint Printers list
-    participant UI as Board
+**Printers.** Written by the bridge; `printerToRow` omits them.
 
-    Op->>S: slice, send to printer (LAN mode, access code)
-    S->>P: print file
-    P->>H: MQTT status reports (continuous)
-    loop every 60 s
-        B->>H: GET /v1/hub/devices
-        H-->>B: devices[] with report_status
-        B->>B: map to live record; diff against last write
-        B->>SP: PATCH changed rows: LiveState, LiveProgress, LiveJob,<br/>LiveEtaMinutes, LiveError; LiveUpdated on every row
-    end
-    UI->>SP: existing poll
-    UI->>UI: badge per printer; grey when LiveUpdated older than 3 min
-    Op->>UI: still sets In progress / Complete by hand
-```
+| Column | Type | Source |
+| --- | --- | --- |
+| `Serial` | Text | Operator, once. Join key |
+| `LiveState` | Choice | `Offline` if not online or `mqtt_status != 2`, else `gcode_state` |
+| `LiveProgress` | Number | `mc_percent` |
+| `LiveEtaMinutes` | Number | `mc_remaining_time / 60` |
+| `LiveJob` | Text | `subtask_name` |
+| `LiveError` | Text | `err2.err_code` or `err`; first `hms` as hex |
+| `LiveUpdated` | DateTime | bridge clock, every poll. Staleness signal |
+| `LoadedFilament` | Multi-line text | JSON: `[{ams, slot, type, color, idx, rfid}]` including external |
+| `LiveNozzleSize` | Text | `nozzle_diameter` |
+| `LiveNozzleType` | Text | decoded `device.nozzle.info[0].type` |
 
-### Hub authentication, as the bridge does it
+The existing `NozzleSize`, `NozzleType`, `NozzleMaterial`, `PrintMaterial`
+fields become read-only on the card when `Serial` is set, showing the live
+values. `BedType` stays manual.
 
-```mermaid
-sequenceDiagram
-    participant B as Bridge
-    participant H as Hub
-    B->>H: POST /v1/hub/login/local/tickets {user_name}
-    H-->>B: {ticket_id, ticket = base64({challenge, salt})}
-    B->>B: hash = hex(sha256(hex(sha256(hex(sha256(pw)) + salt)) + challenge))
-    B->>H: POST /v1/hub/login {user_name, password: hash, ticket_id}
-    H-->>B: {token}  (short-lived JWT)
-    Note over B: cache; on code 6 or 7 repeat
-```
+**Tasks.**
 
-One-time activation (ticket from hub, `PUT` to Bambu cloud with the Activation
-Key, activation code back to hub with the new API account) is done once with
-Bambu's `hub/activate.py` and is not part of the bridge.
+| Column | Type | Source |
+| --- | --- | --- |
+| `FileRef` | Text | Library item id of the attached `.gcode.3mf` |
+| `FileHash` | Text | MD5, for hub cached reprints |
+| `ReqPrinterModel` | Text | from file |
+| `ReqNozzle` | Text | from file, e.g. `0.4 HF` |
+| `ReqFilaments` | Multi-line text | JSON: `[{id, type, color, idx, grams}]` |
+| `ReqPlate` | Text | from gcode header |
+| `EstMinutes` | Number | from gcode header; drives ETA |
+| `DispatchState` | Choice | blank, `Requested`, `Sent`, `Failed` |
+| `DispatchError` | Text | hub message |
 
-### Field mapping
+**Settings.** `AutoComplete` (bool), `AutoNext` (bool), `HeatingLimit`
+per group (stored on Groups as `HeatingLimit` Number, default unlimited).
 
-Source is one element of `devices[]` from `GET /v1/hub/devices`.
+**PrintFiles** document library, one file per task, named `<TaskID>.gcode.3mf`.
 
-| Live column | Type | From | Rule |
+## Bridge behaviour
+
+**Auth.** Ticket then login per the API: `hash =
+hex(sha256(hex(sha256(hex(sha256(pw)) + salt)) + challenge))`. Cache the JWT;
+on code 6 or 7 re-login once.
+
+**Poll.** `GET /v1/hub/devices`. For each device with a matching `Serial`,
+build the live record, compare to the last written values in a local JSON
+cache, PATCH only changed rows, but always write `LiveUpdated`. Rows with a
+serial the hub doesn't report get `Offline`. On hub unreachable, write nothing.
+
+**Dispatch.** Read tasks where `DispatchState == Requested`. For each:
+
+1. Skip if the group's count of printers in `PREPARE` is at `HeatingLimit`;
+   leave `Requested`, try next tick.
+2. Download the file (or reuse `FileHash` if the hub's
+   `GET /v1/hub/file/info?is_encrypted=False&num=100` lists it).
+3. Build `filament_slot[]` from `ReqFilaments` against `LoadedFilament`:
+   match `type`, then nearest colour by RGB distance under a threshold; if any
+   filament has no match, `Failed` with a message naming it.
+4. `print_option`: booleans for P1/A1/X1; mode `2` (auto) for H and P2 series.
+5. `PUT /v1/hub/devices/print`. Code 0 → `Sent`, store `FileHash`. 1051 (busy or
+   bed not cleared), 1053 (mapping) or other → `Failed`, `DispatchError`.
+
+Slot encoding: external `ams_id 255, slot_id 0` (H2D left extruder `254/0`);
+AMS `0–3`/`0–3`; AMS-HT `128–135`/`0`; unused `255/255`.
+
+**Completion.** When a printer's state goes `RUNNING → FINISH → IDLE` and
+`AutoComplete` is on, set the matched run `Complete` with the same columns
+`taskToRow` writes. The board's reconciliation flips the printer to `Ready`.
+If `AutoNext` is on and a `Not started` run is queued on that printer, set it
+`Requested`.
+
+**Errors.** On `FAILED` or a new `hms` entry, look up the text and write
+`LiveError`. The board pings the operator through the existing activity-feed
+mechanism.
+
+## Board behaviour
+
+- **Attach on New job.** File input accepting `.gcode.3mf`. Upload to
+  PrintFiles via Graph; parse in the browser; fill the `Req*` columns,
+  `EstMinutes`, and material. ETA on a run = start time plus `EstMinutes`,
+  replacing the preset buttons when a file is present. Reject multi-plate
+  files with a message.
+- **Live badge** on each printer: state, percent, minutes, greyed past 3 min
+  stale. Loaded filament as colour chips with type. Nozzle from live fields.
+- **Compatibility.** When dragging a job, highlight printers where model
+  matches, nozzle matches, and every required filament type is loaded.
+  Others still accept the drop, marked with the mismatch.
+- **Start.** On a run with a `FileRef` on a printer with a `Serial`, the
+  status menu's In progress becomes **Start**, which sets `In progress` and
+  `DispatchState = Requested`. Without a file or serial, the old manual path is
+  unchanged.
+- **Dispatch feedback.** `Requested` shows a spinner, `Sent` clears it,
+  `Failed` shows `DispatchError` with a Retry that resets to `Requested`.
+- **Confirm removal** button on a `FINISH` printer, calling nothing itself:
+  it sets a flag the bridge turns into `bed_clean`. Optional; clearing the bed
+  on the printer screen does the same.
+
+Mutation handlers keep the identity rule. `live` and `Req*` data ride on the
+existing objects and are omitted from the app's `toRow` where the bridge
+owns them.
+
+## Action plan
+
+| Phase | Work | Done when | Effort |
 | --- | --- | --- | --- |
-| `Serial` | Text | `dev_sn` | Operator-entered once per printer; the join key. Never written by the bridge |
-| `LiveState` | Choice | `online`, `mqtt_status`, `report_status.gcode_state` | `Offline` if `online` false or `mqtt_status` != 2, else `IDLE PREPARE RUNNING PAUSE FINISH FAILED` |
-| `LiveProgress` | Number | `report_status.mc_percent` | Null unless RUNNING or PAUSE |
-| `LiveEtaMinutes` | Number | `report_status.mc_remaining_time` | Seconds ÷ 60. Null unless RUNNING |
-| `LiveJob` | Text | `report_status.subtask_name` | Name given at send time. Blank when IDLE |
-| `LiveError` | Text | `report_status.err2.err_code` else `err`; first `hms` entry as hex | Blank when none |
-| `LiveUpdated` | DateTime | bridge clock, UTC | Written every poll for every bound printer. The staleness signal |
+| **0. Access** | Accept the developer agreement on the shop's Bambu account. Generate Activation Key. Generate 4096-bit RSA key on the shop PC, issue client cert. Order hub. Register bridge Entra app, `Sites.Selected`, grant the site. Test: edit a Printers row in SharePoint by hand and confirm the open board reflects it | Cert and key on the shop PC; Graph app can PATCH a test row; board refresh behaviour known | 1 day plus shipping |
+| **1. Hub acceptance** | Wire hub. Read IP from USB `status.txt`. Run `hub/activate.py`, `user/add_web_user.py`. On each printer: log out of Bambu account, LAN-only off. Bind all via hub web UI. Re-add each in Studio by IP and access code. Run `printer_control/device_get_one.py` on every printer and `device_print.py` on one with a test plate | All printers `mqtt_status 2`; status fields present; one test print started from a script and completed; Studio still reaches each printer | 2 days |
+| **2. Schema** | Add the Printers, Tasks, Groups, Settings columns and the PrintFiles library. `COLS`, mappers, `checkSchema()`. Enter serials | Board loads clean with the new columns; docs updated | 2 days |
+| **3. Bridge read** | Poll loop, auth, diff cache, Graph writes, scheduled task. Board live badge, filament chips, live nozzle, spec fields read-only for hub printers | Every printer card shows live state within 60 s of a change; badge greys when the bridge is stopped | 4 days |
+| **4. File intake** | Attach on New job, browser parse, `Req*` and `EstMinutes`, ETA from duration, compatibility highlight | A designer attaches a file and the job shows model, nozzle, filaments, plate, time without typing | 4 days |
+| **5. Dispatch** | Bridge dispatch loop, filament mapping, heating limit, `FileHash` reuse, error write-back. Board Start, spinner, Failed with Retry. Confirm `taskToRow` completion columns | Operator drags and clicks Start; printer begins within 90 s; run is In progress; a deliberate colour mismatch fails with a clear message; two simultaneous starts in a group with limit 1 stagger | 6 days |
+| **6. Automation** | Auto-complete, auto-next, error text and pings, confirm-removal button | A finished print whose bed is cleared marks itself Complete and frees the printer; with `AutoNext` on the next run starts | 3 days |
+| **7. Cutover** | One week running the board path with Studio sending still allowed. Then retire Studio sending. Update [ui-reference.md](ui-reference.md), [data-model.md](data-model.md), [authentication.md](authentication.md), [operations.md](operations.md) | A week of shop use with no manual status edits needed | 1 week elapsed, 1 day work |
 
-Six columns on the Printers list, following the schema rule in
-[CLAUDE.md](../CLAUDE.md): SharePoint column, `COLS` entry, both mappers.
-`printerToRow` must omit them so an app PATCH can't overwrite a fresher bridge
-value.
+About 23 working days plus one week of parallel running. Each phase ships as
+its own PR with a `BUILD` bump where code changes.
 
-### Matching printers to rows
-
-By `Serial` only. A hub device with no matching row is logged once and
-skipped. A row whose serial the hub doesn't report gets `LiveState = Offline`
-and a fresh `LiveUpdated`.
-
-### Graph access for the bridge
-
-App-only. Second Entra app registration, `Sites.Selected`, granted `write` on
-the one site via `/sites/{id}/permissions`. Certificate credential preferred
-over client secret, stored in Windows Credential Manager on the shop PC. First
-app-only credential in the project; document in
-[authentication.md](authentication.md) when built.
-
-### Board changes
-
-- `COLS.printers` gains the six columns; `printerFromRow` reads them into
-  `printer.live`; `printerToRow` leaves them out.
-- A `LiveBadge` in the printer header: dot by state, `RUNNING 42% · 1h 10m`,
-  greyed with a "stale" tooltip past 3 minutes.
-- `BUILD` bump. Update [ui-reference.md](ui-reference.md) and
-  [data-model.md](data-model.md) in the same PR.
-
-Mutation handlers and the reconciliation effect are untouched.
-
-## Stage 2: nudges
-
-Board-only, computed in render, no new storage.
-
-| Condition | Flag |
-| --- | --- |
-| Task `In progress` on a printer whose `live.state` is `IDLE` or `FINISH` for more than N minutes | "Printer reports finished" on the task card |
-| Printer `live.state` is `RUNNING` with no task `In progress` on it | "Printing unscheduled work" on the printer card |
-| `live.state` is `FAILED` or `live.error` non-blank | Error chip with the code |
-
-Optional: bridge matches `LiveJob` to task `jobcode` or `title` and writes
-`LiveTaskId`, making the first flag exact. This depends on the operator naming
-the plate in Studio with the jobcode, which is a convention to agree on.
-
-## Stage 3: auto-complete
-
-First automation that changes a *task*. Behind a Settings-list toggle, default
-off. When a printer goes `RUNNING` → `FINISH` → `IDLE` (bed cleared), the
-bridge marks the matched `In progress` task `Complete` via Graph. The board's
-reconciliation then flips the printer `Busy` → `Ready` on its own.
-
-The bridge must set whatever completion columns `taskToRow` sets, so the
-history table renders normally. Confirm before shipping that the board's
-refresh picks up rows modified by another writer; today it assumes it is the
-only one.
-
-## Stage 4: dispatch from the board
-
-Only worth doing if the shop wants Studio out of the operator's loop. Moves
-slicing to the designer or a pre-board step.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant D as Designer
-    participant UI as Board
-    participant SP as SharePoint
-    participant B as Bridge
-    participant H as Hub
-    participant P as Printer
-
-    D->>UI: create job, attach sliced .gcode.3mf
-    UI->>SP: upload to PrintFiles library; FileRef on task
-    Note over UI: operator drags job to a printer with a Serial, clicks Start
-    UI->>SP: Task.Status = In progress, DispatchState = Requested
-    loop every 60 s
-        B->>SP: tasks where DispatchState = Requested
-        B->>SP: download 3mf
-        B->>B: read Metadata/slice_info.config: filaments, nozzle, plate
-        B->>H: GET /v1/hub/devices/{sn}  (loaded AMS trays, nozzle)
-        B->>B: map filament ids -> {ams_id, slot_id}; fail on mismatch
-        B->>H: PUT /v1/hub/devices/print (file or file_hash, print_cmd, dev_sns)
-        alt code 0
-            B->>SP: DispatchState = Sent
-        else 1051 busy / 1053 mapping / other
-            B->>SP: DispatchState = Failed, DispatchError
-        end
-    end
-    H->>P: MQTT print command; printer downloads file
-    P->>H: RUNNING
-    Note over B,SP: stage 1 poll shows RUNNING within a minute
-```
-
-Beyond the bridge, stage 4 needs:
-
-- **A document library** for `.gcode.3mf` and a `FileRef` on tasks.
-  Single-plate only (hub error 1004).
-- **Filament mapping.** `print_cmd.filament_slot[i]` is `{ams_id, slot_id}` for
-  slicer filament `i+1`. External spool `255/0` (H2D left extruder `254/0`),
-  AMS `0–3`/`0–3`, AMS-HT `128–135`/`0`. Match `tray_type` then nearest
-  `tray_color`; fail rather than guess. Most of the work is here.
-- **Calibration options** in `print_option`: booleans for P1/A1/X1, `0/1/2`
-  modes for H and P2 series. Default to auto per model.
-- **`DispatchState`** choice on tasks (`Requested`, `Sent`, `Failed`) plus
-  `DispatchError`. Set only when a task with a `FileRef` goes `In progress` on
-  a printer with a `Serial`; otherwise the Studio path continues unchanged.
-- **Cached reprints.** Store the hub's MD5 on the task; use `file_hash` on
-  repeats.
-
-## Pilot rollout
-
-1. Buy the hub. Accept the developer agreement on the shop's Bambu account,
-   generate the Activation Key, issue one client cert from a 4096-bit RSA key
-   generated on the shop PC. Private key never leaves that PC.
-2. Wire the hub to the shop switch. Read its IP from `status.txt` on a USB
-   stick or via SSDP. Activate with `hub/activate.py`. Create the web account
-   with `user/add_web_user.py`.
-3. On each pilot printer's screen: log out of the Bambu account (unbinds Handy)
-   and make sure LAN-only mode is off. In the hub web page, Search Nearby,
-   Connect. Confirm `GET /v1/hub/devices` shows `mqtt_status 2`.
-4. In Studio, re-add each pilot printer by IP and access code so operators can
-   still send prints.
-5. Add `Serial` and the five live columns to the Printers list. Land the
-   `COLS`, mapper, and `LiveBadge` PR. Enter the two serials.
-6. Register the bridge's Entra app with `Sites.Selected`; grant the site.
-7. Run the bridge by hand once, confirm the two rows update, then schedule it.
-8. Live with it for a month. Then decide on stages 2 to 4 and the rest of the
-   fleet.
-
-## Failure modes
+## Failure modes in operation
 
 | Failure | Effect | Handling |
 | --- | --- | --- |
-| Shop PC off or bridge crashed | `LiveUpdated` stops | Badges grey after 3 min. No data corruption |
-| Hub unreachable | Same | Log, retry next tick. Don't write `Offline` on a hub error; leave rows so staleness shows |
-| JWT expired | code 7 / HTTP 401 | Re-login, retry once |
-| Graph 429 | Row skipped this tick | Honour `Retry-After` |
-| Client cert expired | mTLS fails | Reissue from developer center; the hub is bound to the developer account, not the cert |
-| Hub password lost | Nothing works | Factory reset, re-activate, re-bind. Keep it in the shop's password manager |
-| Printer moved back to cloud | Hub reports it gone | Row shows `Offline`. Expected in a mixed fleet |
-| Stage 4: bad filament mapping | Hub 1053 | `DispatchState = Failed` with message; task stays `In progress` |
+| Shop PC off or bridge crashed | `LiveUpdated` stops; `Requested` runs wait | Badges grey after 3 min; Start shows spinner with "bridge not responding" after 3 min |
+| Hub unreachable | Same | Log, retry; write nothing |
+| JWT expired | code 7 / 401 | Re-login, retry once |
+| Graph 429 | Row skipped | Honour `Retry-After` |
+| Client cert expired | mTLS fails | Reissue from developer center; hub is bound to the developer account, not the cert |
+| Hub password lost | Nothing works | Factory reset, re-activate, re-bind. Keep in the shop's password manager |
+| Filament not loaded for a job | 1053 or pre-check | `Failed` naming the filament; operator loads it, clicks Retry |
+| Bed not cleared | 1051 | `Failed` "clear the bed"; Retry |
+| Printer moved back to cloud | Hub reports it gone | `Offline`; expected |
 
-## Security notes
+## Security
 
-- Client cert private key, hub API password, and Graph credential live only on
-  the shop PC. Nothing in this repo; `.gitignore` the bridge config.
-- The bridge talks to the hub on the LAN only and exposes no port.
-- Graph permission is `Sites.Selected` on one site, not `Sites.ReadWrite.All`.
-- Hub model cache is plaintext at rest (encryption planned by Bambu). Keep the
-  hub in the locked shop.
+- Client cert private key, hub API password, Graph credential: shop PC only,
+  Credential Manager. Nothing in this repo; `bridge/config` gitignored.
+- Bridge exposes no port; talks to the hub on the LAN and to Graph outbound.
+- Graph permission `Sites.Selected` on one site.
+- Hub model cache is plaintext at rest (encryption planned by Bambu). Hub stays
+  in the locked shop.
 
-## Open questions
+## Open decisions, not open questions
 
-- Which two printers pilot, and are they the same model.
-- Does the board's refresh pick up rows modified by another writer? Needed for
-  stage 1 correctness, essential for stage 3. Test with a manual SharePoint
-  edit before building the bridge.
-- Bambu's [third-party integration page](https://wiki.bambulab.com/en/software/third-party-integration)
-  describes a "Local Server SDK" (Windows binary or Docker) under
-  application-only access. It may be the engine behind Farm Manager and might
-  not need the hub. Unverified; one email to devpartner@bambulab.com before
-  buying.
-- Hub firmware and API are v1.0. Pin the bridge to the fields above; log
-  anything unexpected rather than failing.
+- Who slices: designer, or a slicing step before the board.
+- `AutoNext` default on or off.
+- `HeatingLimit` per group, from the electrician's circuit map.
+- Whether to also send Bambu one email about the "Local Server SDK" on the
+  [third-party integration page](https://wiki.bambulab.com/en/software/third-party-integration),
+  which might remove the hub. Optional; does not block the plan.
 
-## Reference: hub endpoints the bridge uses
+## Reference: hub endpoints used
 
-| Stage | Method | Path | Purpose |
-| --- | --- | --- | --- |
-| 1 | POST | `/v1/hub/login/local/tickets` | challenge |
-| 1 | POST | `/v1/hub/login` | JWT |
-| 1 | GET | `/v1/hub/devices` | all printer status |
-| 1 | GET | `/v1/hub/captain` | hub health, storage |
-| 2 | GET | `/v1/hub/hms`, `/v1/hub/device_error` | error text |
-| 2 | GET | `/v1/hub/file/info?file_path=liveview/{sn}/liveview.jpeg` | snapshot |
-| 3 | POST | `/v1/hub/devices/{sn}/opt` `{opt: bed_clean}` | confirm removal |
-| 4 | PUT | `/v1/hub/devices/print` | upload and start |
-| 4 | GET | `/v1/hub/file/info?is_encrypted=False&num=100` | cached hashes |
-| setup | GET | `/v1/hub/local_printers`, `/v1/hub/scan_printers` | discovery |
-| setup | PUT / DELETE | `/v1/hub/bind` | bind, unbind |
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/hub/login/local/tickets`, `/v1/hub/login` | auth |
+| GET | `/v1/hub/devices`, `/v1/hub/devices/{sn}` | status |
+| GET | `/v1/hub/captain` | hub health, storage |
+| GET | `/v1/hub/hms`, `/v1/hub/device_error` | error text |
+| GET | `/v1/hub/file/info?file_path=liveview/{sn}/liveview.jpeg` | snapshot |
+| GET | `/v1/hub/file/info?is_encrypted=False&num=100` | cached file hashes |
+| PUT | `/v1/hub/devices/print` | upload and start |
+| POST | `/v1/hub/devices/{sn}/opt` | pause, resume, stop, bed_clean, filament setting |
+| GET | `/v1/hub/local_printers`, `/v1/hub/scan_printers` | discovery |
+| PUT / DELETE | `/v1/hub/bind` | bind, unbind |
 
 Ports: TCP 8888 API (mTLS), TCP 1883 hub-to-printer MQTT, TCP 443 hub web UI,
 UDP 1990/1991/2021/2022 SSDP. Outbound from the hub after activation: optional
