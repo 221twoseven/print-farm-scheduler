@@ -18,6 +18,51 @@ work or take the board down.
 
 ---
 
+## Handoff (2026-09-16, printer-integration design session)
+
+**No code changed.** `BUILD` is still `2026-09-14.3`. `main` head `2a62606`
+(PR #83). PRs #82 and #83 merged 2026-09-15; both docs-only. Nothing is
+mid-flight.
+
+**What the session did.** Researched Bambu Farm Manager 3.0 and Fleet Hub
+from Bambu's wiki, blog, both white papers, and the *Fleet Hub HTTP API
+v1.0.0* PDF (read in full; behind Bambu developer authorization, not checked
+in; Robert's copy is in his Downloads and the developer account). Produced:
+
+- [farm-integration-strategy.md](farm-integration-strategy.md) — stakeholder
+  brief: one board-driven workflow, what is certain vs not, five delivery
+  versions, cost, decisions needed, and the two-front-doors vision.
+- [farm-integration-technical.md](farm-integration-technical.md) — the
+  design: every need mapped to an API field or call, what the sliced 3mf
+  provides (browser-side, no hub), schema additions across four lists plus a
+  document library, bridge and board behaviour, an eight-phase action plan
+  with done-when criteria.
+- Item 7 below, the two-front-doors vision.
+
+**Facts established, worth not re-deriving.**
+
+- Farm Manager has no API and cannot share a printer with a hub. It is not
+  used by the shop and plays no part in the design.
+- Fleet Hub is a replacement controller, not a connector. mTLS on TCP 8888
+  with a Bambu-issued client cert; a browser cannot call it, hence the bridge.
+- The hub does not report the installed bed plate, has no video stream
+  (snapshot only), and does not stagger starts. Everything else the design
+  needs is in the API doc.
+- The operator slices and attaches the sliced file; the designer's New job
+  form is unchanged.
+- The bridge is a headless Python scheduled task on the shop PC. No UI.
+
+**Blocked on Robert.** Hub purchase, developer agreement, and the decisions
+listed at the end of the strategy doc. Phase 0 of the action plan starts
+when those land. The two front doors (item 7) is "not yet, part of the
+vision" — do not build until asked.
+
+**Unverified.** Mermaid blocks in both docs were never checked in GitHub's
+renderer. Whether the board's live refresh picks up rows written by another
+process (the bridge) is untested; it is Phase 0's first check.
+
+---
+
 ## Verified state (2026-08-18, ship-day sprint)
 
 - `main` head `2c6599b` (PR #58); PRs #54–#58 all merged 2026-08-18. Live
@@ -240,8 +285,10 @@ history and [decisions.md](decisions.md).
 
 ## Operational notes
 
-- `gh` CLI is absent. PRs are created with the GitHub REST API using the
-  stored git credential (`git credential fill`).
+- `gh` CLI is installed via winget but not on PATH. Call it by full path
+  (`%LOCALAPPDATA%\Microsoft\WinGet\Packages\GitHub.cli_*\bin\gh.exe`);
+  pass PR bodies with `--body-file`, not inline. Fallback: the GitHub REST
+  API with the stored git credential (`git credential fill`).
 - **Robert merges fast** — check a branch's PR state before pushing more
   work to it (the #43/#44 lesson: commits pushed after merge orphan).
 - Judge shipped state only by reading `main` — PR bodies have claimed items
