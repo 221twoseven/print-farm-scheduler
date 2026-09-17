@@ -73,15 +73,20 @@ than most changes to it. Minimize context use.
 
 ## Before pushing
 
-There is no CI gate that will catch a mistake — the Pages build only fails on
+No CI gate will catch a code mistake — the Pages build only fails on
 infrastructure problems, so a syntax error ships and shows up as a blank board.
-At minimum:
+(The one gate that does exist checks the changelog, nothing else.) At minimum:
 
 - Re-read the diff.
 - **Bump `BUILD`** at the top of `print-farm-scheduler.jsx` in the same commit.
   It is what tells whoever is looking at Teams whether they are seeing this
   change or a cached copy, and a stamp that wasn't bumped lies — worse than
   having none. Only skip it for changes that touch no code, such as docs.
+- **Add the change's lines to `CHANGELOG.md`** under a `## <BUILD> — <Mon D, YYYY>`
+  heading in the same commit. Enforced, not remembered: the Changelog workflow
+  fails the PR if the current `BUILD` stamp has no heading there. Rules for the
+  lines are at the top of `CHANGELOG.md`; a build with nothing shop-facing folds
+  into the next entry.
 - If the change is non-trivial, serve the repo locally
   (`python3 -m http.server 8080`) and load it; a Babel error appears in the
   console immediately.
@@ -101,6 +106,13 @@ Every change lands on `main` through a pull request — never push a change
 directly to `main`. There's no CI gate here, so the PR review is the only
 checkpoint before a mistake reaches production; skipping it defeats the point.
 Push the work to a branch and open the PR even for small or docs-only changes.
+
+## Milestone records
+
+Anything worth remembering later — a schema change, an integration, an audit
+round, a known ceiling — gets a short record in `docs/milestones/`
+(`YYYY-MM-DD-short-slug.md`; shape in that folder's README). Skip it for
+routine fixes; those live in `CHANGELOG.md` alone.
 
 ## Things to check before proposing a change
 
