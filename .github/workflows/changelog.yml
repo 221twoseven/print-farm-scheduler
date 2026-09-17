@@ -1,0 +1,30 @@
+name: Changelog
+
+# The only rule this enforces: a change that bumps BUILD in
+# print-farm-scheduler.jsx must add its entry to CHANGELOG.md in the same
+# commit (see CLAUDE.md "Before pushing"). Docs-only changes pass untouched —
+# the previous build's heading is still present.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Current BUILD stamp has a CHANGELOG.md heading
+        run: |
+          BUILD=$(grep -oP 'const BUILD = "\K[^"]+' print-farm-scheduler.jsx)
+          echo "BUILD stamp: $BUILD"
+          # Escape the dots, then require the stamp on a '## ' heading line,
+          # not followed by another digit (so .1 does not match .11).
+          PATTERN="^## .*$(printf '%s' "$BUILD" | sed 's/\./\\./g')([^0-9]|$)"
+          if grep -Eq "$PATTERN" CHANGELOG.md; then
+            echo "Found a heading for build $BUILD."
+          else
+            echo "::error file=CHANGELOG.md::No '## ' heading names build $BUILD. Every BUILD bump adds its lines to CHANGELOG.md in the same commit — see CLAUDE.md."
+            exit 1
+          fi
