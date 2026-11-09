@@ -28,6 +28,12 @@ have open in the detail modal and a card you are dragging are never changed
 under you — see
 [decisions.md](decisions.md#live-refresh-polls-merges-per-row-and-only-writes-what-a-person-did).
 
+If the Microsoft sign-in expires while a tab sits idle (overnight, typically),
+the board stops refreshing and a **"Your sign-in expired"** overlay covers it —
+no login windows open on their own. One click on its button signs back in,
+pushes any save that was caught mid-flight, and resumes. See
+[authentication.md](authentication.md#token-renewal).
+
 ## The board, top to bottom
 
 1. **Header** — purple bar, app name, live count of printers and jobs (rows

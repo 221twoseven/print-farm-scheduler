@@ -100,18 +100,29 @@ would change the entire deployment shape from "commit files to a static host" to
 The silent path gets most of the benefit: nobody signs in twice and most people
 never see the button.
 
-## Token renewal, and the one known gap
+## Token renewal
 
-`token()` calls `acquireTokenSilent` before every Graph request. When that fails:
+`token()` calls `acquireTokenSilent` before every Graph request, and **never
+opens a window**. When silent renewal fails it throws with
+`authRequired: true`, and `AppShell` takes over:
 
-- **In Teams:** MSAL's hidden-iframe renewal is blocked in a nested frame, so
-  silent renewal is impossible. The code sends the person back through the Teams
-  window (`teamsSignIn()`) and retries.
-- **In a browser:** `acquireTokenPopup`.
+1. It first retries `silentSignIn()` — an expired token over a still-alive
+   Microsoft session heals invisibly and work continues.
+2. Only if that also fails does it stop the live-refresh polling and show an
+   in-page "Your sign-in expired" overlay. The one window Microsoft requires
+   (its login page refuses to be framed, so it can never render inside the
+   overlay) opens only from that overlay's button — a user gesture, so popup
+   blockers allow it. `signIn()` is single-flighted, so concurrent callers can
+   never stack windows.
 
-The Teams case is the known open item. It is handled, but it means a long-idle
-session can surface a sign-in window mid-work. Worth watching whether anyone
-notices after an hour of use.
+A save that fails mid-flight on auth keeps its snapshot in `pending`; the
+overlay's button re-runs `flush()` after sign-in, so nothing typed before the
+expiry is lost.
+
+This replaced the original behaviour — an interactive prompt
+(`teamsSignIn()`/`acquireTokenPopup`) directly from `token()` — which, called
+from the 60-second poll against an expired overnight session, opened a new
+login window every tick: fifteen stacked prompts by morning.
 
 ## Failure modes worth recognising
 
