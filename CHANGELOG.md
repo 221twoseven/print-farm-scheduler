@@ -12,6 +12,14 @@ retitle it when it merges.
 CI checks that the current `BUILD` stamp in `print-farm-scheduler.jsx` appears in
 a heading here, so a code change cannot ship without its entry.
 
+## 2026-11-09.1 — Nov 9, 2026
+
+- No more stacked login windows in the morning. When the sign-in expires while
+  the board sits idle, the board stops polling and shows one "Your sign-in
+  expired" message on the page itself; one click signs back in and resumes.
+  If the Microsoft session is still alive, the board re-signs itself silently
+  and nobody sees anything.
+
 ## 2026-09-14.3 — Sep 14, 2026
 
 - Printer cards no longer lose their coloured top edge after a job is dragged

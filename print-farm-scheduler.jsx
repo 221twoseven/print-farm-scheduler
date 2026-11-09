@@ -248,7 +248,7 @@ const PRINTER_STATUS = {
    not-yet-deployed change apart from a not-yet-refreshed one. If you change
    this file and don't bump this, the stamp lies — which is worse than not
    having it. See docs/operations.md#deploying-a-change. */
-const BUILD = "2026-09-14.3";
+const BUILD = "2026-11-09.1";
 
 const STATUSES = ["Not started", "In progress", "Complete"];
 
@@ -5220,12 +5220,20 @@ async function silentSignIn() {
   }
 }
 
-async function signIn() {
-  if (await inTeams()) return teamsSignIn();
-  const app = await msal();
-  const res = await app.loginPopup({ scopes: SCOPES, prompt: "select_account" });
-  app.setActiveAccount(res.account);
-  return res.account;
+/* Single-flight: concurrent callers share one prompt instead of stacking
+   windows. The memo is the backstop; the real fix for the overnight pile-up
+   is that token() below never calls this — only a visible button does. */
+let signInFlight = null;
+function signIn() {
+  return (signInFlight ??= (async () => {
+    if (await inTeams()) return teamsSignIn();
+    const app = await msal();
+    const res = await app.loginPopup({ scopes: SCOPES, prompt: "select_account" });
+    app.setActiveAccount(res.account);
+    return res.account;
+  })().finally(() => {
+    signInFlight = null;
+  }));
 }
 
 async function currentAccount() {
@@ -5239,27 +5247,25 @@ async function currentAccount() {
    re-adding the Teams special case too — logoutPopup is a popup, which Teams
    refuses, so it would have to clear the MSAL cache instead. */
 
+/* Silent only — this never opens a window. It used to fall back to an
+   interactive prompt, and the 60s live-refresh poll calls it, so a board
+   left open overnight with an expired session opened a fresh login window
+   every tick — fifteen stacked prompts by morning. Now a silent failure
+   throws with `authRequired: true`; AppShell catches that, stops polling,
+   and shows an in-page sign-in that the person triggers themselves. */
 async function token() {
   const app = await msal();
   const account = await currentAccount();
-  if (!account) throw new Error("Not signed in");
+  if (!account)
+    throw Object.assign(new Error("Not signed in"), { authRequired: true });
   try {
     const r = await app.acquireTokenSilent({ scopes: SCOPES, account });
     return r.accessToken;
-  } catch {
-    /* An expired token cannot be renewed silently inside Teams, because the
-       hidden-iframe renewal MSAL uses is blocked in a nested frame. Send the
-       person back through the Teams window instead of a popup. */
-    if (await inTeams()) {
-      await teamsSignIn();
-      const r = await app.acquireTokenSilent({
-        scopes: SCOPES,
-        account: app.getActiveAccount(),
-      });
-      return r.accessToken;
-    }
-    const r = await app.acquireTokenPopup({ scopes: SCOPES, account });
-    return r.accessToken;
+  } catch (err) {
+    throw Object.assign(new Error("Your sign-in expired."), {
+      authRequired: true,
+      cause: err,
+    });
   }
 }
 
@@ -5873,6 +5879,8 @@ function AppShell() {
   const [error, setError] = useState(null);
   const [saveState, setSaveState] = useState(null);
   const [saveDetail, setSaveDetail] = useState("");
+  const [authExpired, setAuthExpired] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
 
   const itemIds = useRef(new Map());        // "kind:uuid" → SharePoint item id
   const saved = useRef(null);               // last snapshot written
@@ -5930,6 +5938,16 @@ function AppShell() {
     }
   };
 
+  /* A silent-renewal failure is usually just an expired token over a live
+     Microsoft session, so try to re-establish without bothering anyone;
+     only when that also fails does the in-page sign-in appear. */
+  const reauthSilently = async () => {
+    const acct = await silentSignIn().catch(() => null);
+    if (acct) return true;
+    setAuthExpired(true);
+    return false;
+  };
+
   /* One writer at a time. Anything that lands mid-write is coalesced into
      `pending` and written once the current pass finishes, so a burst of
      drags collapses into a single trailing save. */
@@ -5963,6 +5981,10 @@ function AppShell() {
          in flight, in which case that snapshot supersedes it and must not be
          clobbered. */
       if (inFlight && !pending.current) pending.current = inFlight;
+      /* Expired sign-in: heal silently if the Microsoft session is still
+         alive, retrying once `finally` releases the writer lock. Otherwise
+         the sign-in overlay takes over and its button re-runs flush. */
+      if (err.authRequired && (await reauthSilently())) setTimeout(flush, 0);
     } finally {
       writing.current = false;
     }
@@ -5992,7 +6014,7 @@ function AppShell() {
      graph() already backs off on 429; the interval is sized for 10–15
      clients sharing the tenant's throttling budget. */
   useEffect(() => {
-    if (!configured() || phase !== "ready") return;
+    if (!configured() || phase !== "ready" || authExpired) return;
     let stopped = false;
     const tick = async () => {
       if (
@@ -6010,6 +6032,12 @@ function AppShell() {
           saved.current = baseline;
         });
       } catch (err) {
+        if (err.authRequired) {
+          /* healed → the next tick carries on; not healed → the overlay is
+             up and this effect unwinds, so the polling stops entirely */
+          await reauthSilently();
+          return;
+        }
         console.warn("Live refresh skipped", err);
       }
     };
@@ -6023,7 +6051,7 @@ function AppShell() {
       clearInterval(iv);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [phase]);
+  }, [phase, authExpired]);
 
   /* last-ditch warning if someone closes the tab mid-write */
   useEffect(() => {
@@ -6100,9 +6128,52 @@ function AppShell() {
       </Centered>
     );
 
+  const reSignIn = async () => {
+    setAuthBusy(true);
+    try {
+      await signIn();
+      setAuthExpired(false);
+      flush(); // push anything that failed while the session was expired
+    } catch (err) {
+      console.warn("Sign-in failed", err); // overlay stays up for another try
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   return (
     <>
       <PrintFarmScheduler initial={initial} onPersist={onPersist} liveApi={liveApi} />
+      {/* The Microsoft login page refuses to be framed, so it cannot render
+          inside this modal — the modal owns the moment, and the one window
+          Microsoft requires opens only from this button's click. */}
+      {authExpired && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-sm"
+            style={{ border: "1px solid #E1DFDD" }}
+          >
+            <h1 className="text-base font-semibold" style={{ color: "#201F1E" }}>
+              Your sign-in expired
+            </h1>
+            <p className="mt-1 mb-4 text-sm text-muted">
+              The board paused while you were away. Sign in to pick up where
+              you left off — nothing on the board was lost.
+            </p>
+            <button
+              onClick={reSignIn}
+              disabled={authBusy}
+              className="w-full rounded py-2 text-sm font-medium text-white"
+              style={{ background: "#0F6CBD", opacity: authBusy ? 0.6 : 1 }}
+            >
+              {authBusy ? "Signing in…" : "Sign in"}
+            </button>
+          </div>
+        </div>
+      )}
       {configured() && (
         <StatusPill
           state={saveState}
